@@ -99,34 +99,20 @@ const calcular = async (req, res) => {
 // Crear liquidación
 const crear = async (req, res) => {
   try {
-    const { empleadoId, periodoDesde, periodoHasta, descuentos, adicionales, observaciones } = req.body;
+    const { empleadoId, periodoDesde, periodoHasta, horasTotales, descuentos, adicionales, observaciones } = req.body;
+
+    // Validar horas
+    if (!horasTotales || horasTotales <= 0) {
+      return res.status(400).json({ error: { message: 'Las horas trabajadas son requeridas' } });
+    }
 
     const empleado = await prisma.empleado.findUnique({ where: { id: empleadoId } });
     if (!empleado) {
       return res.status(404).json({ error: { message: 'Empleado no encontrado' } });
     }
 
-    // Calcular horas
-    const fichajes = await prisma.fichaje.findMany({
-      where: {
-        empleadoId,
-        fecha: {
-          gte: new Date(periodoDesde),
-          lte: new Date(periodoHasta)
-        },
-        salida: { not: null }
-      }
-    });
-
-    let totalMinutos = 0;
-    for (const fichaje of fichajes) {
-      const entrada = new Date(fichaje.entrada);
-      const salida = new Date(fichaje.salida);
-      totalMinutos += (salida - entrada) / (1000 * 60);
-    }
-
-    const horasTotales = totalMinutos / 60;
-    const subtotal = horasTotales * parseFloat(empleado.tarifaHora);
+    // Calcular montos con las horas ingresadas manualmente
+    const subtotal = parseFloat(horasTotales) * parseFloat(empleado.tarifaHora);
     const totalPagar = subtotal - (descuentos || 0) + (adicionales || 0);
 
     const liquidacion = await prisma.liquidacion.create({

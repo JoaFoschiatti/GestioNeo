@@ -191,7 +191,8 @@ const ventasPorMozo = async (req, res) => {
       orderBy: { _sum: { total: 'desc' } }
     });
 
-    const usuariosIds = pedidos.map(p => p.usuarioId);
+    // Filtrar nulls (pedidos del menú público no tienen usuarioId)
+    const usuariosIds = pedidos.map(p => p.usuarioId).filter(id => id !== null);
     const usuarios = await prisma.usuario.findMany({
       where: { id: { in: usuariosIds } },
       select: { id: true, nombre: true }
@@ -200,7 +201,7 @@ const ventasPorMozo = async (req, res) => {
     const resultado = pedidos.map(p => {
       const usuario = usuarios.find(u => u.id === p.usuarioId);
       return {
-        mozo: usuario?.nombre || 'Usuario eliminado',
+        mozo: usuario?.nombre || (p.usuarioId === null ? 'Menú Público' : 'Usuario eliminado'),
         pedidos: p._count.id,
         totalVentas: p._sum.total
       };

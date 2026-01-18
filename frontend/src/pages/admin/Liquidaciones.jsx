@@ -1,17 +1,27 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { PlusIcon, CheckIcon, CalculatorIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, CheckIcon } from '@heroicons/react/24/outline'
 
 export default function Liquidaciones() {
   const [liquidaciones, setLiquidaciones] = useState([])
   const [empleados, setEmpleados] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
-  const [preview, setPreview] = useState(null)
   const [form, setForm] = useState({
-    empleadoId: '', periodoDesde: '', periodoHasta: '', descuentos: 0, adicionales: 0, observaciones: ''
+    empleadoId: '', periodoDesde: '', periodoHasta: '', horasTotales: '', descuentos: 0, adicionales: 0, observaciones: ''
   })
+
+  // Obtener empleado seleccionado y calcular totales
+  const empleadoSeleccionado = useMemo(() =>
+    empleados.find(e => e.id === parseInt(form.empleadoId)),
+    [empleados, form.empleadoId]
+  )
+
+  const tarifaHora = empleadoSeleccionado ? parseFloat(empleadoSeleccionado.tarifaHora) : 0
+  const horas = parseFloat(form.horasTotales) || 0
+  const subtotal = horas * tarifaHora
+  const totalPagar = subtotal - (parseFloat(form.descuentos) || 0) + (parseFloat(form.adicionales) || 0)
 
   useEffect(() => {
     cargarDatos()
@@ -32,27 +42,10 @@ export default function Liquidaciones() {
     }
   }
 
-  const calcularPreview = async () => {
-    if (!form.empleadoId || !form.periodoDesde || !form.periodoHasta) {
-      toast.error('Completa empleado y período')
-      return
-    }
-    try {
-      const response = await api.post('/liquidaciones/calcular', {
-        empleadoId: parseInt(form.empleadoId),
-        fechaDesde: form.periodoDesde,
-        fechaHasta: form.periodoHasta
-      })
-      setPreview(response.data)
-    } catch (error) {
-      console.error('Error:', error)
-    }
-  }
-
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!preview) {
-      toast.error('Primero calcula la liquidación')
+    if (!form.horasTotales || parseFloat(form.horasTotales) <= 0) {
+      toast.error('Ingresa las horas trabajadas')
       return
     }
     try {
@@ -60,14 +53,14 @@ export default function Liquidaciones() {
         empleadoId: parseInt(form.empleadoId),
         periodoDesde: form.periodoDesde,
         periodoHasta: form.periodoHasta,
+        horasTotales: parseFloat(form.horasTotales),
         descuentos: parseFloat(form.descuentos) || 0,
         adicionales: parseFloat(form.adicionales) || 0,
         observaciones: form.observaciones
       })
       toast.success('Liquidación creada')
       setShowModal(false)
-      setForm({ empleadoId: '', periodoDesde: '', periodoHasta: '', descuentos: 0, adicionales: 0, observaciones: '' })
-      setPreview(null)
+      setForm({ empleadoId: '', periodoDesde: '', periodoHasta: '', horasTotales: '', descuentos: 0, adicionales: 0, observaciones: '' })
       cargarDatos()
     } catch (error) {
       console.error('Error:', error)
@@ -167,7 +160,7 @@ export default function Liquidaciones() {
                 <select
                   className="input"
                   value={form.empleadoId}
-                  onChange={(e) => { setForm({ ...form, empleadoId: e.target.value }); setPreview(null) }}
+                  onChange={(e) => setForm({ ...form, empleadoId: e.target.value })}
                   required
                 >
                   <option value="">Seleccionar...</option>
@@ -185,7 +178,7 @@ export default function Liquidaciones() {
                     type="date"
                     className="input"
                     value={form.periodoDesde}
-                    onChange={(e) => { setForm({ ...form, periodoDesde: e.target.value }); setPreview(null) }}
+                    onChange={(e) => setForm({ ...form, periodoDesde: e.target.value })}
                     required
                   />
                 </div>
@@ -195,39 +188,40 @@ export default function Liquidaciones() {
                     type="date"
                     className="input"
                     value={form.periodoHasta}
-                    onChange={(e) => { setForm({ ...form, periodoHasta: e.target.value }); setPreview(null) }}
+                    onChange={(e) => setForm({ ...form, periodoHasta: e.target.value })}
                     required
                   />
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={calcularPreview}
-                className="btn btn-secondary w-full flex items-center justify-center gap-2"
-              >
-                <CalculatorIcon className="w-5 h-5" />
-                Calcular
-              </button>
+              <div>
+                <label className="label">Horas trabajadas</label>
+                <input
+                  type="number"
+                  className="input"
+                  placeholder="Ej: 160"
+                  min="0"
+                  step="0.5"
+                  value={form.horasTotales}
+                  onChange={(e) => setForm({ ...form, horasTotales: e.target.value })}
+                  required
+                />
+              </div>
 
-              {preview && (
+              {empleadoSeleccionado && horas > 0 && (
                 <div className="p-4 bg-gray-50 rounded-lg space-y-2">
                   <div className="flex justify-between">
-                    <span>Fichajes:</span>
-                    <span className="font-medium">{preview.totalFichajes}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Horas totales:</span>
-                    <span className="font-medium">{preview.horasTotales.toFixed(2)}h</span>
+                    <span>Horas trabajadas:</span>
+                    <span className="font-medium">{horas}h</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Tarifa/hora:</span>
-                    <span className="font-medium">${preview.tarifaHora}</span>
+                    <span className="font-medium">${tarifaHora.toLocaleString('es-AR')}</span>
                   </div>
                   <hr />
                   <div className="flex justify-between text-lg font-bold">
                     <span>Subtotal:</span>
-                    <span>${preview.subtotal.toLocaleString('es-AR')}</span>
+                    <span>${subtotal.toLocaleString('es-AR')}</span>
                   </div>
                 </div>
               )}
@@ -263,11 +257,20 @@ export default function Liquidaciones() {
                 />
               </div>
 
+              {horas > 0 && (parseFloat(form.descuentos) > 0 || parseFloat(form.adicionales) > 0) && (
+                <div className="p-4 bg-primary-50 rounded-lg">
+                  <div className="flex justify-between text-lg font-bold text-primary-700">
+                    <span>TOTAL A PAGAR:</span>
+                    <span>${totalPagar.toLocaleString('es-AR')}</span>
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary flex-1">
                   Cancelar
                 </button>
-                <button type="submit" className="btn btn-primary flex-1" disabled={!preview}>
+                <button type="submit" className="btn btn-primary flex-1" disabled={!empleadoSeleccionado || horas <= 0}>
                   Crear Liquidación
                 </button>
               </div>

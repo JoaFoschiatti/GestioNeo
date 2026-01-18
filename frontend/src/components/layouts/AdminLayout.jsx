@@ -16,7 +16,8 @@ import {
   Bars3Icon,
   XMarkIcon,
   ArrowRightOnRectangleIcon,
-  UserCircleIcon
+  UserCircleIcon,
+  Cog6ToothIcon
 } from '@heroicons/react/24/outline'
 
 const navigation = [
@@ -34,6 +35,7 @@ const navigation = [
   { divider: true, roles: ['ADMIN'] },
   { name: 'Liquidaciones', href: '/liquidaciones', icon: BanknotesIcon, roles: ['ADMIN'] },
   { name: 'Reportes', href: '/reportes', icon: ChartBarIcon, roles: ['ADMIN', 'CAJERO'] },
+  { name: 'Configuración', href: '/configuracion', icon: Cog6ToothIcon, roles: ['ADMIN'] },
 ]
 
 export default function AdminLayout() {

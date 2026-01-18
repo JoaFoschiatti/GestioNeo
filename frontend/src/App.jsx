@@ -21,6 +21,7 @@ import Productos from './pages/admin/Productos'
 import Ingredientes from './pages/admin/Ingredientes'
 import Liquidaciones from './pages/admin/Liquidaciones'
 import Reportes from './pages/admin/Reportes'
+import Configuracion from './pages/admin/Configuracion'
 
 // Páginas mozo
 import MozoMesas from './pages/mozo/MozoMesas'
@@ -109,6 +110,11 @@ export default function App() {
         <Route path="reportes" element={
           <ProtectedRoute roles={['ADMIN', 'CAJERO']}>
             <Reportes />
+          </ProtectedRoute>
+        } />
+        <Route path="configuracion" element={
+          <ProtectedRoute roles={['ADMIN']}>
+            <Configuracion />
           </ProtectedRoute>
         } />
         <Route path="pedidos" element={<Pedidos />} />

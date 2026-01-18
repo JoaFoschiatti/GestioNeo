@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const path = require('path');
 
 // Importar rutas
@@ -16,14 +17,21 @@ const liquidacionesRoutes = require('./routes/liquidaciones.routes');
 const reportesRoutes = require('./routes/reportes.routes');
 const pagosRoutes = require('./routes/pagos.routes');
 const impresionRoutes = require('./routes/impresion.routes');
+const configuracionRoutes = require('./routes/configuracion.routes');
+const publicoRoutes = require('./routes/publico.routes');
 
 const app = express();
 
-// Middlewares
+// Middlewares de seguridad
+app.use(helmet());
+
+// CORS
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true
 }));
+
+// Parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -43,6 +51,8 @@ app.use('/api/liquidaciones', liquidacionesRoutes);
 app.use('/api/reportes', reportesRoutes);
 app.use('/api/pagos', pagosRoutes);
 app.use('/api/impresion', impresionRoutes);
+app.use('/api/configuracion', configuracionRoutes);
+app.use('/api/publico', publicoRoutes);
 
 // Ruta de salud
 app.get('/api/health', (req, res) => {

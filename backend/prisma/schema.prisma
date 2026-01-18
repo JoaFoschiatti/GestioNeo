@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")  // Para Supabase con connection pooling
 }
 
 // Enums
@@ -47,6 +48,23 @@ enum TipoMovimientoStock {
   ENTRADA
   SALIDA
   AJUSTE
+}
+
+enum EstadoPago {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+  CANCELADO
+}
+
+enum TipoEntrega {
+  DELIVERY
+  RETIRO
+}
+
+enum OrigenPedido {
+  INTERNO
+  MENU_PUBLICO
 }
 
 // Usuarios del sistema (login)
@@ -236,17 +254,29 @@ model Pedido {
   tipo            TipoPedido
   estado          EstadoPedido @default(PENDIENTE)
   mesaId          Int?
-  usuarioId       Int          // Mozo que tomó el pedido
+  usuarioId       Int?         // Mozo que tomó el pedido (null para pedidos públicos)
 
-  // Datos delivery
-  clienteNombre   String?
-  clienteTelefono String?
+  // Datos cliente
+  clienteNombre    String?
+  clienteTelefono  String?
   clienteDireccion String?
+  clienteEmail     String?      // Email para enviar ticket
 
+  // Delivery/Retiro
+  tipoEntrega     TipoEntrega?
+  costoEnvio      Decimal      @default(0) @db.Decimal(10, 2)
+
+  // Totales
   subtotal        Decimal      @db.Decimal(10, 2)
   descuento       Decimal      @default(0) @db.Decimal(10, 2)
   total           Decimal      @db.Decimal(10, 2)
   observaciones   String?
+
+  // Estado de pago
+  estadoPago      EstadoPago   @default(PENDIENTE)
+
+  // Origen del pedido
+  origen          OrigenPedido @default(INTERNO)
 
   impreso         Boolean      @default(false)
   createdAt       DateTime     @default(now())
@@ -254,7 +284,7 @@ model Pedido {
 
   // Relaciones
   mesa        Mesa?             @relation(fields: [mesaId], references: [id])
-  usuario     Usuario           @relation(fields: [usuarioId], references: [id])
+  usuario     Usuario?          @relation(fields: [usuarioId], references: [id])
   items       PedidoItem[]
   pagos       Pago[]
   movimientos MovimientoStock[]
@@ -286,9 +316,23 @@ model Pago {
   pedidoId         Int
   monto            Decimal     @db.Decimal(10, 2)
   metodo           MetodoPago
+  estado           EstadoPago  @default(PENDIENTE)
   referencia       String?     // ID transacción MercadoPago, etc.
   comprobante      String?
+
+  // MercadoPago
+  mpPreferenceId   String?     // ID de preferencia MP
+  mpPaymentId      String?     // ID de pago MP
+
+  // Efectivo
+  montoAbonado     Decimal?    @db.Decimal(10, 2)  // Con cuánto abona
+  vuelto           Decimal?    @db.Decimal(10, 2)  // Vuelto a dar
+
+  // Seguridad
+  idempotencyKey   String?     @unique  // Prevenir duplicados webhook
+
   createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @default(now()) @updatedAt
 
   // Relaciones
   pedido Pedido @relation(fields: [pedidoId], references: [id])
