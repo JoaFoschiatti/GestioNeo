@@ -1,0 +1,307 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum Rol {
+  ADMIN
+  MOZO
+  COCINERO
+  CAJERO
+  DELIVERY
+}
+
+enum EstadoMesa {
+  LIBRE
+  OCUPADA
+  RESERVADA
+}
+
+enum TipoPedido {
+  MESA
+  DELIVERY
+  MOSTRADOR
+}
+
+enum EstadoPedido {
+  PENDIENTE
+  EN_PREPARACION
+  LISTO
+  ENTREGADO
+  COBRADO
+  CANCELADO
+}
+
+enum MetodoPago {
+  EFECTIVO
+  MERCADOPAGO
+  TARJETA
+}
+
+enum TipoMovimientoStock {
+  ENTRADA
+  SALIDA
+  AJUSTE
+}
+
+// Usuarios del sistema (login)
+model Usuario {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  nombre    String
+  rol       Rol      @default(MOZO)
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relaciones
+  pedidos   Pedido[]
+
+  @@map("usuarios")
+}
+
+// Empleados (para fichaje y liquidación)
+model Empleado {
+  id          Int      @id @default(autoincrement())
+  nombre      String
+  apellido    String
+  dni         String   @unique
+  telefono    String?
+  direccion   String?
+  rol         Rol
+  tarifaHora  Decimal  @db.Decimal(10, 2)
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relaciones
+  fichajes      Fichaje[]
+  liquidaciones Liquidacion[]
+
+  @@map("empleados")
+}
+
+// Control de fichaje (entrada/salida)
+model Fichaje {
+  id         Int       @id @default(autoincrement())
+  empleadoId Int
+  entrada    DateTime
+  salida     DateTime?
+  fecha      DateTime  @db.Date
+  createdAt  DateTime  @default(now())
+
+  // Relaciones
+  empleado Empleado @relation(fields: [empleadoId], references: [id])
+
+  @@map("fichajes")
+}
+
+// Liquidación de sueldos
+model Liquidacion {
+  id           Int      @id @default(autoincrement())
+  empleadoId   Int
+  periodoDesde DateTime @db.Date
+  periodoHasta DateTime @db.Date
+  horasTotales Decimal  @db.Decimal(10, 2)
+  tarifaHora   Decimal  @db.Decimal(10, 2)
+  subtotal     Decimal  @db.Decimal(10, 2)
+  descuentos   Decimal  @default(0) @db.Decimal(10, 2)
+  adicionales  Decimal  @default(0) @db.Decimal(10, 2)
+  totalPagar   Decimal  @db.Decimal(10, 2)
+  observaciones String?
+  pagado       Boolean  @default(false)
+  fechaPago    DateTime?
+  createdAt    DateTime @default(now())
+
+  // Relaciones
+  empleado Empleado @relation(fields: [empleadoId], references: [id])
+
+  @@map("liquidaciones")
+}
+
+// Mesas del local
+model Mesa {
+  id        Int         @id @default(autoincrement())
+  numero    Int         @unique
+  zona      String?
+  capacidad Int         @default(4)
+  estado    EstadoMesa  @default(LIBRE)
+  activa    Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  // Relaciones
+  pedidos Pedido[]
+
+  @@map("mesas")
+}
+
+// Categorías de productos
+model Categoria {
+  id        Int      @id @default(autoincrement())
+  nombre    String   @unique
+  descripcion String?
+  orden     Int      @default(0)
+  activa    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relaciones
+  productos Producto[]
+
+  @@map("categorias")
+}
+
+// Productos (carta)
+model Producto {
+  id           Int      @id @default(autoincrement())
+  nombre       String
+  descripcion  String?
+  precio       Decimal  @db.Decimal(10, 2)
+  imagen       String?
+  categoriaId  Int
+  disponible   Boolean  @default(true)
+  destacado    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relaciones
+  categoria    Categoria @relation(fields: [categoriaId], references: [id])
+  ingredientes ProductoIngrediente[]
+  pedidoItems  PedidoItem[]
+
+  @@map("productos")
+}
+
+// Ingredientes/Insumos para stock
+model Ingrediente {
+  id           Int      @id @default(autoincrement())
+  nombre       String   @unique
+  unidad       String   // kg, litros, unidades, etc.
+  stockActual  Decimal  @db.Decimal(10, 3)
+  stockMinimo  Decimal  @db.Decimal(10, 3)
+  costo        Decimal? @db.Decimal(10, 2)
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relaciones
+  productos    ProductoIngrediente[]
+  movimientos  MovimientoStock[]
+
+  @@map("ingredientes")
+}
+
+// Relación producto-ingrediente (cuánto de cada ingrediente lleva un producto)
+model ProductoIngrediente {
+  id            Int     @id @default(autoincrement())
+  productoId    Int
+  ingredienteId Int
+  cantidad      Decimal @db.Decimal(10, 3)
+
+  // Relaciones
+  producto    Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  ingrediente Ingrediente @relation(fields: [ingredienteId], references: [id])
+
+  @@unique([productoId, ingredienteId])
+  @@map("producto_ingredientes")
+}
+
+// Movimientos de stock
+model MovimientoStock {
+  id            Int                  @id @default(autoincrement())
+  ingredienteId Int
+  tipo          TipoMovimientoStock
+  cantidad      Decimal              @db.Decimal(10, 3)
+  motivo        String?
+  pedidoId      Int?
+  createdAt     DateTime             @default(now())
+
+  // Relaciones
+  ingrediente Ingrediente @relation(fields: [ingredienteId], references: [id])
+  pedido      Pedido?     @relation(fields: [pedidoId], references: [id])
+
+  @@map("movimientos_stock")
+}
+
+// Pedidos
+model Pedido {
+  id              Int          @id @default(autoincrement())
+  tipo            TipoPedido
+  estado          EstadoPedido @default(PENDIENTE)
+  mesaId          Int?
+  usuarioId       Int          // Mozo que tomó el pedido
+
+  // Datos delivery
+  clienteNombre   String?
+  clienteTelefono String?
+  clienteDireccion String?
+
+  subtotal        Decimal      @db.Decimal(10, 2)
+  descuento       Decimal      @default(0) @db.Decimal(10, 2)
+  total           Decimal      @db.Decimal(10, 2)
+  observaciones   String?
+
+  impreso         Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  // Relaciones
+  mesa        Mesa?             @relation(fields: [mesaId], references: [id])
+  usuario     Usuario           @relation(fields: [usuarioId], references: [id])
+  items       PedidoItem[]
+  pagos       Pago[]
+  movimientos MovimientoStock[]
+
+  @@map("pedidos")
+}
+
+// Items del pedido
+model PedidoItem {
+  id            Int      @id @default(autoincrement())
+  pedidoId      Int
+  productoId    Int
+  cantidad      Int
+  precioUnitario Decimal @db.Decimal(10, 2)
+  subtotal      Decimal  @db.Decimal(10, 2)
+  observaciones String?
+  createdAt     DateTime @default(now())
+
+  // Relaciones
+  pedido   Pedido   @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  producto Producto @relation(fields: [productoId], references: [id])
+
+  @@map("pedido_items")
+}
+
+// Pagos
+model Pago {
+  id               Int         @id @default(autoincrement())
+  pedidoId         Int
+  monto            Decimal     @db.Decimal(10, 2)
+  metodo           MetodoPago
+  referencia       String?     // ID transacción MercadoPago, etc.
+  comprobante      String?
+  createdAt        DateTime    @default(now())
+
+  // Relaciones
+  pedido Pedido @relation(fields: [pedidoId], references: [id])
+
+  @@map("pagos")
+}
+
+// Configuración del sistema
+model Configuracion {
+  id        Int      @id @default(autoincrement())
+  clave     String   @unique
+  valor     String
+  updatedAt DateTime @updatedAt
+
+  @@map("configuraciones")
+}

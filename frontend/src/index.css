@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary-50: #fef7ec;
+  --color-primary-100: #fcecd3;
+  --color-primary-200: #f9d5a6;
+  --color-primary-300: #f5b86e;
+  --color-primary-400: #f09235;
+  --color-primary-500: #eb7615;
+  --color-primary-600: #dc5a0b;
+  --color-primary-700: #b6400c;
+  --color-primary-800: #923311;
+  --color-primary-900: #772c11;
+  --color-primary-950: #411405;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply bg-primary-500 text-white hover:bg-primary-600 active:bg-primary-700;
+  }
+
+  .btn-secondary {
+    @apply bg-gray-200 text-gray-800 hover:bg-gray-300 active:bg-gray-400;
+  }
+
+  .btn-danger {
+    @apply bg-red-500 text-white hover:bg-red-600 active:bg-red-700;
+  }
+
+  .btn-success {
+    @apply bg-green-500 text-white hover:bg-green-600 active:bg-green-700;
+  }
+
+  .input {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-gray-700 mb-1;
+  }
+
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-6;
+  }
+
+  .sidebar-link {
+    @apply flex items-center gap-3 px-4 py-3 text-gray-600 hover:bg-primary-50 hover:text-primary-600 rounded-lg transition-colors;
+  }
+
+  .sidebar-link.active {
+    @apply bg-primary-100 text-primary-700 font-medium;
+  }
+}
