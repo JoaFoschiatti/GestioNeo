@@ -9,7 +9,7 @@ router.get('/', pedidosController.listar);
 router.get('/cocina', verificarRol('ADMIN', 'COCINERO'), pedidosController.pedidosCocina);
 router.get('/delivery', verificarRol('ADMIN', 'DELIVERY'), pedidosController.pedidosDelivery);
 router.get('/:id', pedidosController.obtener);
-router.post('/', esMozo, pedidosController.crear);
+router.post('/', verificarRol('ADMIN', 'CAJERO', 'MOZO'), pedidosController.crear);
 router.patch('/:id/estado', pedidosController.cambiarEstado);
 router.post('/:id/items', esMozo, pedidosController.agregarItems);
 router.post('/:id/cancelar', esAdminOCajero, pedidosController.cancelar);

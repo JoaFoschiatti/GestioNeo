@@ -4,6 +4,11 @@ const { prisma, getTenantPrisma } = require('../db/prisma');
 const { resolveTenantFromSlug } = require('../middlewares/tenant.middleware');
 const emailService = require('../services/email.service');
 const eventBus = require('../services/event-bus');
+const {
+  isMercadoPagoConfigured,
+  createPreference,
+  saveTransaction
+} = require('../services/mercadopago.service');
 
 /**
  * All public routes require slug parameter for tenant resolution
@@ -15,6 +20,7 @@ router.get('/:slug/config', resolveTenantFromSlug, async (req, res) => {
   try {
     const tenantPrisma = req.prisma;
     const tenant = req.tenant;
+    const tenantId = req.tenantId;
 
     // Get tenant-specific configuration
     const configs = await tenantPrisma.configuracion.findMany();
@@ -22,6 +28,13 @@ router.get('/:slug/config', resolveTenantFromSlug, async (req, res) => {
     configs.forEach(c => {
       configMap[c.clave] = c.valor;
     });
+
+    // Verificar si MercadoPago está REALMENTE configurado (tiene credenciales válidas)
+    const mpRealmenteConfigurado = await isMercadoPagoConfigured(tenantId);
+    const mpHabilitado = configMap.mercadopago_enabled === 'true' && mpRealmenteConfigurado;
+
+    // Verificar si efectivo está habilitado (por defecto sí)
+    const efectivoHabilitado = configMap.efectivo_enabled !== 'false';
 
     res.json({
       tenant: {
@@ -39,9 +52,14 @@ router.get('/:slug/config', resolveTenantFromSlug, async (req, res) => {
         horario_apertura: configMap.horario_apertura || '11:00',
         horario_cierre: configMap.horario_cierre || '23:00',
         costo_delivery: parseFloat(configMap.costo_delivery || '0'),
-        mercadopago_enabled: configMap.mercadopago_enabled === 'true',
+        delivery_habilitado: configMap.delivery_habilitado !== 'false',
+        direccion_retiro: configMap.direccion_retiro || tenant.direccion,
+        mercadopago_enabled: mpHabilitado,
+        efectivo_enabled: efectivoHabilitado,
+        whatsapp_numero: configMap.whatsapp_numero || null,
         nombre_negocio: configMap.nombre_negocio || tenant.nombre,
-        tagline_negocio: configMap.tagline_negocio || ''
+        tagline_negocio: configMap.tagline_negocio || '',
+        banner_imagen: configMap.banner_imagen || tenant.bannerUrl
       }
     });
   } catch (error) {
@@ -255,22 +273,13 @@ router.post('/:slug/pedido/:id/pagar', resolveTenantFromSlug, async (req, res) =
       return res.status(400).json({ error: { message: 'El pedido ya está pagado' } });
     }
 
-    // Verificar si MercadoPago está habilitado
-    const mpConfig = await tenantPrisma.configuracion.findFirst({
-      where: { clave: 'mercadopago_enabled' }
-    });
-    if (!mpConfig || mpConfig.valor !== 'true') {
-      return res.status(400).json({ error: { message: 'MercadoPago no está habilitado' } });
+    // Verificar si MercadoPago está REALMENTE configurado para este tenant
+    const mpConfigurado = await isMercadoPagoConfigured(tenantId);
+    if (!mpConfigurado) {
+      return res.status(400).json({
+        error: { message: 'MercadoPago no está configurado para este negocio. Solo se acepta pago en efectivo.' }
+      });
     }
-
-    // Importar MercadoPago
-    const { MercadoPagoConfig, Preference } = require('mercadopago');
-
-    const client = new MercadoPagoConfig({
-      accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN
-    });
-
-    const preference = new Preference(client);
 
     // Crear items para MP
     const mpItems = pedido.items.map(item => ({
@@ -309,7 +318,8 @@ router.post('/:slug/pedido/:id/pagar', resolveTenantFromSlug, async (req, res) =
       statement_descriptor: req.tenant.nombre.substring(0, 22).toUpperCase()
     };
 
-    const response = await preference.create({ body: preferenceData });
+    // Usar el servicio multi-tenant para crear la preferencia
+    const response = await createPreference(tenantId, preferenceData);
 
     // Crear registro de pago pendiente
     const idempotencyKey = `mp-${tenantId}-${pedidoId}-${Date.now()}`;
@@ -317,7 +327,7 @@ router.post('/:slug/pedido/:id/pagar', resolveTenantFromSlug, async (req, res) =
       data: {
         tenantId,
         pedidoId,
-        monto: parseFloat(pedido.total) + parseFloat(pedido.costoEnvio),
+        monto: parseFloat(pedido.total),
         metodo: 'MERCADOPAGO',
         estado: 'PENDIENTE',
         mpPreferenceId: response.id,
@@ -332,6 +342,12 @@ router.post('/:slug/pedido/:id/pagar', resolveTenantFromSlug, async (req, res) =
     });
   } catch (error) {
     console.error('Error al crear preferencia de pago:', error);
+
+    // Mensaje de error más descriptivo
+    if (error.message?.includes('no está configurado')) {
+      return res.status(400).json({ error: { message: error.message } });
+    }
+
     res.status(500).json({ error: { message: 'Error al iniciar el pago' } });
   }
 });

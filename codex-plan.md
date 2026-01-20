@@ -1,508 +1,736 @@
-# Plan: Multi-Tenancy for GestioNeo
+# Plan: Configuración de MercadoPago por Tenant para Menú Público
 
 **Generated**: 2026-01-20
-**Estimated Complexity**: High
+**Estimated Complexity**: Medium-High
+**Tech Stack**: Node.js/Express, React, Prisma/PostgreSQL, MercadoPago SDK
 
 ## Overview
-Migrate GestioNeo to a single-database, tenant-scoped SaaS model using tenantId on every row, slug-based public URLs, JWT tenant claims for authenticated routes, and Supabase RLS for defense in depth. This plan covers schema updates, backend tenant scoping, onboarding, super admin, frontend routing/branding, RLS policies, and safe data migration. In scope: backend + frontend + DB + RLS. Out of scope: multi-DB deployment or per-tenant infrastructure.
+
+Este plan implementa la funcionalidad para que cada dueño de restaurante (tenant) pueda configurar su propia cuenta de MercadoPago y recibir pagos directamente cuando los clientes hacen pedidos desde el menú público (`/menu/:slug`).
+
+**Situación actual:**
+- El sistema usa una única configuración global de MercadoPago (`MERCADOPAGO_ACCESS_TOKEN` en `.env`)
+- Los tenants solo pueden habilitar/deshabilitar MercadoPago via checkbox
+- No hay forma de que cada tenant conecte su propia cuenta
+
+**Solución propuesta:**
+- Implementar **OAuth de MercadoPago** para conexión fácil con botón "Conectar con MercadoPago"
+- Agregar opción de **configuración manual** de credenciales como fallback
+- Almacenar credenciales encriptadas por tenant en la base de datos
+- Mostrar **historial de transacciones** en el panel admin
+- Si un tenant no tiene MP configurado, solo acepta efectivo/pago presencial
 
 ## Prerequisites
-- Backup the current PostgreSQL database before any migration.
-- Choose a default tenant slug for existing data (e.g., "gestioneo" or "default").
-- Ensure SMTP credentials exist for verification emails (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_FROM).
-- Access to Supabase SQL editor to apply RLS policies.
-- Identify the initial Super Admin account and how it will be created (seed or manual insert).
 
-## Phase 1: Database Schema Changes
-### Task 1.1: Create Tenant model
-- **Location**: backend/prisma/schema.prisma
-- **Description**: Add the Tenant model, branding fields, and plan enum. Wire relations from Tenant to all tenant-owned models.
+- [ ] Crear aplicación en MercadoPago Developers (https://www.mercadopago.com.ar/developers)
+- [ ] Obtener `APP_ID` y `APP_SECRET` para OAuth
+- [ ] Configurar redirect URI: `{BACKEND_URL}/api/mercadopago/oauth/callback`
+- [ ] Instalar dependencia para encriptación de credenciales
+- [ ] Configurar variables de entorno para OAuth de la plataforma
+
+## Phase 1: Base de Datos y Modelos
+**Goal**: Extender el esquema de Prisma para almacenar credenciales de MercadoPago por tenant
+
+### Task 1.1: Crear modelo MercadoPagoConfig en Prisma
+- **Location**: `backend/prisma/schema.prisma`
+- **Description**: Agregar modelo para almacenar credenciales de MP por tenant con campos encriptados
 - **Dependencies**: None
-- **Complexity**: 6
-- **Test-First Approach**: Add a schema validation test (or CI step) to run `npx prisma validate`. Add a unit test to create a Tenant and verify slug uniqueness.
-- **Acceptance Criteria**: Prisma schema validates; Tenant can be created; slug is unique; plan defaults to FREE; activo defaults to false.
-- **Schema Snippet**:
-```prisma
-enum PlanTenant {
-  FREE
-  PRO
-  ENTERPRISE
-}
+- **Complexity**: 3
+- **Test-First Approach**:
+  - Write test: Test unitario que verifique que el modelo se crea correctamente con todos los campos
+  - Test verifies: Campos requeridos, relación con Tenant, unicidad de tenantId
+- **Implementation Details**:
+  ```prisma
+  model MercadoPagoConfig {
+    id              Int      @id @default(autoincrement())
+    tenantId        Int      @unique
+    accessToken     String   // Encriptado
+    refreshToken    String?  // Encriptado (para OAuth)
+    publicKey       String?
+    userId          String?  // ID del usuario en MP
+    email           String?  // Email de la cuenta MP
+    expiresAt       DateTime?
+    isOAuth         Boolean  @default(false)
+    isActive        Boolean  @default(true)
+    createdAt       DateTime @default(now())
+    updatedAt       DateTime @updatedAt
 
-model Tenant {
-  id              Int        @id @default(autoincrement())
-  slug            String     @unique
-  nombre          String
-  email           String
-  telefono        String?
-  direccion       String?
-  logo            String?
-  bannerUrl       String?
-  colorPrimario   String?
-  colorSecundario String?
-  plan            PlanTenant @default(FREE)
-  activo          Boolean    @default(false)
-  createdAt       DateTime   @default(now())
+    tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  usuarios        Usuario[]
-  empleados       Empleado[]
-  mesas           Mesa[]
-  categorias      Categoria[]
-  productos       Producto[]
-  ingredientes    Ingrediente[]
-  pedidos         Pedido[]
-  pagos           Pago[]
-  fichajes        Fichaje[]
-  liquidaciones   Liquidacion[]
-  movimientos     MovimientoStock[]
-  reservas        Reserva[]
-  cierres         CierreCaja[]
-  printJobs       PrintJob[]
-  modificadores   Modificador[]
-  configuraciones Configuracion[]
+    @@map("mercadopago_configs")
+  }
+  ```
+  - Agregar relación en modelo Tenant: `mercadoPagoConfig MercadoPagoConfig?`
+- **Acceptance Criteria**:
+  - [ ] Modelo creado con todos los campos especificados
+  - [ ] Relación 1:1 con Tenant establecida
+  - [ ] Índice único en tenantId
 
-  @@map("tenants")
-}
-```
-
-### Task 1.2: Add tenantId to core domain tables
-- **Location**: backend/prisma/schema.prisma
-- **Description**: Add `tenantId` and Tenant relations to Usuario, Empleado, Mesa, Categoria, Producto, Ingrediente, Pedido, PedidoItem, Pago, Fichaje, Liquidacion, MovimientoStock, Reserva, CierreCaja, PrintJob, Modificador, ProductoIngrediente, ProductoModificador, PedidoItemModificador.
+### Task 1.2: Crear modelo TransaccionMercadoPago para historial
+- **Location**: `backend/prisma/schema.prisma`
+- **Description**: Modelo para almacenar historial de transacciones de MercadoPago por tenant
 - **Dependencies**: Task 1.1
-- **Complexity**: 8
-- **Test-First Approach**: Add unit tests that create data in two tenants and verify isolation using tenant-scoped queries.
-- **Acceptance Criteria**: All listed models include `tenantId` + relation to Tenant; Prisma migration compiles; queries can filter by tenantId.
-- **Schema Snippet (example)**:
-```prisma
-model Usuario {
-  id        Int      @id @default(autoincrement())
-  tenantId  Int
-  email     String
-  password  String
-  nombre    String
-  rol       Rol      @default(MOZO)
-  activo    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+- **Complexity**: 2
+- **Test-First Approach**:
+  - Write test: Verificar que se pueden crear transacciones asociadas a pagos
+  - Test verifies: Relación con Pago y Tenant, campos de auditoría
+- **Implementation Details**:
+  ```prisma
+  model TransaccionMercadoPago {
+    id                Int         @id @default(autoincrement())
+    tenantId          Int
+    pagoId            Int?
+    mpPaymentId       String      @unique
+    mpPreferenceId    String?
+    status            String      // approved, rejected, pending, etc.
+    statusDetail      String?
+    amount            Decimal     @db.Decimal(10, 2)
+    currency          String      @default("ARS")
+    payerEmail        String?
+    paymentMethod     String?     // credit_card, debit_card, account_money, etc.
+    paymentTypeId     String?     // visa, mastercard, etc.
+    installments      Int?
+    fee               Decimal?    @db.Decimal(10, 2) // Comisión de MP
+    netAmount         Decimal?    @db.Decimal(10, 2) // Monto neto recibido
+    externalReference String?
+    rawData           Json?       // Guardar respuesta completa de MP
+    createdAt         DateTime    @default(now())
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  pedidos   Pedido[]
-  cierres   CierreCaja[]
+    tenant            Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+    pago              Pago?       @relation(fields: [pagoId], references: [id])
 
-  @@unique([tenantId, email])
-  @@index([tenantId])
-  @@map("usuarios")
-}
+    @@index([tenantId])
+    @@index([tenantId, createdAt])
+    @@map("transacciones_mercadopago")
+  }
+  ```
+- **Acceptance Criteria**:
+  - [ ] Modelo creado con campos para tracking completo
+  - [ ] Relación opcional con Pago para vincular con pedidos
+  - [ ] Campo rawData para debugging
 
-model Mesa {
-  id        Int        @id @default(autoincrement())
-  tenantId  Int
-  numero    Int
-  zona      String?
-  capacidad Int        @default(4)
-  estado    EstadoMesa @default(LIBRE)
-  activa    Boolean    @default(true)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+### Task 1.3: Ejecutar migración de Prisma
+- **Location**: `backend/prisma/`
+- **Description**: Generar y ejecutar migración para los nuevos modelos
+- **Dependencies**: Task 1.1, Task 1.2
+- **Complexity**: 1
+- **Implementation Details**:
+  ```bash
+  cd backend
+  npx prisma migrate dev --name add_mercadopago_tenant_config
+  npx prisma generate
+  ```
+- **Acceptance Criteria**:
+  - [ ] Migración ejecutada sin errores
+  - [ ] Cliente Prisma regenerado
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
-  pedidos   Pedido[]
-  reservas  Reserva[]
+## Phase 2: Servicio de Encriptación y MercadoPago
+**Goal**: Crear servicios para manejar encriptación de credenciales y lógica de MercadoPago multi-tenant
 
-  @@unique([tenantId, numero])
-  @@index([tenantId])
-  @@map("mesas")
-}
-```
-
-### Task 1.3: Add tenantId to join tables and adjust composite uniques
-- **Location**: backend/prisma/schema.prisma
-- **Description**: Add tenantId to ProductoIngrediente, ProductoModificador, PedidoItemModificador; update unique constraints to include tenantId.
-- **Dependencies**: Task 1.2
-- **Complexity**: 5
-- **Test-First Approach**: Add unit tests that create the same productoId/modificadorId pairs in two tenants without conflicts.
-- **Acceptance Criteria**: Join tables include tenantId and composite uniques that allow duplicates across tenants.
-- **Schema Snippet (example)**:
-```prisma
-model ProductoIngrediente {
-  id            Int     @id @default(autoincrement())
-  tenantId      Int
-  productoId    Int
-  ingredienteId Int
-  cantidad      Decimal @db.Decimal(10, 3)
-
-  tenant        Tenant     @relation(fields: [tenantId], references: [id])
-  producto      Producto   @relation(fields: [productoId], references: [id], onDelete: Cascade)
-  ingrediente   Ingrediente @relation(fields: [ingredienteId], references: [id])
-
-  @@unique([tenantId, productoId, ingredienteId])
-  @@index([tenantId])
-  @@map("producto_ingredientes")
-}
-```
-
-### Task 1.4: Make Configuracion tenant-scoped
-- **Location**: backend/prisma/schema.prisma
-- **Description**: Add tenantId to Configuracion and change unique constraint to be per-tenant. Update any defaults to use Tenant context.
-- **Dependencies**: Task 1.1
+### Task 2.1: Crear servicio de encriptación
+- **Location**: `backend/src/services/crypto.service.js`
+- **Description**: Servicio para encriptar/desencriptar credenciales sensibles usando AES-256
+- **Dependencies**: None
 - **Complexity**: 4
-- **Test-First Approach**: Add unit tests to store same clave in two tenants without conflict.
-- **Acceptance Criteria**: Configuracion includes tenantId and `@@unique([tenantId, clave])`.
-- **Schema Snippet**:
-```prisma
-model Configuracion {
-  id        Int      @id @default(autoincrement())
-  tenantId  Int
-  clave     String
-  valor     String
-  updatedAt DateTime @updatedAt
+- **Test-First Approach**:
+  - Write test: Tests para encriptar, desencriptar, y verificar que datos encriptados no son legibles
+  - Test verifies: Encriptación reversible, diferentes resultados con misma entrada (IV random)
+- **Implementation Details**:
+  ```javascript
+  const crypto = require('crypto');
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  const ALGORITHM = 'aes-256-gcm';
+  const KEY = process.env.ENCRYPTION_KEY; // 32 bytes
 
-  @@unique([tenantId, clave])
-  @@index([tenantId])
-  @@map("configuraciones")
-}
-```
-
-### Task 1.5: Add email verification model
-- **Location**: backend/prisma/schema.prisma
-- **Description**: Add a model to store verification tokens for tenant onboarding and mark usuarios as verified.
-- **Dependencies**: Task 1.1
-- **Complexity**: 4
-- **Test-First Approach**: Add a unit test to create token, verify expiration, and mark usedAt.
-- **Acceptance Criteria**: Tokens are unique; verification can be marked used; linked to tenant and usuario.
-- **Schema Snippet**:
-```prisma
-model EmailVerificacion {
-  id        Int      @id @default(autoincrement())
-  tenantId  Int
-  usuarioId Int
-  token     String   @unique
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime @default(now())
-
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
-
-  @@index([tenantId, usuarioId])
-  @@map("email_verificaciones")
-}
-```
-
-## Phase 2: Backend Multi-Tenancy Middleware
-### Task 2.1: Centralize Prisma client and add tenant-aware helper
-- **Location**: backend/src/db/prisma.js (new), update imports across backend
-- **Description**: Create a shared Prisma client and a helper to scope queries by tenantId; replace all `new PrismaClient()` usages in controllers/services/jobs.
-- **Dependencies**: Phase 1
-- **Complexity**: 7
-- **Test-First Approach**: Add unit tests for the tenant helper to ensure it injects tenantId on create/find/update.
-- **Acceptance Criteria**: No files instantiate PrismaClient directly; all queries go through the shared helper; tenantId auto-injected where appropriate.
-- **Middleware Snippet**:
-```js
-// backend/src/db/prisma.js
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
-
-const getTenantPrisma = (tenantId, isSuperAdmin = false) => {
-  if (isSuperAdmin) return prisma;
-
-  return prisma.$extends({
-    query: {
-      $allModels: {
-        async $allOperations({ operation, args, query }) {
-          if (!args) args = {};
-
-          if (['findMany', 'findFirst', 'count', 'aggregate', 'groupBy'].includes(operation)) {
-            args.where = { ...(args.where || {}), tenantId };
-          }
-
-          if (['update', 'delete', 'upsert'].includes(operation)) {
-            args.where = { ...(args.where || {}), tenantId };
-          }
-
-          if (['create', 'createMany'].includes(operation)) {
-            args.data = Array.isArray(args.data)
-              ? args.data.map(d => ({ ...d, tenantId }))
-              : { ...(args.data || {}), tenantId };
-          }
-
-          return query(args);
-        }
-      }
-    }
-  });
-};
-
-module.exports = { prisma, getTenantPrisma };
-```
-
-### Task 2.2: Add tenant context middleware
-- **Location**: backend/src/middlewares/tenant.middleware.js (new), backend/src/app.js
-- **Description**: Resolve tenantId from JWT for authenticated routes and from slug for public routes. Attach `req.tenantId`, `req.tenantSlug`, and `req.prisma`.
-- **Dependencies**: Task 2.1
-- **Complexity**: 6
-- **Test-First Approach**: Add unit tests for slug resolution and 404 for inactive tenant.
-- **Acceptance Criteria**: All routes receive tenant context; public routes resolve tenant by slug; inactive tenants are blocked.
-- **Middleware Snippet**:
-```js
-const { prisma, getTenantPrisma } = require('../db/prisma');
-
-const resolveTenantFromSlug = async (req, res, next) => {
-  const { slug } = req.params;
-  if (!slug) return res.status(400).json({ error: { message: 'Slug requerido' } });
-
-  const tenant = await prisma.tenant.findUnique({ where: { slug } });
-  if (!tenant || !tenant.activo) {
-    return res.status(404).json({ error: { message: 'Restaurante no encontrado o inactivo' } });
+  function encrypt(text) {
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv(ALGORITHM, Buffer.from(KEY, 'hex'), iv);
+    let encrypted = cipher.update(text, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    const authTag = cipher.getAuthTag();
+    return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
   }
 
-  req.tenantId = tenant.id;
-  req.tenantSlug = tenant.slug;
-  req.prisma = getTenantPrisma(tenant.id, req.isSuperAdmin);
-  return next();
-};
+  function decrypt(encryptedData) {
+    const [ivHex, authTagHex, encrypted] = encryptedData.split(':');
+    const iv = Buffer.from(ivHex, 'hex');
+    const authTag = Buffer.from(authTagHex, 'hex');
+    const decipher = crypto.createDecipheriv(ALGORITHM, Buffer.from(KEY, 'hex'), iv);
+    decipher.setAuthTag(authTag);
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  }
 
-module.exports = { resolveTenantFromSlug };
-```
+  module.exports = { encrypt, decrypt };
+  ```
+- **Acceptance Criteria**:
+  - [ ] Encriptación AES-256-GCM implementada
+  - [ ] Funciones encrypt/decrypt exportadas
+  - [ ] Tests unitarios pasando
 
-### Task 2.3: Update auth middleware to include tenant context
-- **Location**: backend/src/middlewares/auth.middleware.js
-- **Description**: Decode tenantId from JWT, validate tenant + usuario are active, and set `req.tenantId` and `req.isSuperAdmin`.
+### Task 2.2: Crear servicio de MercadoPago multi-tenant
+- **Location**: `backend/src/services/mercadopago.service.js`
+- **Description**: Servicio centralizado para operaciones de MercadoPago que obtiene credenciales del tenant
+- **Dependencies**: Task 1.3, Task 2.1
+- **Complexity**: 6
+- **Test-First Approach**:
+  - Write test: Mock de Prisma para verificar obtención de credenciales y creación de cliente MP
+  - Test verifies: Obtención correcta de access token, manejo de tenant sin configuración
+- **Implementation Details**:
+  ```javascript
+  const { MercadoPagoConfig, Preference, Payment } = require('mercadopago');
+  const { prisma } = require('../db/prisma');
+  const { decrypt } = require('./crypto.service');
+
+  async function getMercadoPagoClient(tenantId) {
+    const config = await prisma.mercadoPagoConfig.findUnique({
+      where: { tenantId }
+    });
+
+    if (!config || !config.isActive) {
+      return null;
+    }
+
+    const accessToken = decrypt(config.accessToken);
+    return new MercadoPagoConfig({ accessToken });
+  }
+
+  async function createPreference(tenantId, preferenceData) {
+    const client = await getMercadoPagoClient(tenantId);
+    if (!client) throw new Error('MercadoPago no configurado para este tenant');
+
+    const preference = new Preference(client);
+    return preference.create({ body: preferenceData });
+  }
+
+  async function getPayment(tenantId, paymentId) {
+    const client = await getMercadoPagoClient(tenantId);
+    if (!client) throw new Error('MercadoPago no configurado para este tenant');
+
+    const payment = new Payment(client);
+    return payment.get({ id: paymentId });
+  }
+
+  async function isMercadoPagoConfigured(tenantId) {
+    const config = await prisma.mercadoPagoConfig.findUnique({
+      where: { tenantId }
+    });
+    return config?.isActive ?? false;
+  }
+
+  module.exports = {
+    getMercadoPagoClient,
+    createPreference,
+    getPayment,
+    isMercadoPagoConfigured
+  };
+  ```
+- **Acceptance Criteria**:
+  - [ ] Cliente MP se crea con credenciales del tenant
+  - [ ] Retorna null si tenant no tiene configuración
+  - [ ] Funciones para crear preferencia y obtener pago
+
+## Phase 3: OAuth de MercadoPago
+**Goal**: Implementar flujo OAuth para que tenants conecten su cuenta con un botón
+
+### Task 3.1: Crear controlador de OAuth de MercadoPago
+- **Location**: `backend/src/controllers/mercadopago-oauth.controller.js`
+- **Description**: Endpoints para iniciar y completar flujo OAuth de MercadoPago
+- **Dependencies**: Task 2.1, Task 2.2
+- **Complexity**: 7
+- **Test-First Approach**:
+  - Write test: Mock de llamadas a MP y verificar que credenciales se guardan encriptadas
+  - Test verifies: Generación de URL OAuth, intercambio de código por tokens, almacenamiento seguro
+- **Implementation Details**:
+  ```javascript
+  const { prisma } = require('../db/prisma');
+  const { encrypt } = require('../services/crypto.service');
+
+  // GET /api/mercadopago/oauth/authorize
+  const iniciarOAuth = async (req, res) => {
+    const tenantId = req.tenantId;
+    const state = Buffer.from(JSON.stringify({ tenantId })).toString('base64');
+
+    const authUrl = `https://auth.mercadopago.com/authorization?` +
+      `client_id=${process.env.MP_APP_ID}&` +
+      `response_type=code&` +
+      `platform_id=mp&` +
+      `state=${state}&` +
+      `redirect_uri=${process.env.BACKEND_URL}/api/mercadopago/oauth/callback`;
+
+    res.json({ authUrl });
+  };
+
+  // GET /api/mercadopago/oauth/callback
+  const callbackOAuth = async (req, res) => {
+    const { code, state } = req.query;
+    const { tenantId } = JSON.parse(Buffer.from(state, 'base64').toString());
+
+    // Intercambiar código por tokens
+    const response = await fetch('https://api.mercadopago.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: process.env.MP_APP_ID,
+        client_secret: process.env.MP_APP_SECRET,
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: `${process.env.BACKEND_URL}/api/mercadopago/oauth/callback`
+      })
+    });
+
+    const data = await response.json();
+
+    // Guardar tokens encriptados
+    await prisma.mercadoPagoConfig.upsert({
+      where: { tenantId },
+      update: {
+        accessToken: encrypt(data.access_token),
+        refreshToken: data.refresh_token ? encrypt(data.refresh_token) : null,
+        publicKey: data.public_key,
+        userId: data.user_id?.toString(),
+        expiresAt: new Date(Date.now() + data.expires_in * 1000),
+        isOAuth: true,
+        isActive: true
+      },
+      create: {
+        tenantId,
+        accessToken: encrypt(data.access_token),
+        refreshToken: data.refresh_token ? encrypt(data.refresh_token) : null,
+        publicKey: data.public_key,
+        userId: data.user_id?.toString(),
+        expiresAt: new Date(Date.now() + data.expires_in * 1000),
+        isOAuth: true,
+        isActive: true
+      }
+    });
+
+    // Habilitar MP en configuración del tenant
+    await prisma.configuracion.upsert({
+      where: { tenantId_clave: { tenantId, clave: 'mercadopago_enabled' } },
+      update: { valor: 'true' },
+      create: { tenantId, clave: 'mercadopago_enabled', valor: 'true' }
+    });
+
+    // Redirigir al frontend con éxito
+    res.redirect(`${process.env.FRONTEND_URL}/admin/configuracion?mp=connected`);
+  };
+
+  // DELETE /api/mercadopago/oauth/disconnect
+  const desconectarOAuth = async (req, res) => {
+    const tenantId = req.tenantId;
+
+    await prisma.mercadoPagoConfig.update({
+      where: { tenantId },
+      data: { isActive: false }
+    });
+
+    await prisma.configuracion.upsert({
+      where: { tenantId_clave: { tenantId, clave: 'mercadopago_enabled' } },
+      update: { valor: 'false' },
+      create: { tenantId, clave: 'mercadopago_enabled', valor: 'false' }
+    });
+
+    res.json({ message: 'MercadoPago desconectado' });
+  };
+
+  module.exports = { iniciarOAuth, callbackOAuth, desconectarOAuth };
+  ```
+- **Acceptance Criteria**:
+  - [ ] Endpoint genera URL de autorización correcta
+  - [ ] Callback intercambia código por tokens
+  - [ ] Tokens se guardan encriptados
+  - [ ] Redirect al frontend después de conexión exitosa
+
+### Task 3.2: Crear rutas de OAuth
+- **Location**: `backend/src/routes/mercadopago.routes.js`
+- **Description**: Definir rutas para el flujo OAuth
+- **Dependencies**: Task 3.1
+- **Complexity**: 2
+- **Implementation Details**:
+  ```javascript
+  const express = require('express');
+  const router = express.Router();
+  const { auth, requireRol } = require('../middlewares/auth.middleware');
+  const { tenantMiddleware } = require('../middlewares/tenant.middleware');
+  const controller = require('../controllers/mercadopago-oauth.controller');
+
+  // Rutas protegidas (requieren admin)
+  router.get('/oauth/authorize', auth, requireRol('ADMIN'), tenantMiddleware, controller.iniciarOAuth);
+  router.delete('/oauth/disconnect', auth, requireRol('ADMIN'), tenantMiddleware, controller.desconectarOAuth);
+  router.get('/oauth/status', auth, requireRol('ADMIN'), tenantMiddleware, controller.obtenerEstado);
+
+  // Callback público (viene de MercadoPago)
+  router.get('/oauth/callback', controller.callbackOAuth);
+
+  module.exports = router;
+  ```
+- **Acceptance Criteria**:
+  - [ ] Rutas protegidas con autenticación
+  - [ ] Callback accesible públicamente
+  - [ ] Registradas en app.js
+
+### Task 3.3: Agregar endpoint para configuración manual
+- **Location**: `backend/src/controllers/mercadopago-oauth.controller.js`
+- **Description**: Endpoint para que admins ingresen credenciales manualmente
+- **Dependencies**: Task 3.1
+- **Complexity**: 4
+- **Implementation Details**:
+  ```javascript
+  // POST /api/mercadopago/config/manual
+  const configurarManual = async (req, res) => {
+    const tenantId = req.tenantId;
+    const { accessToken, publicKey } = req.body;
+
+    if (!accessToken) {
+      return res.status(400).json({ error: { message: 'Access Token es requerido' } });
+    }
+
+    // Verificar que el token es válido consultando a MP
+    try {
+      const { MercadoPagoConfig, User } = require('mercadopago');
+      const client = new MercadoPagoConfig({ accessToken });
+      // Intentar obtener info del usuario para validar token
+      const userInfo = await fetch('https://api.mercadopago.com/users/me', {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      }).then(r => r.json());
+
+      if (userInfo.error) {
+        return res.status(400).json({ error: { message: 'Access Token inválido' } });
+      }
+
+      await prisma.mercadoPagoConfig.upsert({
+        where: { tenantId },
+        update: {
+          accessToken: encrypt(accessToken),
+          publicKey,
+          userId: userInfo.id?.toString(),
+          email: userInfo.email,
+          isOAuth: false,
+          isActive: true
+        },
+        create: {
+          tenantId,
+          accessToken: encrypt(accessToken),
+          publicKey,
+          userId: userInfo.id?.toString(),
+          email: userInfo.email,
+          isOAuth: false,
+          isActive: true
+        }
+      });
+
+      await prisma.configuracion.upsert({
+        where: { tenantId_clave: { tenantId, clave: 'mercadopago_enabled' } },
+        update: { valor: 'true' },
+        create: { tenantId, clave: 'mercadopago_enabled', valor: 'true' }
+      });
+
+      res.json({ message: 'MercadoPago configurado correctamente', email: userInfo.email });
+    } catch (error) {
+      res.status(400).json({ error: { message: 'Error al validar credenciales' } });
+    }
+  };
+  ```
+- **Acceptance Criteria**:
+  - [ ] Valida token contra API de MP
+  - [ ] Guarda credenciales encriptadas
+  - [ ] Retorna email de cuenta conectada
+
+## Phase 4: Actualizar Flujo de Pagos
+**Goal**: Modificar el flujo de pagos públicos para usar credenciales del tenant
+
+### Task 4.1: Actualizar endpoint de crear preferencia en rutas públicas
+- **Location**: `backend/src/routes/publico.routes.js`
+- **Description**: Modificar endpoint `/api/publico/:slug/pedido/:id/pagar` para usar credenciales del tenant
 - **Dependencies**: Task 2.2
 - **Complexity**: 5
-- **Test-First Approach**: Add unit tests to reject tokens with mismatched tenantId and inactive tenant.
-- **Acceptance Criteria**: Authenticated requests always have tenantId; super admin is detected; inactive users or tenants are rejected.
+- **Implementation Details**:
+  - Reemplazar uso de `process.env.MERCADOPAGO_ACCESS_TOKEN` por `getMercadoPagoClient(tenantId)`
+  - Si tenant no tiene MP configurado, retornar error claro
+  - Usar servicio `mercadopago.service.js` para crear preferencia
+- **Acceptance Criteria**:
+  - [ ] Usa credenciales del tenant, no globales
+  - [ ] Error claro si MP no está configurado
+  - [ ] Preferencia se crea en cuenta del tenant
 
-### Task 2.4: Wire tenant middleware in app.js
-- **Location**: backend/src/app.js
-- **Description**: Mount tenant middleware for public routes (slug based) and ensure authenticated routes set tenant context before controllers run.
-- **Dependencies**: Task 2.2, Task 2.3
-- **Complexity**: 4
-- **Test-First Approach**: Add integration test that calls `/api/publico/:slug/menu` and verifies tenant scoping.
-- **Acceptance Criteria**: All API routes that touch data have tenant context; missing tenant context returns a clear error.
-
-## Phase 3: API Route Updates
-### Task 3.1: Update login to require tenant context
-- **Location**: backend/src/controllers/auth.controller.js, backend/src/routes/auth.routes.js
-- **Description**: Require slug (or tenant selection) during login, load user by tenantId + email, and include tenantId/tenantSlug in JWT claims and response.
-- **Dependencies**: Phase 2
-- **Complexity**: 6
-- **Test-First Approach**: Add integration test for login with correct slug; verify cross-tenant login fails.
-- **Acceptance Criteria**: Login requires slug; JWT includes `tenant_id`; user search scoped to tenant.
-
-### Task 3.2: Update public routes to be slug-based
-- **Location**: backend/src/routes/publico.routes.js, backend/src/controllers/configuracion.controller.js
-- **Description**: Change public endpoints to `/api/publico/:slug/config`, `/api/publico/:slug/menu`, `/api/publico/:slug/pedido`, `/api/publico/:slug/pedido/:id/pagar` and scope all queries by tenantId.
+### Task 4.2: Actualizar webhook de MercadoPago
+- **Location**: `backend/src/controllers/pagos.controller.js`
+- **Description**: Modificar webhook para identificar tenant desde external_reference y usar sus credenciales
 - **Dependencies**: Task 2.2
-- **Complexity**: 7
-- **Test-First Approach**: Add integration tests for public menu + pedido creation with two tenants.
-- **Acceptance Criteria**: Public menu and config are tenant-specific; orders created via public menu carry tenantId.
-
-### Task 3.3: Scope all controllers to tenantId
-- **Location**: backend/src/controllers/*.controller.js (auth, categorias, cierres, configuracion, empleados, fichajes, impresion, ingredientes, liquidaciones, mesas, modificadores, pagos, pedidos, productos, reportes, reservas)
-- **Description**: Replace direct PrismaClient usage with `req.prisma` and ensure every query includes tenantId via middleware or explicit where clauses. Update any `findUnique` usage to `findFirst` with tenantId when needed.
-- **Dependencies**: Task 2.1
-- **Complexity**: 9
-- **Test-First Approach**: For each controller, add a test that attempts cross-tenant access and expects 404/403.
-- **Acceptance Criteria**: All controller queries are tenant-scoped; no cross-tenant data is returned or modified.
-
-### Task 3.4: Scope services, jobs, and events to tenant
-- **Location**: backend/src/services/email.service.js, backend/src/services/print.service.js, backend/src/services/event-bus.js, backend/src/routes/eventos.routes.js, backend/src/jobs/reservas.job.js
-- **Description**: Include tenantId in event payloads, filter SSE by tenant, and ensure background jobs iterate by tenant. Update email and print queries to include tenantId.
-- **Dependencies**: Task 2.1, Task 2.3
-- **Complexity**: 7
-- **Test-First Approach**: Add tests to confirm SSE does not leak events across tenants.
-- **Acceptance Criteria**: Events and background jobs are tenant-isolated; services only query within tenantId.
-
-## Phase 4: Tenant Registration & Onboarding
-### Task 4.1: Add registration endpoint to create Tenant + Admin usuario
-- **Location**: backend/src/routes/registro.routes.js (new), backend/src/controllers/registro.controller.js (new)
-- **Description**: Implement `/api/registro` to create Tenant and first admin user in a transaction, set tenant.activo=false, usuario.activo=false, and create EmailVerificacion token.
-- **Dependencies**: Phase 1, Phase 2
-- **Complexity**: 7
-- **Test-First Approach**: Add integration test to ensure tenant + admin user are created atomically.
-- **Acceptance Criteria**: Transaction succeeds or rolls back; slug is unique; admin user is created for new tenant.
-
-### Task 4.2: Implement email verification flow
-- **Location**: backend/src/controllers/registro.controller.js, backend/src/services/email.service.js, backend/src/routes/registro.routes.js
-- **Description**: Send verification email with a secure token; create `/api/registro/verificar` to activate tenant + usuario and mark token used.
-- **Dependencies**: Task 4.1
 - **Complexity**: 6
-- **Test-First Approach**: Add test for token expiration and verify activation only once.
-- **Acceptance Criteria**: Email verification activates tenant and admin user; expired or reused tokens are rejected.
+- **Implementation Details**:
+  - Parsear `external_reference` que ahora incluye `{tenantId}-{pedidoId}`
+  - Usar credenciales del tenant para consultar estado del pago en MP
+  - Guardar transacción en tabla `TransaccionMercadoPago`
+- **Acceptance Criteria**:
+  - [ ] Identifica tenant desde external_reference
+  - [ ] Consulta pago con credenciales del tenant
+  - [ ] Guarda historial de transacción
 
-### Task 4.3: Add rate limiting and slug validation
-- **Location**: backend/src/routes/registro.routes.js, backend/src/utils/slug.js (new)
-- **Description**: Add rate limit to /registro and a slug normalizer/validator to prevent collisions and unsafe slugs.
-- **Dependencies**: Task 4.1
-- **Complexity**: 4
-- **Test-First Approach**: Add unit tests for slug validation and collision detection.
-- **Acceptance Criteria**: Invalid slugs are rejected; registration is rate-limited.
-
-### Task 4.4: Build public registration page
-- **Location**: frontend/src/pages/Registro.jsx (new), frontend/src/App.jsx
-- **Description**: Create `/registro` page with Spanish UI text, form validation, and success state instructing email verification.
-- **Dependencies**: Task 4.1
-- **Complexity**: 5
-- **Test-First Approach**: Add frontend tests to validate form errors and successful submission.
-- **Acceptance Criteria**: Registration page submits data, shows errors in Espanol, and displays verification instructions.
-
-## Phase 5: Super Admin Panel
-### Task 5.1: Add SUPER_ADMIN role and bootstrap account
-- **Location**: backend/prisma/schema.prisma, backend/prisma/seed.js
-- **Description**: Extend Rol enum with SUPER_ADMIN and seed a super admin user (assign to a system tenant or dedicated tenant).
-- **Dependencies**: Phase 1
-- **Complexity**: 5
-- **Test-First Approach**: Add unit test to verify SUPER_ADMIN role bypass logic.
-- **Acceptance Criteria**: SUPER_ADMIN can authenticate; role is stored in JWT; tenant scoping can be bypassed safely.
-
-### Task 5.2: Add super admin API endpoints
-- **Location**: backend/src/routes/superadmin.routes.js (new), backend/src/controllers/superadmin.controller.js (new)
-- **Description**: Implement endpoints to list tenants, activate/deactivate, and fetch basic metrics (orders count, revenue, active users) by tenant.
-- **Dependencies**: Task 5.1
-- **Complexity**: 6
-- **Test-First Approach**: Add integration tests for /super-admin endpoints to ensure access control.
-- **Acceptance Criteria**: Super admin can list and toggle tenant status; metrics are returned per tenant.
-
-### Task 5.3: Add super admin frontend route
-- **Location**: frontend/src/pages/superadmin/SuperAdmin.jsx (new), frontend/src/App.jsx, frontend/src/components/RedirectByRole.jsx
-- **Description**: Create `/super-admin` UI with tenant list, status toggles, and metrics summary; protect route to SUPER_ADMIN only.
-- **Dependencies**: Task 5.2
-- **Complexity**: 6
-- **Test-First Approach**: Add frontend tests to ensure non-super-admin users are redirected.
-- **Acceptance Criteria**: Super admin UI loads data, toggles tenant status, and is hidden for tenant admins.
-
-## Phase 6: Frontend Updates
-### Task 6.1: Update public menu routing to use slug
-- **Location**: frontend/src/App.jsx, frontend/src/pages/MenuPublico.jsx
-- **Description**: Change route to `/menu/:slug` and update all public API calls to include slug in the path.
-- **Dependencies**: Task 3.2
-- **Complexity**: 5
-- **Test-First Approach**: Add frontend tests verifying menu loads with slug and errors when slug is invalid.
-- **Acceptance Criteria**: Public menu works only with slug; public config and menu are tenant-specific.
-
-### Task 6.2: Add tenant context and branding loader
-- **Location**: frontend/src/context/TenantContext.jsx (new), frontend/src/main.jsx
-- **Description**: Add a TenantContext to load branding and tenant info; store tenantSlug in localStorage for reuse in login.
-- **Dependencies**: Task 3.2
-- **Complexity**: 6
-- **Test-First Approach**: Add unit tests for TenantContext state transitions (loading, success, error).
-- **Acceptance Criteria**: Branding is available across public pages and admin layout; tenantSlug persists.
-
-### Task 6.3: Update login to include tenant context
-- **Location**: frontend/src/pages/Login.jsx, frontend/src/context/AuthContext.jsx
-- **Description**: Add slug input (or tenant selector) to login form and send slug in `/auth/login`. Store tenant info from response.
-- **Dependencies**: Task 3.1, Task 6.2
-- **Complexity**: 5
-- **Test-First Approach**: Add frontend test to ensure login requires slug and shows errors in Espanol.
-- **Acceptance Criteria**: Login includes tenant slug; user state includes tenantId/tenantSlug.
-
-### Task 6.4: Apply tenant branding to layouts
-- **Location**: frontend/src/components/layouts/PublicLayout.jsx, frontend/src/components/layouts/AdminLayout.jsx, frontend/src/index.css
-- **Description**: Apply tenant logo, banner, and colors via CSS variables; keep UI text in Espanol.
-- **Dependencies**: Task 6.2
-- **Complexity**: 6
-- **Test-First Approach**: Add UI tests to check CSS variables are set after branding load.
-- **Acceptance Criteria**: Public and admin layouts reflect tenant branding without breaking layout on mobile.
-
-### Task 6.5: Update tenant context usage in API and events
-- **Location**: frontend/src/services/api.js, frontend/src/services/eventos.js
-- **Description**: Include tenantSlug in headers or query params where needed, and include token + tenant context for SSE.
-- **Dependencies**: Task 6.2
-- **Complexity**: 4
-- **Test-First Approach**: Add tests for EventSource URL generation with tenant context.
-- **Acceptance Criteria**: API calls and SSE connections carry tenant context; no cross-tenant updates are shown.
-
-## Phase 7: Supabase RLS Policies
-### Task 7.1: Enable RLS on all tenant tables
-- **Location**: Supabase SQL editor; store scripts in docs/rls.sql
-- **Description**: Enable RLS for all tenant-owned tables and add base policies for tenant isolation.
-- **Dependencies**: Phase 1
-- **Complexity**: 6
-- **Test-First Approach**: Create SQL tests to verify a tenant JWT cannot read other tenant rows.
-- **Acceptance Criteria**: RLS is enabled and policies exist for every tenant table.
-- **Policy Snippet**:
-```sql
-alter table usuarios enable row level security;
-
-create policy tenant_isolation_usuarios
-on usuarios
-for all
-using ((auth.jwt() ->> 'tenant_id') = ("tenantId")::text)
-with check ((auth.jwt() ->> 'tenant_id') = ("tenantId")::text);
-```
-
-### Task 7.2: Add super admin bypass policy
-- **Location**: Supabase SQL editor; docs/rls.sql
-- **Description**: Allow SUPER_ADMIN to bypass tenant isolation via JWT claim.
-- **Dependencies**: Task 7.1
+### Task 4.3: Actualizar endpoint de config pública
+- **Location**: `backend/src/routes/publico.routes.js`
+- **Description**: El endpoint `/api/publico/:slug/config` debe verificar si MP está realmente configurado
+- **Dependencies**: Task 2.2
 - **Complexity**: 3
-- **Test-First Approach**: Add SQL tests to verify SUPER_ADMIN can read all tenants.
-- **Acceptance Criteria**: SUPER_ADMIN can read/write across tenants; regular users cannot.
-- **Policy Snippet**:
-```sql
-create policy super_admin_bypass_usuarios
-on usuarios
-for all
-using ((auth.jwt() ->> 'role') = 'SUPER_ADMIN')
-with check ((auth.jwt() ->> 'role') = 'SUPER_ADMIN');
-```
+- **Implementation Details**:
+  ```javascript
+  // En GET /:slug/config
+  const mpConfigured = await isMercadoPagoConfigured(tenantId);
 
-### Task 7.3: Set JWT claims per request for Prisma connections
-- **Location**: backend/src/db/prisma.js
-- **Description**: For each request, execute `set_config('request.jwt.claims', ...)` inside a transaction so `auth.jwt()` works for RLS. Use tenantId and role claims.
-- **Dependencies**: Task 2.1
-- **Complexity**: 7
-- **Test-First Approach**: Add integration test that uses RLS and verifies access denied without correct tenant claim.
-- **Acceptance Criteria**: RLS policies enforce tenant isolation for Prisma queries.
+  res.json({
+    // ... otros campos
+    config: {
+      // ...
+      mercadopago_enabled: configMap.mercadopago_enabled === 'true' && mpConfigured,
+    }
+  });
+  ```
+- **Acceptance Criteria**:
+  - [ ] `mercadopago_enabled` solo es true si hay credenciales válidas
+  - [ ] Frontend muestra opciones de pago correctas
 
-## Phase 8: Data Migration
-### Task 8.1: Create staged migrations for tenantId
-- **Location**: backend/prisma/migrations/*
-- **Description**: Use multiple migrations: (1) create Tenant + EmailVerificacion, (2) add tenantId nullable to all tables with defaults, (3) backfill tenantId for existing data, (4) change tenantId to NOT NULL and update uniques.
-- **Dependencies**: Phase 1
-- **Complexity**: 8
-- **Test-First Approach**: Run migration on a copy of production data and verify row counts match.
-- **Acceptance Criteria**: Migration completes without data loss; all rows have tenantId.
+## Phase 5: Frontend - Panel de Configuración
+**Goal**: Actualizar UI de configuración para conectar MercadoPago
 
-### Task 8.2: Create default tenant and backfill existing data
-- **Location**: backend/prisma/seed.js, backend/prisma/migrations/*
-- **Description**: Insert the default tenant, update all existing rows to reference it, and update seed data to include tenantId.
-- **Dependencies**: Task 8.1
-- **Complexity**: 6
-- **Test-First Approach**: Add a seed test to verify all created records have tenantId.
-- **Acceptance Criteria**: All existing data belongs to the default tenant; seed creates tenant-scoped records.
+### Task 5.1: Crear componente MercadoPagoConfig
+- **Location**: `frontend/src/components/configuracion/MercadoPagoConfig.jsx`
+- **Description**: Componente para mostrar estado de conexión y botones de conectar/desconectar
+- **Dependencies**: Task 3.2
+- **Complexity**: 5
+- **Implementation Details**:
+  ```jsx
+  // Estados: no conectado, conectando, conectado (OAuth), conectado (manual)
+  // Botón "Conectar con MercadoPago" que redirige a OAuth
+  // Opción "Configuración manual" expandible
+  // Mostrar email de cuenta conectada
+  // Botón "Desconectar"
+  ```
+- **Acceptance Criteria**:
+  - [ ] Muestra estado actual de conexión
+  - [ ] Botón de OAuth funcional
+  - [ ] Formulario manual funcional
+  - [ ] Opción de desconectar
 
-### Task 8.3: Backward compatibility for public menu
-- **Location**: backend/src/routes/publico.routes.js, frontend/src/App.jsx
-- **Description**: Keep `/menu` and `/api/publico/menu` as temporary redirects to the default slug during a transition window; emit deprecation warnings in logs.
-- **Dependencies**: Task 3.2, Task 6.1
+### Task 5.2: Integrar componente en página de Configuración
+- **Location**: `frontend/src/pages/admin/Configuracion.jsx`
+- **Description**: Reemplazar checkbox simple por nuevo componente
+- **Dependencies**: Task 5.1
+- **Complexity**: 3
+- **Implementation Details**:
+  - Importar y usar `MercadoPagoConfig`
+  - Eliminar checkbox `mercadopago_enabled`
+  - Agregar estado para cargar info de MP
+  - Detectar parámetro `?mp=connected` para mostrar mensaje de éxito
+- **Acceptance Criteria**:
+  - [ ] Componente integrado correctamente
+  - [ ] Mensaje de éxito al conectar
+  - [ ] Estado se actualiza al conectar/desconectar
+
+## Phase 6: Frontend - Historial de Transacciones
+**Goal**: Mostrar historial de pagos de MercadoPago al admin
+
+### Task 6.1: Crear endpoint de historial de transacciones
+- **Location**: `backend/src/controllers/mercadopago-oauth.controller.js`
+- **Description**: Endpoint para listar transacciones del tenant con paginación
+- **Dependencies**: Task 1.2
 - **Complexity**: 4
-- **Test-First Approach**: Add tests to verify `/menu` redirects to `/menu/:defaultSlug`.
-- **Acceptance Criteria**: Legacy routes still work for the default tenant and log a warning.
+- **Implementation Details**:
+  ```javascript
+  // GET /api/mercadopago/transacciones
+  const listarTransacciones = async (req, res) => {
+    const tenantId = req.tenantId;
+    const { page = 1, limit = 20, desde, hasta } = req.query;
+
+    const where = { tenantId };
+    if (desde || hasta) {
+      where.createdAt = {};
+      if (desde) where.createdAt.gte = new Date(desde);
+      if (hasta) where.createdAt.lte = new Date(hasta);
+    }
+
+    const [transacciones, total] = await Promise.all([
+      prisma.transaccionMercadoPago.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: parseInt(limit),
+        include: { pago: { include: { pedido: true } } }
+      }),
+      prisma.transaccionMercadoPago.count({ where })
+    ]);
+
+    // Calcular totales
+    const totales = await prisma.transaccionMercadoPago.aggregate({
+      where: { ...where, status: 'approved' },
+      _sum: { amount: true, fee: true, netAmount: true }
+    });
+
+    res.json({
+      transacciones,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+      totales: {
+        bruto: totales._sum.amount || 0,
+        comisiones: totales._sum.fee || 0,
+        neto: totales._sum.netAmount || 0
+      }
+    });
+  };
+  ```
+- **Acceptance Criteria**:
+  - [ ] Paginación funcional
+  - [ ] Filtro por fechas
+  - [ ] Incluye totales agregados
+
+### Task 6.2: Crear página de Transacciones MercadoPago
+- **Location**: `frontend/src/pages/admin/TransaccionesMercadoPago.jsx`
+- **Description**: Página para ver historial de transacciones con filtros y totales
+- **Dependencies**: Task 6.1
+- **Complexity**: 5
+- **Implementation Details**:
+  - Tabla con: fecha, pedido #, monto, comisión, neto, estado, método
+  - Filtros por rango de fechas
+  - Cards con totales (bruto, comisiones, neto)
+  - Paginación
+  - Link a detalle del pedido
+- **Acceptance Criteria**:
+  - [ ] Lista transacciones correctamente
+  - [ ] Filtros funcionan
+  - [ ] Totales calculados
+  - [ ] Navegación a pedido
+
+### Task 6.3: Agregar link en navegación admin
+- **Location**: `frontend/src/components/layouts/AdminLayout.jsx`
+- **Description**: Agregar item de menú para transacciones MP
+- **Dependencies**: Task 6.2
+- **Complexity**: 1
+- **Acceptance Criteria**:
+  - [ ] Link visible en sidebar
+  - [ ] Icono apropiado
+  - [ ] Ruta configurada
+
+## Phase 7: Manejo de Fallback (Sin MP)
+**Goal**: Comportamiento correcto cuando tenant no tiene MP configurado
+
+### Task 7.1: Actualizar frontend de menú público
+- **Location**: `frontend/src/pages/MenuPublico.jsx`
+- **Description**: Si MP no está habilitado/configurado, solo mostrar opción de efectivo
+- **Dependencies**: Task 4.3
+- **Complexity**: 3
+- **Implementation Details**:
+  - Ya implementado parcialmente (línea 809-836)
+  - Agregar mensaje informativo: "Este local solo acepta pago en efectivo/presencial"
+  - Si solo hay efectivo, pre-seleccionar automáticamente
+- **Acceptance Criteria**:
+  - [ ] Solo muestra métodos de pago disponibles
+  - [ ] Mensaje claro si solo efectivo
+  - [ ] No intenta crear preferencia MP si no está configurado
+
+### Task 7.2: Agregar validación en backend
+- **Location**: `backend/src/routes/publico.routes.js`
+- **Description**: Validar que no se intente pagar con MP si no está configurado
+- **Dependencies**: Task 4.1
+- **Complexity**: 2
+- **Implementation Details**:
+  - Ya existe validación básica, reforzar con verificación de credenciales reales
+  - Retornar error descriptivo
+- **Acceptance Criteria**:
+  - [ ] Error claro si se intenta pagar con MP sin configuración
+  - [ ] Status code 400 apropiado
 
 ## Testing Strategy
-- **Unit Tests**: Add tests for slug validation, tenant middleware, and Prisma tenant scoping (backend/src/__tests__). Run `npm test` in backend.
-- **Integration Tests**: Add tests for login with tenant slug, public menu access, and cross-tenant access denial using supertest.
-- **E2E Tests**: Add UI tests in frontend/src/__tests__ for public menu + login + onboarding flows using Vitest and Testing Library (`npm test` in frontend).
+
+- **Unit Tests**:
+  - `backend/src/__tests__/crypto.service.test.js`: Encriptación/desencriptación
+  - `backend/src/__tests__/mercadopago.service.test.js`: Mocks de cliente MP
+  - Coverage target: 80%
+
+- **Integration Tests**:
+  - `backend/src/__tests__/mercadopago-oauth.test.js`: Flujo OAuth completo con mocks
+  - `backend/src/__tests__/publico-pagos.test.js`: Creación de preferencia multi-tenant
+
+- **E2E Tests**:
+  - Flujo completo: Conectar MP → Hacer pedido → Pagar → Verificar transacción
+  - Flujo sin MP: Hacer pedido → Solo efectivo disponible
+
+- **Test Commands**:
+  ```bash
+  cd backend && npm test
+  cd frontend && npm test
+  ```
 
 ## Dependency Graph
-- Phase 1 (schema) -> Phase 8 (migrations/backfill) -> Phase 2 (tenant middleware) -> Phase 3 (route updates)
-- Phase 3 -> Phase 4 (onboarding) -> Phase 6 (frontend changes)
-- Phase 5 (super admin) depends on Phase 1 + Phase 2
-- Phase 7 (RLS) depends on Phase 1 + Phase 2
 
-## Potential Risks
-- Cross-tenant data leakage if any query bypasses tenant scoping.
-- Migration downtime or lock contention when adding tenantId to large tables.
-- JWT claim mismatch with RLS, causing unexpected access denial.
-- Slug collisions or changes breaking existing public URLs.
-- SSE/event streams leaking events across tenants if not filtered.
+### Tasks With No Dependencies (Can Start Immediately)
+- Task 1.1: Crear modelo MercadoPagoConfig
+- Task 2.1: Crear servicio de encriptación
+
+### Dependency Chains
+```
+Task 1.1 ─┬─► Task 1.2 ───► Task 1.3 ───► Task 2.2 ─┬─► Task 3.1 ───► Task 3.2 ───► Task 3.3
+          │                                          │
+Task 2.1 ─┘                                          ├─► Task 4.1
+                                                     ├─► Task 4.2
+                                                     └─► Task 4.3 ───► Task 7.1
+
+Task 3.2 ───► Task 5.1 ───► Task 5.2
+
+Task 1.2 ───► Task 6.1 ───► Task 6.2 ───► Task 6.3
+```
+
+### Parallel Execution Groups
+- **Group A** (no dependencies): Task 1.1, Task 2.1
+- **Group B** (after Task 1.3): Task 2.2
+- **Group C** (after Task 2.2): Task 3.1, Task 4.1, Task 4.2, Task 4.3
+- **Group D** (after Task 3.2): Task 5.1, Task 6.1
+- **Group E** (after Group D): Task 5.2, Task 6.2, Task 7.1
+- **Group F** (final): Task 6.3, Task 7.2
+
+## Files to Create/Modify
+
+| File | Action | Description |
+|------|--------|-------------|
+| `backend/prisma/schema.prisma` | Modify | Agregar modelos MercadoPagoConfig y TransaccionMercadoPago |
+| `backend/src/services/crypto.service.js` | Create | Servicio de encriptación AES-256 |
+| `backend/src/services/mercadopago.service.js` | Create | Servicio multi-tenant de MercadoPago |
+| `backend/src/controllers/mercadopago-oauth.controller.js` | Create | Controlador OAuth y configuración |
+| `backend/src/routes/mercadopago.routes.js` | Create | Rutas de MercadoPago |
+| `backend/src/routes/publico.routes.js` | Modify | Usar servicio MP multi-tenant |
+| `backend/src/controllers/pagos.controller.js` | Modify | Webhook multi-tenant |
+| `backend/src/app.js` | Modify | Registrar nuevas rutas |
+| `backend/.env.example` | Modify | Agregar variables MP_APP_ID, MP_APP_SECRET, ENCRYPTION_KEY |
+| `frontend/src/components/configuracion/MercadoPagoConfig.jsx` | Create | Componente de conexión MP |
+| `frontend/src/pages/admin/Configuracion.jsx` | Modify | Integrar componente MP |
+| `frontend/src/pages/admin/TransaccionesMercadoPago.jsx` | Create | Página de historial |
+| `frontend/src/components/layouts/AdminLayout.jsx` | Modify | Link a transacciones |
+| `frontend/src/pages/MenuPublico.jsx` | Modify | Mejorar fallback sin MP |
+
+## Potential Risks & Mitigations
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| Token OAuth expira y no se renueva | Medium | High | Implementar refresh automático antes de expiración |
+| Credenciales mal encriptadas/perdidas | Low | Critical | Backup de ENCRYPTION_KEY, tests de encrypt/decrypt |
+| Webhook no identifica tenant correctamente | Medium | High | Logging detallado, formato consistente de external_reference |
+| Rate limiting de MercadoPago | Low | Medium | Implementar retry con backoff exponencial |
+| Usuario conecta cuenta MP equivocada | Medium | Medium | Mostrar email de cuenta antes de confirmar |
 
 ## Rollback Plan
-- Restore database from backup taken before Phase 8 migrations.
-- Revert backend and frontend to pre-multi-tenant routes (keep /menu and /login).
-- Disable RLS policies in Supabase if they block access unexpectedly.
-- Roll back to single-tenant seed data and remove tenant middleware usage.
+
+1. **Base de datos**:
+   ```bash
+   npx prisma migrate rollback
+   ```
+2. **Código**: Revertir commits de esta feature branch
+3. **Configuración**: Los tenants que conectaron MP seguirán con datos en DB pero el código anterior los ignorará (usa env global)
+4. **Comunicación**: Notificar a tenants afectados si hubo rollback en producción
+
+## Success Metrics
+
+- [ ] Al menos 1 tenant puede conectar su cuenta MP vía OAuth
+- [ ] Pago completo funciona end-to-end con credenciales del tenant
+- [ ] Transacción aparece en historial del admin
+- [ ] Tenant sin MP solo ve opción de efectivo
+- [ ] Tests unitarios e integración pasando (>80% coverage en nuevos archivos)
+- [ ] Sin errores críticos en logs durante 24h post-deploy

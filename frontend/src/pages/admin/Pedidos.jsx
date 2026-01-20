@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { useAuth } from '../../context/AuthContext'
-import { EyeIcon, PrinterIcon, CurrencyDollarIcon } from '@heroicons/react/24/outline'
+import { EyeIcon, PrinterIcon, CurrencyDollarIcon, PlusIcon } from '@heroicons/react/24/outline'
 import { createEventSource } from '../../services/eventos'
+import NuevoPedidoModal from '../../components/pedidos/NuevoPedidoModal'
 
 const estadoColors = {
   PENDIENTE: 'bg-yellow-100 text-yellow-700',
@@ -17,6 +18,7 @@ const estadoColors = {
 export default function Pedidos() {
   const { usuario } = useAuth()
   const esSoloMozo = usuario?.rol === 'MOZO'
+  const puedeCrearPedido = ['ADMIN', 'CAJERO'].includes(usuario?.rol)
 
   const [pedidos, setPedidos] = useState([])
   const [loading, setLoading] = useState(true)
@@ -25,6 +27,7 @@ export default function Pedidos() {
   const [pedidoSeleccionado, setPedidoSeleccionado] = useState(null)
   const [showPagoModal, setShowPagoModal] = useState(false)
   const [pagoForm, setPagoForm] = useState({ monto: '', metodo: 'EFECTIVO', referencia: '' })
+  const [showNuevoPedidoModal, setShowNuevoPedidoModal] = useState(false)
 
   useEffect(() => {
     cargarPedidos()
@@ -149,19 +152,30 @@ export default function Pedidos() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Pedidos</h1>
-        <select
-          className="input w-48"
-          value={filtroEstado}
-          onChange={(e) => setFiltroEstado(e.target.value)}
-        >
-          <option value="">Todos los estados</option>
-          <option value="PENDIENTE">Pendiente</option>
-          <option value="EN_PREPARACION">En preparación</option>
-          <option value="LISTO">Listo</option>
-          <option value="ENTREGADO">Entregado</option>
-          <option value="COBRADO">Cobrado</option>
-          <option value="CANCELADO">Cancelado</option>
-        </select>
+        <div className="flex items-center gap-4">
+          <select
+            className="input w-48"
+            value={filtroEstado}
+            onChange={(e) => setFiltroEstado(e.target.value)}
+          >
+            <option value="">Todos los estados</option>
+            <option value="PENDIENTE">Pendiente</option>
+            <option value="EN_PREPARACION">En preparacion</option>
+            <option value="LISTO">Listo</option>
+            <option value="ENTREGADO">Entregado</option>
+            <option value="COBRADO">Cobrado</option>
+            <option value="CANCELADO">Cancelado</option>
+          </select>
+          {puedeCrearPedido && (
+            <button
+              onClick={() => setShowNuevoPedidoModal(true)}
+              className="btn btn-primary flex items-center gap-2"
+            >
+              <PlusIcon className="w-5 h-5" />
+              Nuevo Pedido
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="card overflow-hidden">
@@ -184,7 +198,11 @@ export default function Pedidos() {
                 <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">#{pedido.id}</td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`px-2 py-1 text-xs rounded-full ${
-                    pedido.tipo === 'DELIVERY' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                    pedido.tipo === 'DELIVERY'
+                      ? 'bg-purple-100 text-purple-700'
+                      : pedido.tipo === 'MOSTRADOR'
+                        ? 'bg-orange-100 text-orange-700'
+                        : 'bg-blue-100 text-blue-700'
                   }`}>
                     {pedido.tipo}
                   </span>
@@ -192,7 +210,9 @@ export default function Pedidos() {
                 <td className="px-6 py-4 whitespace-nowrap text-gray-600">
                   {pedido.tipo === 'MESA'
                     ? `Mesa ${pedido.mesa?.numero}`
-                    : pedido.clienteNombre || 'Sin nombre'}
+                    : pedido.tipo === 'MOSTRADOR'
+                      ? pedido.clienteNombre || 'Mostrador'
+                      : pedido.clienteNombre || 'Sin nombre'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
                   ${parseFloat(pedido.total).toLocaleString('es-AR')}
@@ -327,7 +347,7 @@ export default function Pedidos() {
                 />
               </div>
               <div>
-                <label className="label">Método de Pago</label>
+                <label className="label">Metodo de Pago</label>
                 <select
                   className="input"
                   value={pagoForm.metodo}
@@ -346,7 +366,7 @@ export default function Pedidos() {
                     className="input"
                     value={pagoForm.referencia}
                     onChange={(e) => setPagoForm({ ...pagoForm, referencia: e.target.value })}
-                    placeholder="Número de transacción"
+                    placeholder="Numero de transaccion"
                   />
                 </div>
               )}
@@ -362,6 +382,16 @@ export default function Pedidos() {
           </div>
         </div>
       )}
+
+      {/* Modal Nuevo Pedido */}
+      <NuevoPedidoModal
+        isOpen={showNuevoPedidoModal}
+        onClose={() => setShowNuevoPedidoModal(false)}
+        onSuccess={() => {
+          setShowNuevoPedidoModal(false)
+          cargarPedidos()
+        }}
+      />
     </div>
   )
 }

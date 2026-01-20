@@ -25,6 +25,7 @@ const reservasRoutes = require('./routes/reservas.routes');
 const modificadoresRoutes = require('./routes/modificadores.routes');
 const registroRoutes = require('./routes/registro.routes');
 const superadminRoutes = require('./routes/superadmin.routes');
+const mercadopagoRoutes = require('./routes/mercadopago.routes');
 
 // Jobs
 const { iniciarJobReservas } = require('./jobs/reservas.job');
@@ -68,6 +69,7 @@ app.use('/api/reservas', reservasRoutes);
 app.use('/api/modificadores', modificadoresRoutes);
 app.use('/api/registro', registroRoutes);
 app.use('/api/super-admin', superadminRoutes);
+app.use('/api/mercadopago', mercadopagoRoutes);
 
 // Ruta de salud
 app.get('/api/health', (req, res) => {

@@ -19,7 +19,8 @@ import {
   UserCircleIcon,
   Cog6ToothIcon,
   CalendarDaysIcon,
-  AdjustmentsHorizontalIcon
+  AdjustmentsHorizontalIcon,
+  CreditCardIcon
 } from '@heroicons/react/24/outline'
 
 const navigation = [
@@ -38,6 +39,7 @@ const navigation = [
   { name: 'Ingredientes', href: '/ingredientes', icon: BeakerIcon, roles: ['ADMIN'] },
   { divider: true, roles: ['ADMIN'] },
   { name: 'Liquidaciones', href: '/liquidaciones', icon: BanknotesIcon, roles: ['ADMIN'] },
+  { name: 'Transacciones MP', href: '/transacciones-mp', icon: CreditCardIcon, roles: ['ADMIN'] },
   { name: 'Reportes', href: '/reportes', icon: ChartBarIcon, roles: ['ADMIN', 'CAJERO'] },
   { name: 'Cierre de Caja', href: '/cierre-caja', icon: BanknotesIcon, roles: ['ADMIN', 'CAJERO'] },
   { name: 'Configuración', href: '/configuracion', icon: Cog6ToothIcon, roles: ['ADMIN'] },
@@ -62,14 +64,14 @@ export default function AdminLayout() {
       {/* Sidebar móvil */}
       <div className={`fixed inset-0 z-50 lg:hidden ${sidebarOpen ? '' : 'hidden'}`}>
         <div className="fixed inset-0 bg-gray-900/80" onClick={() => setSidebarOpen(false)} />
-        <div className="fixed inset-y-0 left-0 w-72 bg-white shadow-xl">
+        <div className="fixed inset-y-0 left-0 w-72 bg-white shadow-xl flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b">
             <h1 className="text-xl font-bold text-primary-600">GestioNeo</h1>
             <button onClick={() => setSidebarOpen(false)}>
               <XMarkIcon className="w-6 h-6 text-gray-500" />
             </button>
           </div>
-          <nav className="p-4 space-y-1">
+          <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
             {filteredNav.map((item, i) =>
               item.divider ? (
                 <hr key={i} className="my-4 border-gray-200" />
@@ -93,7 +95,7 @@ export default function AdminLayout() {
 
       {/* Sidebar desktop */}
       <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-72 lg:flex-col">
-        <div className="flex flex-col flex-grow bg-white border-r border-gray-200">
+        <div className="flex flex-col flex-grow overflow-hidden bg-white border-r border-gray-200">
           <div className="flex items-center px-6 py-5 border-b">
             <h1 className="text-2xl font-bold text-primary-600">GestioNeo</h1>
           </div>

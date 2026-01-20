@@ -149,6 +149,8 @@ model Tenant {
   productoModificadores   ProductoModificador[]
   pedidoItemModificadores PedidoItemModificador[]
   emailVerificaciones     EmailVerificacion[]
+  mercadoPagoConfig       MercadoPagoConfig?
+  transaccionesMercadoPago TransaccionMercadoPago[]
 
   @@map("tenants")
 }
@@ -595,6 +597,7 @@ model Pago {
   // Relaciones
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   pedido Pedido @relation(fields: [pedidoId], references: [id])
+  transaccionesMercadoPago TransaccionMercadoPago[]
 
   @@index([tenantId])
   @@index([tenantId, pedidoId])
@@ -686,4 +689,60 @@ model Configuracion {
   @@unique([tenantId, clave])
   @@index([tenantId])
   @@map("configuraciones")
+}
+
+// ============================================
+// MERCADOPAGO (por tenant)
+// ============================================
+
+// Configuracion de MercadoPago por tenant (credenciales encriptadas)
+model MercadoPagoConfig {
+  id              Int       @id @default(autoincrement())
+  tenantId        Int       @unique
+  accessToken     String    // Encriptado con AES-256
+  refreshToken    String?   // Encriptado (para OAuth)
+  publicKey       String?
+  userId          String?   // ID del usuario en MercadoPago
+  email           String?   // Email de la cuenta MercadoPago conectada
+  expiresAt       DateTime? // Fecha de expiración del token
+  isOAuth         Boolean   @default(false) // true si se conectó via OAuth, false si manual
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relaciones
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("mercadopago_configs")
+}
+
+// Historial de transacciones de MercadoPago
+model TransaccionMercadoPago {
+  id                Int       @id @default(autoincrement())
+  tenantId          Int
+  pagoId            Int?
+  mpPaymentId       String    @unique // ID único del pago en MercadoPago
+  mpPreferenceId    String?   // ID de la preferencia que originó el pago
+  status            String    // approved, rejected, pending, in_process, etc.
+  statusDetail      String?   // Detalle del estado (ej: accredited, cc_rejected_other_reason)
+  amount            Decimal   @db.Decimal(10, 2)
+  currency          String    @default("ARS")
+  payerEmail        String?   // Email del pagador
+  paymentMethod     String?   // credit_card, debit_card, account_money, ticket, etc.
+  paymentTypeId     String?   // visa, mastercard, amex, etc.
+  installments      Int?      // Cantidad de cuotas
+  fee               Decimal?  @db.Decimal(10, 2) // Comisión de MercadoPago
+  netAmount         Decimal?  @db.Decimal(10, 2) // Monto neto recibido
+  externalReference String?   // Referencia externa (tenantId-pedidoId)
+  rawData           Json?     // Respuesta completa de MercadoPago para debugging
+  createdAt         DateTime  @default(now())
+
+  // Relaciones
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pago   Pago?  @relation(fields: [pagoId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
+  @@map("transacciones_mercadopago")
 }

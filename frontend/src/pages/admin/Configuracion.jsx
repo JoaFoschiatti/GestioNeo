@@ -7,8 +7,10 @@ import {
   CreditCardIcon,
   ClockIcon,
   CheckCircleIcon,
-  XCircleIcon
+  XCircleIcon,
+  BanknotesIcon
 } from '@heroicons/react/24/outline'
+import MercadoPagoConfig from '../../components/configuracion/MercadoPagoConfig'
 
 export default function Configuracion() {
   const [config, setConfig] = useState({
@@ -328,37 +330,52 @@ export default function Configuracion() {
       </div>
 
       {/* Pagos */}
-      <div className="card mb-6">
+      <div className="mb-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
           <CreditCardIcon className="w-5 h-5" />
-          Métodos de Pago
+          Metodos de Pago
         </h2>
 
-        <div className="space-y-4">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={config.mercadopago_enabled}
-              onChange={(e) => handleChange('mercadopago_enabled', e.target.checked)}
-              className="w-5 h-5 rounded text-primary-500 focus:ring-primary-500"
-            />
-            <span className="font-medium text-gray-700">MercadoPago habilitado</span>
-          </label>
-          {config.mercadopago_enabled && (
-            <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded">
-              Asegurate de configurar MERCADOPAGO_ACCESS_TOKEN en las variables de entorno del backend
-            </p>
-          )}
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* MercadoPago */}
+          <MercadoPagoConfig
+            onStatusChange={(connected) => handleChange('mercadopago_enabled', connected)}
+          />
 
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={config.efectivo_enabled}
-              onChange={(e) => handleChange('efectivo_enabled', e.target.checked)}
-              className="w-5 h-5 rounded text-primary-500 focus:ring-primary-500"
-            />
-            <span className="font-medium text-gray-700">Efectivo habilitado</span>
-          </label>
+          {/* Efectivo */}
+          <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+            <div className="bg-gradient-to-r from-green-500 to-green-600 p-4 text-white">
+              <div className="flex items-center gap-3">
+                <BanknotesIcon className="w-8 h-8" />
+                <div>
+                  <h3 className="font-bold text-lg">Efectivo</h3>
+                  <p className="text-green-100 text-sm">Pago en efectivo al recibir</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={config.efectivo_enabled}
+                  onChange={(e) => handleChange('efectivo_enabled', e.target.checked)}
+                  className="w-5 h-5 rounded text-green-500 focus:ring-green-500"
+                />
+                <span className="font-medium text-gray-700">Aceptar pagos en efectivo</span>
+              </label>
+
+              <p className="text-sm text-gray-600 mt-4">
+                Los clientes podran elegir pagar en efectivo al momento de recibir su pedido (delivery) o al retirar en el local.
+              </p>
+
+              {!config.efectivo_enabled && !config.mercadopago_enabled && (
+                <div className="mt-4 bg-amber-50 text-amber-700 p-3 rounded-lg text-sm">
+                  Debes habilitar al menos un metodo de pago para recibir pedidos.
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 

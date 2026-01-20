@@ -97,17 +97,19 @@ export default function MenuPublico() {
       ])
       const configData = await configRes.json()
       const menuData = await menuRes.json()
-      setConfig(configData)
+      // Flatten tenant and config into a single object for easier access
+      const flatConfig = { ...configData.tenant, ...configData.config }
+      setConfig(flatConfig)
       setCategorias(menuData)
 
       // Set default tipo entrega based on config
-      if (!configData.delivery_habilitado) {
+      if (!flatConfig.delivery_habilitado) {
         setTipoEntrega('RETIRO')
       }
       // Set default metodo pago based on config
-      if (configData.mercadopago_enabled && !configData.efectivo_enabled) {
+      if (flatConfig.mercadopago_enabled && !flatConfig.efectivo_enabled) {
         setMetodoPago('MERCADOPAGO')
-      } else if (!configData.mercadopago_enabled && configData.efectivo_enabled) {
+      } else if (!flatConfig.mercadopago_enabled && flatConfig.efectivo_enabled) {
         setMetodoPago('EFECTIVO')
       }
     } catch (err) {
@@ -805,36 +807,52 @@ export default function MenuPublico() {
               {/* Metodo de pago */}
               <div>
                 <label className="label">Metodo de Pago</label>
-                <div className="grid grid-cols-2 gap-3">
-                  {config?.mercadopago_enabled && (
-                    <button
-                      type="button"
-                      onClick={() => setMetodoPago('MERCADOPAGO')}
-                      className={`p-4 rounded-xl border-2 text-center transition-all ${
-                        metodoPago === 'MERCADOPAGO'
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <CreditCardIcon className="w-8 h-8 mx-auto mb-2 text-blue-500" />
-                      <p className="font-semibold text-sm">MercadoPago</p>
-                    </button>
-                  )}
-                  {config?.efectivo_enabled && (
-                    <button
-                      type="button"
-                      onClick={() => setMetodoPago('EFECTIVO')}
-                      className={`p-4 rounded-xl border-2 text-center transition-all ${
-                        metodoPago === 'EFECTIVO'
-                          ? 'border-green-500 bg-green-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <BanknotesIcon className="w-8 h-8 mx-auto mb-2 text-green-500" />
-                      <p className="font-semibold text-sm">Efectivo</p>
-                    </button>
-                  )}
-                </div>
+                {!config?.mercadopago_enabled && !config?.efectivo_enabled ? (
+                  <div className="bg-amber-50 text-amber-700 p-4 rounded-xl">
+                    <ExclamationCircleIcon className="w-6 h-6 inline mr-2" />
+                    El negocio no tiene metodos de pago configurados. Contacta al local para realizar tu pedido.
+                  </div>
+                ) : (
+                  <>
+                    <div className={`grid gap-3 ${config?.mercadopago_enabled && config?.efectivo_enabled ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                      {config?.mercadopago_enabled && (
+                        <button
+                          type="button"
+                          onClick={() => setMetodoPago('MERCADOPAGO')}
+                          className={`p-4 rounded-xl border-2 text-center transition-all ${
+                            metodoPago === 'MERCADOPAGO'
+                              ? 'border-blue-500 bg-blue-50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <CreditCardIcon className="w-8 h-8 mx-auto mb-2 text-blue-500" />
+                          <p className="font-semibold text-sm">MercadoPago</p>
+                          <p className="text-xs text-gray-500 mt-1">Tarjeta o dinero en cuenta</p>
+                        </button>
+                      )}
+                      {config?.efectivo_enabled && (
+                        <button
+                          type="button"
+                          onClick={() => setMetodoPago('EFECTIVO')}
+                          className={`p-4 rounded-xl border-2 text-center transition-all ${
+                            metodoPago === 'EFECTIVO'
+                              ? 'border-green-500 bg-green-50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <BanknotesIcon className="w-8 h-8 mx-auto mb-2 text-green-500" />
+                          <p className="font-semibold text-sm">Efectivo</p>
+                          <p className="text-xs text-gray-500 mt-1">Pagas al recibir</p>
+                        </button>
+                      )}
+                    </div>
+                    {!config?.mercadopago_enabled && config?.efectivo_enabled && (
+                      <p className="text-sm text-gray-500 mt-2 text-center">
+                        Solo se acepta pago en efectivo al momento de la entrega
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
 
               {/* Monto abonado para efectivo */}
@@ -862,12 +880,12 @@ export default function MenuPublico() {
               {/* Boton confirmar */}
               <button
                 onClick={enviarPedido}
-                disabled={enviandoPedido}
+                disabled={enviandoPedido || (!config?.mercadopago_enabled && !config?.efectivo_enabled)}
                 className={`btn w-full py-4 text-lg flex items-center justify-center gap-2 ${
                   metodoPago === 'MERCADOPAGO'
                     ? 'bg-blue-500 hover:bg-blue-600 text-white'
                     : 'btn-primary'
-                } ${enviandoPedido ? 'opacity-50 cursor-not-allowed' : ''}`}
+                } ${(enviandoPedido || (!config?.mercadopago_enabled && !config?.efectivo_enabled)) ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 {enviandoPedido ? (
                   <>

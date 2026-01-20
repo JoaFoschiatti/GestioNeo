@@ -108,6 +108,15 @@ const crear = async (req, res) => {
   try {
     const { tipo, mesaId, items, clienteNombre, clienteTelefono, clienteDireccion, observaciones } = req.body;
 
+    // Validaciones
+    if (!items || items.length === 0) {
+      return res.status(400).json({ error: { message: 'El pedido debe tener al menos un item' } });
+    }
+
+    if (tipo === 'MESA' && !mesaId) {
+      return res.status(400).json({ error: { message: 'Mesa requerida para pedidos de tipo MESA' } });
+    }
+
     // Calcular totales
     let subtotal = 0;
     const itemsConPrecio = [];
