@@ -124,6 +124,38 @@ async function getPayment(tenantId, paymentId) {
 }
 
 /**
+ * Busca pagos por external_reference en MercadoPago
+ * @param {number} tenantId - ID del tenant
+ * @param {string} externalReference - Referencia externa (formato: tenantId-pedidoId)
+ * @returns {Promise<object|null>} - Pago aprobado si existe, null si no
+ */
+async function searchPaymentByReference(tenantId, externalReference) {
+  const client = await getMercadoPagoClient(tenantId);
+
+  if (!client) {
+    return null;
+  }
+
+  try {
+    const payment = new Payment(client);
+    const result = await payment.search({
+      options: {
+        criteria: 'desc',
+        sort: 'date_created',
+        external_reference: externalReference
+      }
+    });
+
+    // Buscar pago aprobado
+    const pagoAprobado = result.results?.find(p => p.status === 'approved');
+    return pagoAprobado || null;
+  } catch (error) {
+    console.error(`Error buscando pago por referencia ${externalReference}:`, error);
+    return null;
+  }
+}
+
+/**
  * Guarda una transacción de MercadoPago en el historial
  * @param {number} tenantId - ID del tenant
  * @param {object} paymentInfo - Información del pago de MercadoPago
@@ -245,6 +277,7 @@ module.exports = {
   getMercadoPagoConfigInfo,
   createPreference,
   getPayment,
+  searchPaymentByReference,
   saveTransaction,
   getTransactionHistory
 };

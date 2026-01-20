@@ -1,12 +1,16 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const { prisma } = require('../db/prisma');
 const path = require('path');
 const fs = require('fs');
 
-// Obtener configuración pública (sin auth)
+// Obtener configuración pública (sin auth) - DEPRECATED, usar /api/publico/:slug/config
 const obtenerPublica = async (req, res) => {
   try {
-    const configs = await prisma.configuracion.findMany();
+    // Para backwards compatibility, usar tenant por defecto
+    const tenantId = req.tenantId || 1;
+
+    const configs = await prisma.configuracion.findMany({
+      where: { tenantId }
+    });
 
     // Convertir a objeto
     const configObj = {};
@@ -42,7 +46,15 @@ const obtenerPublica = async (req, res) => {
 // Obtener todas las configuraciones (admin)
 const obtenerTodas = async (req, res) => {
   try {
-    const configs = await prisma.configuracion.findMany();
+    const tenantId = req.tenantId;
+
+    if (!tenantId) {
+      return res.status(400).json({ error: { message: 'Tenant no identificado' } });
+    }
+
+    const configs = await prisma.configuracion.findMany({
+      where: { tenantId }
+    });
 
     // Convertir a objeto
     const configObj = {};
@@ -60,13 +72,20 @@ const obtenerTodas = async (req, res) => {
 // Actualizar una configuración
 const actualizar = async (req, res) => {
   try {
+    const tenantId = req.tenantId;
     const { clave } = req.params;
     const { valor } = req.body;
 
+    if (!tenantId) {
+      return res.status(400).json({ error: { message: 'Tenant no identificado' } });
+    }
+
     const config = await prisma.configuracion.upsert({
-      where: { clave },
+      where: {
+        tenantId_clave: { tenantId, clave }
+      },
       update: { valor: String(valor) },
-      create: { clave, valor: String(valor) }
+      create: { tenantId, clave, valor: String(valor) }
     });
 
     res.json(config);
@@ -79,14 +98,21 @@ const actualizar = async (req, res) => {
 // Actualizar múltiples configuraciones
 const actualizarBulk = async (req, res) => {
   try {
+    const tenantId = req.tenantId;
     const configs = req.body;
+
+    if (!tenantId) {
+      return res.status(400).json({ error: { message: 'Tenant no identificado' } });
+    }
 
     const updates = await Promise.all(
       Object.entries(configs).map(([clave, valor]) =>
         prisma.configuracion.upsert({
-          where: { clave },
+          where: {
+            tenantId_clave: { tenantId, clave }
+          },
           update: { valor: String(valor) },
-          create: { clave, valor: String(valor) }
+          create: { tenantId, clave, valor: String(valor) }
         })
       )
     );
@@ -101,6 +127,12 @@ const actualizarBulk = async (req, res) => {
 // Subir banner
 const subirBanner = async (req, res) => {
   try {
+    const tenantId = req.tenantId;
+
+    if (!tenantId) {
+      return res.status(400).json({ error: { message: 'Tenant no identificado' } });
+    }
+
     if (!req.file) {
       return res.status(400).json({ error: { message: 'No se subió ninguna imagen' } });
     }
@@ -109,9 +141,11 @@ const subirBanner = async (req, res) => {
 
     // Guardar en configuración
     await prisma.configuracion.upsert({
-      where: { clave: 'banner_imagen' },
+      where: {
+        tenantId_clave: { tenantId, clave: 'banner_imagen' }
+      },
       update: { valor: bannerUrl },
-      create: { clave: 'banner_imagen', valor: bannerUrl }
+      create: { tenantId, clave: 'banner_imagen', valor: bannerUrl }
     });
 
     res.json({ url: bannerUrl, message: 'Banner subido correctamente' });
@@ -121,8 +155,8 @@ const subirBanner = async (req, res) => {
   }
 };
 
-// Semilla de configuraciones iniciales
-const seedConfiguraciones = async () => {
+// Semilla de configuraciones iniciales para un tenant
+const seedConfiguraciones = async (tenantId = 1) => {
   const defaults = [
     { clave: 'tienda_abierta', valor: 'true' },
     { clave: 'horario_apertura', valor: '11:00' },
@@ -139,9 +173,11 @@ const seedConfiguraciones = async () => {
 
   for (const config of defaults) {
     await prisma.configuracion.upsert({
-      where: { clave: config.clave },
+      where: {
+        tenantId_clave: { tenantId, clave: config.clave }
+      },
       update: {},
-      create: config
+      create: { tenantId, ...config }
     });
   }
 };

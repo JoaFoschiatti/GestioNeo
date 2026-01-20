@@ -29,24 +29,41 @@ export default function Pedidos() {
   const [pagoForm, setPagoForm] = useState({ monto: '', metodo: 'EFECTIVO', referencia: '' })
   const [showNuevoPedidoModal, setShowNuevoPedidoModal] = useState(false)
 
+  // Cargar pedidos cuando cambia el filtro
   useEffect(() => {
     cargarPedidos()
   }, [filtroEstado])
 
+  // Suscripción SSE - solo una vez al montar el componente
   useEffect(() => {
     const source = createEventSource()
-    const handleUpdate = () => cargarPedidos()
 
     if (source) {
+      const handleUpdate = (e) => {
+        console.log('[SSE] Evento recibido:', e.type)
+        cargarPedidos()
+      }
+
       source.addEventListener('pedido.updated', handleUpdate)
       source.addEventListener('pago.updated', handleUpdate)
       source.addEventListener('impresion.updated', handleUpdate)
+
+      source.onerror = (err) => {
+        console.error('[SSE] Error en conexión:', err)
+      }
+
+      source.onopen = () => {
+        console.log('[SSE] Conexión establecida')
+      }
     }
 
     return () => {
-      if (source) source.close()
+      if (source) {
+        console.log('[SSE] Cerrando conexión')
+        source.close()
+      }
     }
-  }, [filtroEstado])
+  }, []) // Sin dependencias - solo se ejecuta una vez
 
   const cargarPedidos = async () => {
     try {

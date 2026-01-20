@@ -58,6 +58,13 @@ export default function MenuPublico() {
   const [pedidoExitoso, setPedidoExitoso] = useState(null)
   const [error, setError] = useState(null)
 
+  // Estado para pedido pendiente de pago en nueva pestaña (desktop)
+  const [pedidoPendienteMP, setPedidoPendienteMP] = useState(null)
+
+  // Estados para verificación de pago MP
+  const [verificandoPago, setVerificandoPago] = useState(false)
+  const [tiempoEspera, setTiempoEspera] = useState(0)
+
   // Delivery vs Retiro
   const [tipoEntrega, setTipoEntrega] = useState('DELIVERY')
 
@@ -76,17 +83,138 @@ export default function MenuPublico() {
 
   useEffect(() => {
     cargarConfigYMenu()
-    // Check for payment result from MercadoPago
-    const pagoResult = searchParams.get('pago')
-    const pedidoId = searchParams.get('pedido')
-    if (pagoResult && pedidoId) {
-      if (pagoResult === 'exito') {
-        setPedidoExitoso({ id: pedidoId, pagoAprobado: true })
-      } else if (pagoResult === 'error') {
-        setError('El pago no pudo ser procesado. Intenta nuevamente.')
+  }, [slug])
+
+  // Recuperar estado de pedido pendiente de MP al cargar
+  useEffect(() => {
+    const pedidoGuardado = localStorage.getItem('mp_pedido_pendiente')
+    if (pedidoGuardado) {
+      try {
+        const data = JSON.parse(pedidoGuardado)
+        // Si tiene menos de 30 minutos, mostrar opción de verificar
+        if (Date.now() - data.timestamp < 30 * 60 * 1000) {
+          setPedidoPendienteMP(data.pedido)
+        } else {
+          localStorage.removeItem('mp_pedido_pendiente')
+        }
+      } catch (e) {
+        localStorage.removeItem('mp_pedido_pendiente')
       }
     }
-  }, [slug, searchParams])
+  }, [])
+
+  // Efecto para manejar el retorno de MercadoPago con polling
+  useEffect(() => {
+    const pagoResult = searchParams.get('pago')
+    const pedidoId = searchParams.get('pedido')
+
+    if (!pagoResult || !pedidoId) return
+
+    if (pagoResult === 'error') {
+      setError('El pago no pudo ser procesado. Intenta nuevamente.')
+      return
+    }
+
+    if (pagoResult === 'exito' || pagoResult === 'pendiente') {
+      setVerificandoPago(true)
+      setTiempoEspera(0)
+
+      const tenantSlug = slug || 'default'
+      let intentos = 0
+      const maxIntentos = 20 // 60 segundos (20 intentos * 3 segundos)
+
+      const verificarPago = async () => {
+        try {
+          const res = await fetch(`${API_URL}/publico/${tenantSlug}/pedido/${pedidoId}`)
+          const pedido = await res.json()
+
+          if (pedido.estadoPago === 'APROBADO') {
+            setVerificandoPago(false)
+            setPedidoExitoso({ ...pedido, pagoAprobado: true })
+            // Limpiar URL params
+            navigate(`/menu/${tenantSlug}`, { replace: true })
+            return true
+          }
+
+          return false
+        } catch (err) {
+          console.error('Error verificando pago:', err)
+          return false
+        }
+      }
+
+      // Primera verificación inmediata
+      verificarPago().then(aprobado => {
+        if (aprobado) return
+
+        // Si no está aprobado, iniciar polling
+        const interval = setInterval(async () => {
+          intentos++
+          setTiempoEspera(intentos * 3)
+
+          const aprobado = await verificarPago()
+          if (aprobado || intentos >= maxIntentos) {
+            clearInterval(interval)
+            if (!aprobado && intentos >= maxIntentos) {
+              setVerificandoPago(false)
+              setError('No pudimos confirmar tu pago. Si ya pagaste, por favor contacta al local. Tu número de pedido es: #' + pedidoId)
+              navigate(`/menu/${tenantSlug}`, { replace: true })
+            }
+          }
+        }, 3000)
+
+        // Cleanup
+        return () => clearInterval(interval)
+      })
+    }
+  }, [searchParams, slug, navigate])
+
+  // Polling automático cuando hay pedido pendiente de MP (desktop - nueva pestaña)
+  useEffect(() => {
+    if (!pedidoPendienteMP) return
+
+    const tenantSlug = slug || 'default'
+    let intentos = 0
+    const maxIntentos = 60 // 3 minutos (60 * 3 segundos)
+
+    const verificarPago = async () => {
+      try {
+        const res = await fetch(`${API_URL}/publico/${tenantSlug}/pedido/${pedidoPendienteMP.id}`)
+        const pedido = await res.json()
+
+        if (pedido.estadoPago === 'APROBADO') {
+          setPedidoPendienteMP(null)
+          setPedidoExitoso({ ...pedido, pagoAprobado: true })
+          localStorage.removeItem('mp_pedido_pendiente')
+          setCarrito([])
+          return true
+        }
+        return false
+      } catch (err) {
+        console.error('Error verificando pago:', err)
+        return false
+      }
+    }
+
+    // Primera verificación inmediata
+    verificarPago()
+
+    const interval = setInterval(async () => {
+      intentos++
+      const aprobado = await verificarPago()
+
+      if (aprobado || intentos >= maxIntentos) {
+        clearInterval(interval)
+        if (!aprobado && intentos >= maxIntentos) {
+          setError('No pudimos confirmar el pago. Si ya pagaste, el pedido se actualizará pronto.')
+          setPedidoPendienteMP(null)
+          localStorage.removeItem('mp_pedido_pendiente')
+        }
+      }
+    }, 3000)
+
+    return () => clearInterval(interval)
+  }, [pedidoPendienteMP, slug])
 
   const cargarConfigYMenu = async () => {
     try {
@@ -210,21 +338,36 @@ export default function MenuPublico() {
         throw new Error(data.error?.message || 'Error al crear pedido')
       }
 
-      // Si es MercadoPago, iniciar pago
-      if (metodoPago === 'MERCADOPAGO') {
-        const pagoRes = await fetch(`${API_URL}/publico/${tenantSlug}/pedido/${data.pedido.id}/pagar`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        })
-
-        const pagoData = await pagoRes.json()
-
-        if (!pagoRes.ok) {
-          throw new Error(pagoData.error?.message || 'Error al iniciar pago')
+      // Si es MercadoPago, redirigir según dispositivo
+      if (metodoPago === 'MERCADOPAGO' && data.initPoint) {
+        // Guardar estado del pedido para recuperarlo al volver
+        const estadoPedido = {
+          pedidoId: data.pedido.id,
+          pedido: data.pedido,
+          total: data.pedido.total,
+          timestamp: Date.now()
         }
+        localStorage.setItem('mp_pedido_pendiente', JSON.stringify(estadoPedido))
 
-        // Redirect to MercadoPago
-        window.location.href = pagoData.initPoint
+        // Detectar si es móvil
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+
+        if (isMobile) {
+          // En móvil: redirección normal (mejor integración con app MP)
+          window.location.href = data.initPoint
+        } else {
+          // En desktop: abrir nueva pestaña
+          const mpWindow = window.open(data.initPoint, '_blank')
+
+          // Si el popup fue bloqueado, hacer fallback a redirect normal
+          if (!mpWindow || mpWindow.closed) {
+            window.location.href = data.initPoint
+          } else {
+            // Mostrar pantalla de "Pago en proceso"
+            setPedidoPendienteMP(data.pedido)
+            setShowCheckout(false)
+          }
+        }
         return
       }
 
@@ -252,6 +395,77 @@ export default function MenuPublico() {
     return (
       <div className="min-h-screen bg-gray-50 flex justify-center items-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+      </div>
+    )
+  }
+
+  // Pantalla mientras el usuario paga en otra pestaña (desktop)
+  if (pedidoPendienteMP) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-8">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
+          <div className="relative mb-6">
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-500 mx-auto"></div>
+            <CreditCardIcon className="w-6 h-6 text-blue-500 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
+          </div>
+          <h1 className="text-2xl font-bold mb-2">Esperando confirmacion de pago</h1>
+          <p className="text-gray-600 mb-6">
+            Completa el pago en MercadoPago.
+            Esta pagina se actualizara automaticamente.
+          </p>
+          <div className="bg-gray-100 rounded-lg p-4 mb-6">
+            <p className="text-sm text-gray-500">Pedido #{pedidoPendienteMP.id}</p>
+            <p className="text-2xl font-bold text-primary-600">
+              ${parseFloat(pedidoPendienteMP.total).toLocaleString('es-AR')}
+            </p>
+          </div>
+          <p className="text-xs text-gray-400 mb-4">
+            Verificando cada 3 segundos...
+          </p>
+          <button
+            onClick={() => {
+              setPedidoPendienteMP(null)
+              localStorage.removeItem('mp_pedido_pendiente')
+            }}
+            className="text-gray-500 text-sm hover:underline"
+          >
+            Cancelar y volver al menu
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Verificando pago de MercadoPago
+  if (verificandoPago) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center text-center p-8">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
+          <div className="relative mb-6">
+            <div className="animate-spin rounded-full h-20 w-20 border-4 border-primary-200 border-t-primary-500 mx-auto"></div>
+            <CreditCardIcon className="w-8 h-8 text-primary-500 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            Verificando tu pago...
+          </h1>
+          <p className="text-gray-600 mb-4">
+            Estamos confirmando tu pago con MercadoPago. Por favor espera un momento.
+          </p>
+          <div className="bg-gray-100 rounded-lg p-3">
+            <p className="text-sm text-gray-500">
+              Tiempo de espera: {tiempoEspera} segundos
+            </p>
+            <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+              <div
+                className="bg-primary-500 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${Math.min((tiempoEspera / 60) * 100, 100)}%` }}
+              ></div>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 mt-4">
+            No cierres esta ventana
+          </p>
+        </div>
       </div>
     )
   }

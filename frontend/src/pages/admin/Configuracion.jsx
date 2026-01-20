@@ -8,11 +8,29 @@ import {
   ClockIcon,
   CheckCircleIcon,
   XCircleIcon,
-  BanknotesIcon
+  BanknotesIcon,
+  BuildingStorefrontIcon,
+  LinkIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline'
 import MercadoPagoConfig from '../../components/configuracion/MercadoPagoConfig'
 
 export default function Configuracion() {
+  // Estado del tenant (datos del negocio)
+  const [tenant, setTenant] = useState({
+    slug: '',
+    nombre: '',
+    email: '',
+    telefono: '',
+    direccion: '',
+    colorPrimario: '#3B82F6',
+    colorSecundario: '#1E40AF'
+  })
+  const [slugError, setSlugError] = useState(null)
+  const [slugChecking, setSlugChecking] = useState(false)
+  const [savingTenant, setSavingTenant] = useState(false)
+
+  // Estado de configuracion
   const [config, setConfig] = useState({
     tienda_abierta: true,
     horario_apertura: '11:00',
@@ -33,15 +51,31 @@ export default function Configuracion() {
   const [message, setMessage] = useState(null)
 
   useEffect(() => {
-    cargarConfiguracion()
+    cargarDatos()
   }, [])
 
-  const cargarConfiguracion = async () => {
+  const cargarDatos = async () => {
     try {
-      const response = await api.get('/configuracion')
-      // Convertir strings a tipos apropiados
+      // Cargar tenant y configuracion en paralelo
+      const [tenantRes, configRes] = await Promise.all([
+        api.get('/tenant'),
+        api.get('/configuracion')
+      ])
+
+      // Procesar tenant
+      setTenant({
+        slug: tenantRes.data.slug || '',
+        nombre: tenantRes.data.nombre || '',
+        email: tenantRes.data.email || '',
+        telefono: tenantRes.data.telefono || '',
+        direccion: tenantRes.data.direccion || '',
+        colorPrimario: tenantRes.data.colorPrimario || '#3B82F6',
+        colorSecundario: tenantRes.data.colorSecundario || '#1E40AF'
+      })
+
+      // Procesar configuracion
       const configData = {}
-      Object.entries(response.data).forEach(([key, value]) => {
+      Object.entries(configRes.data).forEach(([key, value]) => {
         if (value === 'true') configData[key] = true
         else if (value === 'false') configData[key] = false
         else if (!isNaN(value) && value !== '') configData[key] = parseFloat(value)
@@ -49,8 +83,8 @@ export default function Configuracion() {
       })
       setConfig(prev => ({ ...prev, ...configData }))
     } catch (error) {
-      console.error('Error al cargar configuración:', error)
-      mostrarMensaje('Error al cargar configuración', 'error')
+      console.error('Error al cargar datos:', error)
+      mostrarMensaje('Error al cargar configuracion', 'error')
     } finally {
       setLoading(false)
     }
@@ -61,14 +95,87 @@ export default function Configuracion() {
     setTimeout(() => setMessage(null), 3000)
   }
 
+  // Funciones de tenant
+  const handleTenantChange = (key, value) => {
+    setTenant(prev => ({ ...prev, [key]: value }))
+    if (key === 'slug') {
+      setSlugError(null)
+    }
+  }
+
+  const validateSlugFormat = (slug) => {
+    if (!slug || slug.length < 3) return 'El slug debe tener al menos 3 caracteres'
+    if (slug.length > 50) return 'El slug no puede tener mas de 50 caracteres'
+    if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(slug) && slug.length > 2) {
+      return 'Solo minusculas, numeros y guiones (no al inicio ni al final)'
+    }
+    if (/--/.test(slug)) return 'No puede tener guiones consecutivos'
+    return null
+  }
+
+  const checkSlugAvailability = async (slug) => {
+    const formatError = validateSlugFormat(slug)
+    if (formatError) {
+      setSlugError(formatError)
+      return
+    }
+
+    setSlugChecking(true)
+    try {
+      const response = await api.get(`/tenant/verificar-slug/${slug}`)
+      if (!response.data.disponible) {
+        setSlugError(response.data.error || 'Este slug no esta disponible')
+      } else {
+        setSlugError(null)
+      }
+    } catch (error) {
+      console.error('Error al verificar slug:', error)
+    } finally {
+      setSlugChecking(false)
+    }
+  }
+
+  const handleSlugBlur = () => {
+    if (tenant.slug) {
+      checkSlugAvailability(tenant.slug)
+    }
+  }
+
+  const guardarTenant = async () => {
+    // Validar slug
+    const formatError = validateSlugFormat(tenant.slug)
+    if (formatError) {
+      setSlugError(formatError)
+      return
+    }
+
+    setSavingTenant(true)
+    try {
+      const response = await api.put('/tenant', tenant)
+      setTenant(prev => ({ ...prev, ...response.data.tenant }))
+
+      if (response.data.slugChanged) {
+        mostrarMensaje('Datos guardados. La URL del menu cambio a: /menu/' + response.data.tenant.slug)
+      } else {
+        mostrarMensaje('Datos del negocio guardados')
+      }
+    } catch (error) {
+      console.error('Error al guardar tenant:', error)
+      mostrarMensaje(error.response?.data?.error?.message || 'Error al guardar', 'error')
+    } finally {
+      setSavingTenant(false)
+    }
+  }
+
+  // Funciones de configuracion
   const guardarConfiguracion = async () => {
     setSaving(true)
     try {
       await api.put('/configuracion', config)
-      mostrarMensaje('Configuración guardada correctamente')
+      mostrarMensaje('Configuracion guardada correctamente')
     } catch (error) {
       console.error('Error al guardar:', error)
-      mostrarMensaje('Error al guardar configuración', 'error')
+      mostrarMensaje('Error al guardar configuracion', 'error')
     } finally {
       setSaving(false)
     }
@@ -109,7 +216,7 @@ export default function Configuracion() {
       mostrarMensaje(nuevoEstado ? 'Tienda ABIERTA' : 'Tienda CERRADA')
     } catch (error) {
       console.error('Error al cambiar estado:', error)
-      handleChange('tienda_abierta', !nuevoEstado) // Revertir
+      handleChange('tienda_abierta', !nuevoEstado)
       mostrarMensaje('Error al cambiar estado', 'error')
     }
   }
@@ -123,13 +230,14 @@ export default function Configuracion() {
   }
 
   const backendUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3001'
+  const frontendUrl = import.meta.env.VITE_FRONTEND_URL || window.location.origin
 
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
           <Cog6ToothIcon className="w-7 h-7" />
-          Configuración del Negocio
+          Configuracion del Negocio
         </h1>
 
         {message && (
@@ -144,6 +252,179 @@ export default function Configuracion() {
             {message.texto}
           </div>
         )}
+      </div>
+
+      {/* Datos del Negocio (Tenant) */}
+      <div className="card mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <BuildingStorefrontIcon className="w-5 h-5" />
+          Datos del Negocio
+        </h2>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Nombre del Negocio *
+              </label>
+              <input
+                type="text"
+                value={tenant.nombre}
+                onChange={(e) => handleTenantChange('nombre', e.target.value)}
+                className="input"
+                placeholder="Mi Restaurante"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                URL del Menu (slug) *
+              </label>
+              <div className="flex">
+                <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm">
+                  {frontendUrl}/menu/
+                </span>
+                <input
+                  type="text"
+                  value={tenant.slug}
+                  onChange={(e) => handleTenantChange('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                  onBlur={handleSlugBlur}
+                  className={`input rounded-l-none flex-1 ${slugError ? 'border-red-500 focus:ring-red-500' : ''}`}
+                  placeholder="mi-restaurante"
+                />
+              </div>
+              {slugChecking && (
+                <p className="text-xs text-gray-500 mt-1">Verificando disponibilidad...</p>
+              )}
+              {slugError && (
+                <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                  <ExclamationTriangleIcon className="w-3 h-3" />
+                  {slugError}
+                </p>
+              )}
+              {!slugError && tenant.slug && !slugChecking && (
+                <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                  <CheckCircleIcon className="w-3 h-3" />
+                  URL disponible
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Email de Contacto
+              </label>
+              <input
+                type="email"
+                value={tenant.email}
+                onChange={(e) => handleTenantChange('email', e.target.value)}
+                className="input"
+                placeholder="contacto@mirestaurante.com"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Telefono
+              </label>
+              <input
+                type="text"
+                value={tenant.telefono}
+                onChange={(e) => handleTenantChange('telefono', e.target.value)}
+                className="input"
+                placeholder="+54 11 1234-5678"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Direccion
+            </label>
+            <input
+              type="text"
+              value={tenant.direccion}
+              onChange={(e) => handleTenantChange('direccion', e.target.value)}
+              className="input"
+              placeholder="Av. Principal 123, Ciudad"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Color Primario
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={tenant.colorPrimario}
+                  onChange={(e) => handleTenantChange('colorPrimario', e.target.value)}
+                  className="w-12 h-10 rounded border cursor-pointer"
+                />
+                <input
+                  type="text"
+                  value={tenant.colorPrimario}
+                  onChange={(e) => handleTenantChange('colorPrimario', e.target.value)}
+                  className="input flex-1"
+                  placeholder="#3B82F6"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Color Secundario
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={tenant.colorSecundario}
+                  onChange={(e) => handleTenantChange('colorSecundario', e.target.value)}
+                  className="w-12 h-10 rounded border cursor-pointer"
+                />
+                <input
+                  type="text"
+                  value={tenant.colorSecundario}
+                  onChange={(e) => handleTenantChange('colorSecundario', e.target.value)}
+                  className="input flex-1"
+                  placeholder="#1E40AF"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Link al menu publico */}
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <div className="flex items-center gap-2 text-blue-700">
+              <LinkIcon className="w-5 h-5" />
+              <span className="font-medium">Link del Menu Publico:</span>
+            </div>
+            <a
+              href={`${frontendUrl}/menu/${tenant.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:underline text-sm mt-1 block"
+            >
+              {frontendUrl}/menu/{tenant.slug}
+            </a>
+            <p className="text-xs text-blue-600 mt-2">
+              Comparte este link con tus clientes para que vean el menu y hagan pedidos
+            </p>
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              onClick={guardarTenant}
+              disabled={savingTenant || !!slugError}
+              className={`btn btn-primary px-6 ${(savingTenant || !!slugError) ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {savingTenant ? 'Guardando...' : 'Guardar Datos del Negocio'}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Estado del Local */}
@@ -202,7 +483,7 @@ export default function Configuracion() {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Nombre del Negocio
+              Nombre para mostrar en el Menu
             </label>
             <input
               type="text"
@@ -211,6 +492,9 @@ export default function Configuracion() {
               className="input"
               placeholder="Mi Restaurante"
             />
+            <p className="text-xs text-gray-500 mt-1">
+              Se muestra en el menu publico. Si esta vacio, se usa el nombre del negocio.
+            </p>
           </div>
 
           <div>
@@ -228,7 +512,7 @@ export default function Configuracion() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Banner del Menú Público
+              Banner del Menu Publico
             </label>
             <div className="flex items-center gap-4">
               <label className="cursor-pointer">
@@ -286,7 +570,7 @@ export default function Configuracion() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Costo de Envío ($)
+              Costo de Envio ($)
             </label>
             <input
               type="number"
@@ -300,7 +584,7 @@ export default function Configuracion() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Dirección para Retiro
+              Direccion para Retiro
             </label>
             <input
               type="text"
@@ -323,7 +607,7 @@ export default function Configuracion() {
               placeholder="5411XXXXXXXX"
             />
             <p className="text-xs text-gray-500 mt-1">
-              Código de país + número sin espacios ni guiones
+              Codigo de pais + numero sin espacios ni guiones
             </p>
           </div>
         </div>
@@ -379,14 +663,14 @@ export default function Configuracion() {
         </div>
       </div>
 
-      {/* Botón Guardar */}
+      {/* Boton Guardar Configuracion */}
       <div className="flex justify-end">
         <button
           onClick={guardarConfiguracion}
           disabled={saving}
           className={`btn btn-primary px-8 ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
-          {saving ? 'Guardando...' : 'Guardar Cambios'}
+          {saving ? 'Guardando...' : 'Guardar Configuracion'}
         </button>
       </div>
     </div>

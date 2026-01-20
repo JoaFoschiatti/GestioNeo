@@ -7,7 +7,8 @@ const eventBus = require('../services/event-bus');
 const {
   isMercadoPagoConfigured,
   createPreference,
-  saveTransaction
+  saveTransaction,
+  searchPaymentByReference
 } = require('../services/mercadopago.service');
 
 /**
@@ -122,6 +123,16 @@ router.post('/:slug/pedido', resolveTenantFromSlug, async (req, res) => {
       return res.status(400).json({ error: { message: 'La dirección es requerida para delivery' } });
     }
 
+    // Si es MercadoPago, verificar ANTES de crear pedido
+    if (metodoPago === 'MERCADOPAGO') {
+      const mpConfigurado = await isMercadoPagoConfigured(tenantId);
+      if (!mpConfigurado) {
+        return res.status(400).json({
+          error: { message: 'MercadoPago no está configurado para este negocio. Solo se acepta pago en efectivo.' }
+        });
+      }
+    }
+
     // Verificar que la tienda esté abierta
     const tiendaConfig = await tenantPrisma.configuracion.findFirst({
       where: { clave: 'tienda_abierta' }
@@ -201,6 +212,84 @@ router.post('/:slug/pedido', resolveTenantFromSlug, async (req, res) => {
       }
     });
 
+    // Variable para initPoint de MercadoPago
+    let initPoint = null;
+
+    // Si es MercadoPago, crear preferencia y pago
+    if (metodoPago === 'MERCADOPAGO') {
+      try {
+        // Crear items para MP
+        const mpItems = pedido.items.map(item => ({
+          id: item.productoId.toString(),
+          title: item.producto.nombre,
+          quantity: item.cantidad,
+          unit_price: parseFloat(item.precioUnitario),
+          currency_id: 'ARS'
+        }));
+
+        // Agregar costo de envío como item si aplica
+        if (costoEnvio > 0) {
+          mpItems.push({
+            id: 'envio',
+            title: 'Costo de envío',
+            quantity: 1,
+            unit_price: costoEnvio,
+            currency_id: 'ARS'
+          });
+        }
+
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
+        const slug = req.tenantSlug;
+        const isLocalhost = frontendUrl.includes('localhost') || frontendUrl.includes('127.0.0.1');
+
+        const preferenceData = {
+          items: mpItems,
+          back_urls: {
+            success: `${frontendUrl}/menu/${slug}?pago=exito&pedido=${pedido.id}`,
+            failure: `${frontendUrl}/menu/${slug}?pago=error&pedido=${pedido.id}`,
+            pending: `${frontendUrl}/menu/${slug}?pago=pendiente&pedido=${pedido.id}`
+          },
+          external_reference: `${tenantId}-${pedido.id}`,
+          notification_url: `${backendUrl}/api/pagos/webhook/mercadopago`,
+          statement_descriptor: req.tenant.nombre.substring(0, 22).toUpperCase()
+        };
+
+        if (!isLocalhost) {
+          preferenceData.auto_return = 'approved';
+        }
+
+        // Crear preferencia en MercadoPago
+        const mpResponse = await createPreference(tenantId, preferenceData);
+
+        // Crear registro de pago
+        const idempotencyKey = `mp-${tenantId}-${pedido.id}-${Date.now()}`;
+        await prisma.pago.create({
+          data: {
+            tenantId,
+            pedidoId: pedido.id,
+            monto: total,
+            metodo: 'MERCADOPAGO',
+            estado: 'PENDIENTE',
+            mpPreferenceId: mpResponse.id,
+            idempotencyKey
+          }
+        });
+
+        initPoint = mpResponse.init_point;
+
+      } catch (mpError) {
+        // Si falla MercadoPago, eliminar el pedido creado (rollback manual)
+        console.error('Error al crear preferencia MP, eliminando pedido:', mpError);
+        await prisma.pedidoItem.deleteMany({ where: { pedidoId: pedido.id } });
+        await prisma.pedido.delete({ where: { id: pedido.id } });
+
+        return res.status(500).json({
+          error: { message: 'Error al conectar con MercadoPago. Por favor intenta de nuevo.' }
+        });
+      }
+    }
+
     // Publish event with tenantId
     eventBus.publish('pedido.updated', {
       tenantId,
@@ -227,8 +316,8 @@ router.post('/:slug/pedido', resolveTenantFromSlug, async (req, res) => {
       });
     }
 
-    // Enviar email de confirmación
-    if (pedido.clienteEmail) {
+    // Enviar email de confirmación (solo si no es MP, ya que el email se enviará cuando se confirme el pago)
+    if (pedido.clienteEmail && metodoPago !== 'MERCADOPAGO') {
       try {
         await emailService.sendOrderConfirmation(pedido, req.tenant);
         console.log('Email de confirmación enviado a:', pedido.clienteEmail);
@@ -242,6 +331,7 @@ router.post('/:slug/pedido', resolveTenantFromSlug, async (req, res) => {
       pedido,
       costoEnvio,
       total,
+      initPoint, // Incluir initPoint para MercadoPago
       message: 'Pedido creado correctamente'
     });
   } catch (error) {
@@ -305,6 +395,9 @@ router.post('/:slug/pedido/:id/pagar', resolveTenantFromSlug, async (req, res) =
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
     const slug = req.tenantSlug;
 
+    // MercadoPago no acepta auto_return con URLs localhost
+    const isLocalhost = frontendUrl.includes('localhost') || frontendUrl.includes('127.0.0.1');
+
     const preferenceData = {
       items: mpItems,
       back_urls: {
@@ -312,11 +405,15 @@ router.post('/:slug/pedido/:id/pagar', resolveTenantFromSlug, async (req, res) =
         failure: `${frontendUrl}/menu/${slug}?pago=error&pedido=${pedidoId}`,
         pending: `${frontendUrl}/menu/${slug}?pago=pendiente&pedido=${pedidoId}`
       },
-      auto_return: 'approved',
       external_reference: `${tenantId}-${pedidoId}`,
       notification_url: `${backendUrl}/api/pagos/webhook/mercadopago`,
       statement_descriptor: req.tenant.nombre.substring(0, 22).toUpperCase()
     };
+
+    // Solo agregar auto_return si no es localhost (MercadoPago lo requiere)
+    if (!isLocalhost) {
+      preferenceData.auto_return = 'approved';
+    }
 
     // Usar el servicio multi-tenant para crear la preferencia
     const response = await createPreference(tenantId, preferenceData);
@@ -356,10 +453,12 @@ router.post('/:slug/pedido/:id/pagar', resolveTenantFromSlug, async (req, res) =
 router.get('/:slug/pedido/:id', resolveTenantFromSlug, async (req, res) => {
   try {
     const tenantPrisma = req.prisma;
+    const tenantId = req.tenantId;
     const { id } = req.params;
+    const pedidoId = parseInt(id);
 
-    const pedido = await tenantPrisma.pedido.findFirst({
-      where: { id: parseInt(id) },
+    let pedido = await tenantPrisma.pedido.findFirst({
+      where: { id: pedidoId },
       include: {
         items: { include: { producto: true } },
         pagos: true
@@ -368,6 +467,58 @@ router.get('/:slug/pedido/:id', resolveTenantFromSlug, async (req, res) => {
 
     if (!pedido) {
       return res.status(404).json({ error: { message: 'Pedido no encontrado' } });
+    }
+
+    // Si el pedido está pendiente y tiene un pago de MercadoPago, verificar con la API
+    if (pedido.estadoPago === 'PENDIENTE') {
+      const pagoMP = pedido.pagos.find(p => p.metodo === 'MERCADOPAGO' && p.estado === 'PENDIENTE');
+
+      if (pagoMP) {
+        // Buscar pago aprobado en MercadoPago usando external_reference
+        const externalReference = `${tenantId}-${pedidoId}`;
+        const pagoAprobado = await searchPaymentByReference(tenantId, externalReference);
+
+        if (pagoAprobado) {
+          console.log(`Pago aprobado encontrado en MP para pedido ${pedidoId}:`, pagoAprobado.id);
+
+          // Actualizar el pago local
+          await prisma.pago.update({
+            where: { id: pagoMP.id },
+            data: {
+              estado: 'APROBADO',
+              mpPaymentId: pagoAprobado.id.toString()
+            }
+          });
+
+          // Actualizar el pedido
+          await prisma.pedido.update({
+            where: { id: pedidoId },
+            data: { estadoPago: 'APROBADO' }
+          });
+
+          // Guardar transacción de MP
+          await saveTransaction(tenantId, pagoAprobado, pagoMP.id);
+
+          // Publicar evento de actualización
+          eventBus.publish('pedido.updated', {
+            tenantId,
+            id: pedidoId,
+            estado: pedido.estado,
+            estadoPago: 'APROBADO',
+            tipo: pedido.tipo,
+            mesaId: pedido.mesaId || null,
+            updatedAt: new Date().toISOString()
+          });
+
+          // Actualizar el objeto pedido para la respuesta
+          pedido.estadoPago = 'APROBADO';
+          pedido.pagos = pedido.pagos.map(p =>
+            p.id === pagoMP.id
+              ? { ...p, estado: 'APROBADO', mpPaymentId: pagoAprobado.id.toString() }
+              : p
+          );
+        }
+      }
     }
 
     res.json(pedido);
