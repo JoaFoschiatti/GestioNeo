@@ -1,5 +1,27 @@
 const { PrismaClient } = require('@prisma/client');
+const eventBus = require('../services/event-bus');
+const printService = require('../services/print.service');
 const prisma = new PrismaClient();
+
+const emitPedidoUpdated = (pedido) => {
+  if (!pedido) return;
+  eventBus.publish('pedido.updated', {
+    id: pedido.id,
+    estado: pedido.estado,
+    tipo: pedido.tipo,
+    mesaId: pedido.mesaId || null,
+    updatedAt: pedido.updatedAt || new Date().toISOString()
+  });
+};
+
+const emitMesaUpdated = (mesaId, estado) => {
+  if (!mesaId) return;
+  eventBus.publish('mesa.updated', {
+    mesaId,
+    estado,
+    updatedAt: new Date().toISOString()
+  });
+};
 
 // Listar pedidos
 const listar = async (req, res) => {
@@ -22,13 +44,25 @@ const listar = async (req, res) => {
       include: {
         mesa: { select: { numero: true, zona: true } },
         usuario: { select: { nombre: true } },
-        items: { include: { producto: { select: { nombre: true } } } },
-        pagos: true
+        items: {
+          include: {
+            producto: { select: { nombre: true } },
+            modificadores: { include: { modificador: { select: { nombre: true, tipo: true } } } }
+          }
+        },
+        pagos: true,
+        printJobs: { select: { status: true, batchId: true, createdAt: true, lastError: true } }
       },
       orderBy: { createdAt: 'desc' }
     });
 
-    res.json(pedidos);
+    const pedidosConImpresion = pedidos.map(pedido => {
+      const impresion = printService.getLatestPrintSummary(pedido.printJobs || []);
+      const { printJobs, ...rest } = pedido;
+      return { ...rest, impresion };
+    });
+
+    res.json(pedidosConImpresion);
   } catch (error) {
     console.error('Error al listar pedidos:', error);
     res.status(500).json({ error: { message: 'Error al obtener pedidos' } });
@@ -45,8 +79,14 @@ const obtener = async (req, res) => {
       include: {
         mesa: true,
         usuario: { select: { nombre: true, email: true } },
-        items: { include: { producto: true } },
-        pagos: true
+        items: {
+          include: {
+            producto: true,
+            modificadores: { include: { modificador: true } }
+          }
+        },
+        pagos: true,
+        printJobs: { select: { status: true, batchId: true, createdAt: true, lastError: true } }
       }
     });
 
@@ -54,7 +94,9 @@ const obtener = async (req, res) => {
       return res.status(404).json({ error: { message: 'Pedido no encontrado' } });
     }
 
-    res.json(pedido);
+    const impresion = printService.getLatestPrintSummary(pedido.printJobs || []);
+    const { printJobs, ...rest } = pedido;
+    res.json({ ...rest, impresion });
   } catch (error) {
     console.error('Error al obtener pedido:', error);
     res.status(500).json({ error: { message: 'Error al obtener pedido' } });
@@ -69,8 +111,10 @@ const crear = async (req, res) => {
     // Calcular totales
     let subtotal = 0;
     const itemsConPrecio = [];
+    const itemsModificadores = []; // Almacenar modificadores para crear después
 
-    for (const item of items) {
+    for (let itemIdx = 0; itemIdx < items.length; itemIdx++) {
+      const item = items[itemIdx];
       const producto = await prisma.producto.findUnique({ where: { id: item.productoId } });
       if (!producto) {
         return res.status(400).json({ error: { message: `Producto ${item.productoId} no encontrado` } });
@@ -79,13 +123,24 @@ const crear = async (req, res) => {
         return res.status(400).json({ error: { message: `Producto "${producto.nombre}" no está disponible` } });
       }
 
-      const itemSubtotal = parseFloat(producto.precio) * item.cantidad;
+      // Calcular precio de modificadores
+      let precioModificadores = 0;
+      if (item.modificadores && item.modificadores.length > 0) {
+        const mods = await prisma.modificador.findMany({
+          where: { id: { in: item.modificadores } }
+        });
+        precioModificadores = mods.reduce((sum, m) => sum + parseFloat(m.precio), 0);
+        itemsModificadores.push({ itemIdx, modificadores: mods });
+      }
+
+      const precioUnitarioConMods = parseFloat(producto.precio) + precioModificadores;
+      const itemSubtotal = precioUnitarioConMods * item.cantidad;
       subtotal += itemSubtotal;
 
       itemsConPrecio.push({
         productoId: item.productoId,
         cantidad: item.cantidad,
-        precioUnitario: producto.precio,
+        precioUnitario: precioUnitarioConMods,
         subtotal: itemSubtotal,
         observaciones: item.observaciones
       });
@@ -97,6 +152,7 @@ const crear = async (req, res) => {
         where: { id: mesaId },
         data: { estado: 'OCUPADA' }
       });
+      emitMesaUpdated(mesaId, 'OCUPADA');
     }
 
     const pedido = await prisma.pedido.create({
@@ -119,7 +175,37 @@ const crear = async (req, res) => {
       }
     });
 
-    res.status(201).json(pedido);
+    // Crear modificadores de items
+    for (const { itemIdx, modificadores } of itemsModificadores) {
+      const pedidoItem = pedido.items[itemIdx];
+      if (pedidoItem) {
+        await prisma.pedidoItemModificador.createMany({
+          data: modificadores.map(m => ({
+            pedidoItemId: pedidoItem.id,
+            modificadorId: m.id,
+            precio: m.precio
+          }))
+        });
+      }
+    }
+
+    // Recargar pedido con modificadores
+    const pedidoCompleto = await prisma.pedido.findUnique({
+      where: { id: pedido.id },
+      include: {
+        mesa: true,
+        usuario: { select: { nombre: true } },
+        items: {
+          include: {
+            producto: true,
+            modificadores: { include: { modificador: true } }
+          }
+        }
+      }
+    });
+
+    emitPedidoUpdated(pedidoCompleto);
+    res.status(201).json(pedidoCompleto);
   } catch (error) {
     console.error('Error al crear pedido:', error);
     res.status(500).json({ error: { message: 'Error al crear pedido' } });
@@ -171,6 +257,47 @@ const cambiarEstado = async (req, res) => {
           });
         }
       }
+
+      // Verificar ingredientes agotados y marcar productos como no disponibles
+      const ingredientesAgotados = await prisma.ingrediente.findMany({
+        where: { stockActual: { lte: 0 } },
+        select: { id: true, nombre: true }
+      });
+
+      if (ingredientesAgotados.length > 0) {
+        const idsIngredientesAgotados = ingredientesAgotados.map(i => i.id);
+
+        // Buscar productos que usan estos ingredientes
+        const productosAfectados = await prisma.producto.findMany({
+          where: {
+            disponible: true,
+            ingredientes: {
+              some: { ingredienteId: { in: idsIngredientesAgotados } }
+            }
+          },
+          select: { id: true, nombre: true }
+        });
+
+        if (productosAfectados.length > 0) {
+          // Marcar productos como no disponibles
+          await prisma.producto.updateMany({
+            where: { id: { in: productosAfectados.map(p => p.id) } },
+            data: { disponible: false }
+          });
+
+          // Publicar evento por cada producto agotado
+          for (const producto of productosAfectados) {
+            eventBus.publish('producto.agotado', {
+              id: producto.id,
+              nombre: producto.nombre,
+              motivo: 'Ingrediente agotado',
+              updatedAt: new Date().toISOString()
+            });
+          }
+
+          console.log(`Productos marcados como no disponibles: ${productosAfectados.map(p => p.nombre).join(', ')}`);
+        }
+      }
     }
 
     // Si pasa a COBRADO y es de mesa, liberar la mesa
@@ -179,6 +306,7 @@ const cambiarEstado = async (req, res) => {
         where: { id: pedido.mesaId },
         data: { estado: 'LIBRE' }
       });
+      emitMesaUpdated(pedido.mesaId, 'LIBRE');
     }
 
     const pedidoActualizado = await prisma.pedido.update({
@@ -191,7 +319,22 @@ const cambiarEstado = async (req, res) => {
       }
     });
 
-    res.json(pedidoActualizado);
+    let impresion = null;
+    if (estado === 'EN_PREPARACION' && pedido.estado === 'PENDIENTE') {
+      try {
+        impresion = await printService.enqueuePrintJobs(pedido.id);
+        eventBus.publish('impresion.updated', {
+          pedidoId: pedido.id,
+          ok: 0,
+          total: impresion.total
+        });
+      } catch (printError) {
+        console.error('Error al encolar impresion:', printError);
+      }
+    }
+
+    emitPedidoUpdated(pedidoActualizado);
+    res.json({ ...pedidoActualizado, impresion });
   } catch (error) {
     console.error('Error al cambiar estado de pedido:', error);
     res.status(500).json({ error: { message: 'Error al cambiar estado' } });
@@ -250,6 +393,7 @@ const agregarItems = async (req, res) => {
       }
     });
 
+    emitPedidoUpdated(pedidoActualizado);
     res.json(pedidoActualizado);
   } catch (error) {
     console.error('Error al agregar items:', error);
@@ -304,6 +448,7 @@ const cancelar = async (req, res) => {
         where: { id: pedido.mesaId },
         data: { estado: 'LIBRE' }
       });
+      emitMesaUpdated(pedido.mesaId, 'LIBRE');
     }
 
     const pedidoCancelado = await prisma.pedido.update({
@@ -316,6 +461,7 @@ const cancelar = async (req, res) => {
       }
     });
 
+    emitPedidoUpdated(pedidoCancelado);
     res.json(pedidoCancelado);
   } catch (error) {
     console.error('Error al cancelar pedido:', error);
@@ -332,7 +478,12 @@ const pedidosCocina = async (req, res) => {
       },
       include: {
         mesa: { select: { numero: true } },
-        items: { include: { producto: { select: { nombre: true } } } }
+        items: {
+          include: {
+            producto: { select: { nombre: true } },
+            modificadores: { include: { modificador: { select: { nombre: true, tipo: true } } } }
+          }
+        }
       },
       orderBy: { createdAt: 'asc' }
     });

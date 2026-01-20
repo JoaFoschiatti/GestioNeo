@@ -8,6 +8,7 @@ import {
   CheckCircleIcon,
   ClockIcon
 } from '@heroicons/react/24/outline'
+import { createEventSource } from '../../services/eventos'
 
 const estadoColor = {
   PENDIENTE: 'bg-yellow-100 text-yellow-800',
@@ -40,7 +41,17 @@ export default function DeliveryPedidos() {
   useEffect(() => {
     cargarPedidos()
     const interval = setInterval(cargarPedidos, 30000)
-    return () => clearInterval(interval)
+    const source = createEventSource()
+    const handleUpdate = () => cargarPedidos()
+
+    if (source) {
+      source.addEventListener('pedido.updated', handleUpdate)
+    }
+
+    return () => {
+      clearInterval(interval)
+      if (source) source.close()
+    }
   }, [])
 
   const marcarEntregado = async (pedidoId) => {

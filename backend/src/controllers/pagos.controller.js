@@ -1,5 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const crypto = require('crypto');
+const eventBus = require('../services/event-bus');
 const prisma = new PrismaClient();
 const emailService = require('../services/email.service');
 
@@ -56,6 +57,23 @@ const registrarPago = async (req, res) => {
       where: { id: pedidoId },
       include: { pagos: true, mesa: true }
     });
+
+    eventBus.publish('pago.updated', {
+      pedidoId,
+      totalPagado: nuevoTotalPagado,
+      pendiente: Math.max(0, parseFloat(pedido.total) - nuevoTotalPagado),
+      estadoPedido: pedidoActualizado.estado
+    });
+
+    if (pedidoActualizado.estado === 'COBRADO') {
+      eventBus.publish('pedido.updated', {
+        id: pedidoActualizado.id,
+        estado: pedidoActualizado.estado,
+        tipo: pedidoActualizado.tipo,
+        mesaId: pedidoActualizado.mesaId || null,
+        updatedAt: pedidoActualizado.updatedAt || new Date().toISOString()
+      });
+    }
 
     res.status(201).json({
       pago,
@@ -255,6 +273,12 @@ const webhookMercadoPago = async (req, res) => {
           }
         });
       }
+
+      eventBus.publish('pago.updated', {
+        pedidoId,
+        estadoPago,
+        totalPagado: parseFloat(paymentInfo.transaction_amount)
+      });
 
       // Si el pago fue aprobado, actualizar pedido
       if (estadoPago === 'APROBADO') {

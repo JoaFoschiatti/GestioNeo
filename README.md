@@ -187,6 +187,10 @@ Ver [DEPLOY.md](./DEPLOY.md) para guía completa de deploy con:
 - **Railway** - Backend Node.js (~$5/mes)
 - **Vercel** - Frontend React (gratis)
 
+## Impresion en Cloud
+
+Si el backend corre en cloud, necesitas un print bridge local en la PC del negocio para imprimir.
+Ver `bridge/README.md`.
 ## Documentación
 
 Para documentación técnica detallada incluyendo diagramas de base de datos, flujos de datos y permisos por rol, ver [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).

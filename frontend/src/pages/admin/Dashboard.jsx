@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../../services/api'
+import toast from 'react-hot-toast'
+import { createEventSource } from '../../services/eventos'
 import {
   CurrencyDollarIcon,
   ShoppingCartIcon,
@@ -16,6 +18,34 @@ export default function Dashboard() {
 
   useEffect(() => {
     cargarDashboard()
+
+    // Escuchar eventos de productos agotados/disponibles
+    const source = createEventSource()
+    if (source) {
+      source.addEventListener('producto.agotado', (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          toast.error(`⚠️ Producto agotado: ${data.nombre}`, { duration: 5000 })
+          cargarDashboard() // Recargar para actualizar alertas
+        } catch (e) {
+          console.error('Error parsing producto.agotado event:', e)
+        }
+      })
+
+      source.addEventListener('producto.disponible', (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          toast.success(`✓ Producto disponible: ${data.nombre}`, { duration: 4000 })
+          cargarDashboard()
+        } catch (e) {
+          console.error('Error parsing producto.disponible event:', e)
+        }
+      })
+    }
+
+    return () => {
+      if (source) source.close()
+    }
   }, [])
 
   const cargarDashboard = async () => {

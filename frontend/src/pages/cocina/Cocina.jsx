@@ -1,29 +1,101 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { CheckIcon, ClockIcon } from '@heroicons/react/24/outline'
+import { CheckIcon, ClockIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/outline'
+import { createEventSource } from '../../services/eventos'
+
+// Función para reproducir sonido de notificación usando Web Audio API
+const playNotificationSound = () => {
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+    const oscillator = audioContext.createOscillator()
+    const gainNode = audioContext.createGain()
+
+    oscillator.connect(gainNode)
+    gainNode.connect(audioContext.destination)
+
+    oscillator.frequency.value = 800
+    oscillator.type = 'sine'
+    gainNode.gain.value = 0.3
+
+    oscillator.start()
+
+    // Beep corto
+    setTimeout(() => {
+      oscillator.frequency.value = 1000
+    }, 100)
+
+    setTimeout(() => {
+      oscillator.frequency.value = 800
+    }, 200)
+
+    setTimeout(() => {
+      oscillator.stop()
+      audioContext.close()
+    }, 300)
+  } catch (error) {
+    console.error('Error reproduciendo sonido:', error)
+  }
+}
 
 export default function Cocina() {
   const [pedidos, setPedidos] = useState([])
   const [loading, setLoading] = useState(true)
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    return localStorage.getItem('cocina_sound') !== 'false'
+  })
+  const pedidosRef = useRef([])
 
-  useEffect(() => {
-    cargarPedidos()
-    // Actualizar cada 10 segundos
-    const interval = setInterval(cargarPedidos, 10000)
-    return () => clearInterval(interval)
-  }, [])
+  const toggleSound = () => {
+    const newValue = !soundEnabled
+    setSoundEnabled(newValue)
+    localStorage.setItem('cocina_sound', newValue.toString())
+    if (newValue) {
+      // Reproducir sonido de prueba al activar
+      playNotificationSound()
+    }
+  }
 
-  const cargarPedidos = async () => {
+  const cargarPedidos = useCallback(async () => {
     try {
       const response = await api.get('/pedidos/cocina')
-      setPedidos(response.data)
+      const nuevosPedidos = response.data
+
+      // Detectar nuevos pedidos PENDIENTES
+      if (soundEnabled && pedidosRef.current.length > 0) {
+        const idsAnteriores = new Set(pedidosRef.current.map(p => p.id))
+        const hayNuevoPendiente = nuevosPedidos.some(
+          p => p.estado === 'PENDIENTE' && !idsAnteriores.has(p.id)
+        )
+        if (hayNuevoPendiente) {
+          playNotificationSound()
+        }
+      }
+
+      pedidosRef.current = nuevosPedidos
+      setPedidos(nuevosPedidos)
     } catch (error) {
       console.error('Error:', error)
     } finally {
       setLoading(false)
     }
-  }
+  }, [soundEnabled])
+
+  useEffect(() => {
+    cargarPedidos()
+    // Actualizar cada 10 segundos
+    const interval = setInterval(cargarPedidos, 10000)
+    const source = createEventSource()
+
+    if (source) {
+      source.addEventListener('pedido.updated', cargarPedidos)
+    }
+
+    return () => {
+      clearInterval(interval)
+      if (source) source.close()
+    }
+  }, [cargarPedidos])
 
   const cambiarEstado = async (id, nuevoEstado) => {
     try {
@@ -65,6 +137,21 @@ export default function Cocina() {
             <span className="w-3 h-3 bg-blue-400 rounded-full"></span>
             En preparación: {pedidosEnPreparacion.length}
           </span>
+          <button
+            onClick={toggleSound}
+            className={`p-2 rounded-lg transition-colors ${
+              soundEnabled
+                ? 'bg-green-100 text-green-600 hover:bg-green-200'
+                : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+            }`}
+            title={soundEnabled ? 'Sonido activado' : 'Sonido desactivado'}
+          >
+            {soundEnabled ? (
+              <SpeakerWaveIcon className="w-5 h-5" />
+            ) : (
+              <SpeakerXMarkIcon className="w-5 h-5" />
+            )}
+          </button>
         </div>
       </div>
 
@@ -122,9 +209,26 @@ export default function Cocina() {
                       <p className="font-medium text-gray-900">
                         {item.producto?.nombre}
                       </p>
+                      {item.modificadores?.length > 0 && (
+                        <div className="mt-1 space-y-0.5">
+                          {item.modificadores.map((mod) => (
+                            <p
+                              key={mod.id}
+                              className={`text-sm font-medium ${
+                                mod.modificador?.tipo === 'EXCLUSION'
+                                  ? 'text-red-600'
+                                  : 'text-green-600'
+                              }`}
+                            >
+                              {mod.modificador?.tipo === 'EXCLUSION' ? '- Sin' : '+ Extra'}{' '}
+                              {mod.modificador?.nombre}
+                            </p>
+                          ))}
+                        </div>
+                      )}
                       {item.observaciones && (
-                        <p className="text-sm text-red-600 font-medium">
-                          {item.observaciones}
+                        <p className="text-sm text-orange-600 font-medium mt-1">
+                          Nota: {item.observaciones}
                         </p>
                       )}
                     </div>

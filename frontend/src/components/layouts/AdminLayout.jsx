@@ -17,12 +17,15 @@ import {
   XMarkIcon,
   ArrowRightOnRectangleIcon,
   UserCircleIcon,
-  Cog6ToothIcon
+  Cog6ToothIcon,
+  CalendarDaysIcon,
+  AdjustmentsHorizontalIcon
 } from '@heroicons/react/24/outline'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, roles: ['ADMIN', 'COCINERO', 'CAJERO'] },
   { name: 'Mesas', href: '/mozo/mesas', icon: TableCellsIcon, roles: ['ADMIN', 'MOZO'] },
+  { name: 'Reservas', href: '/reservas', icon: CalendarDaysIcon, roles: ['ADMIN'] },
   { name: 'Pedidos', href: '/pedidos', icon: ClipboardDocumentListIcon, roles: ['ADMIN', 'MOZO', 'CAJERO'] },
   { name: 'Cocina', href: '/cocina', icon: FireIcon, roles: ['ADMIN', 'COCINERO'] },
   { name: 'Mis Entregas', href: '/delivery/pedidos', icon: TruckIcon, roles: ['ADMIN', 'DELIVERY'] },
@@ -31,10 +34,12 @@ const navigation = [
   { name: 'Config. Mesas', href: '/mesas', icon: TableCellsIcon, roles: ['ADMIN'] },
   { name: 'Categorías', href: '/categorias', icon: TagIcon, roles: ['ADMIN'] },
   { name: 'Productos', href: '/productos', icon: CubeIcon, roles: ['ADMIN'] },
+  { name: 'Modificadores', href: '/modificadores', icon: AdjustmentsHorizontalIcon, roles: ['ADMIN'] },
   { name: 'Ingredientes', href: '/ingredientes', icon: BeakerIcon, roles: ['ADMIN'] },
   { divider: true, roles: ['ADMIN'] },
   { name: 'Liquidaciones', href: '/liquidaciones', icon: BanknotesIcon, roles: ['ADMIN'] },
   { name: 'Reportes', href: '/reportes', icon: ChartBarIcon, roles: ['ADMIN', 'CAJERO'] },
+  { name: 'Cierre de Caja', href: '/cierre-caja', icon: BanknotesIcon, roles: ['ADMIN', 'CAJERO'] },
   { name: 'Configuración', href: '/configuracion', icon: Cog6ToothIcon, roles: ['ADMIN'] },
 ]
 

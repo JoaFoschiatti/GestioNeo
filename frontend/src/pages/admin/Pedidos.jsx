@@ -3,6 +3,7 @@ import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { useAuth } from '../../context/AuthContext'
 import { EyeIcon, PrinterIcon, CurrencyDollarIcon } from '@heroicons/react/24/outline'
+import { createEventSource } from '../../services/eventos'
 
 const estadoColors = {
   PENDIENTE: 'bg-yellow-100 text-yellow-700',
@@ -27,6 +28,21 @@ export default function Pedidos() {
 
   useEffect(() => {
     cargarPedidos()
+  }, [filtroEstado])
+
+  useEffect(() => {
+    const source = createEventSource()
+    const handleUpdate = () => cargarPedidos()
+
+    if (source) {
+      source.addEventListener('pedido.updated', handleUpdate)
+      source.addEventListener('pago.updated', handleUpdate)
+      source.addEventListener('impresion.updated', handleUpdate)
+    }
+
+    return () => {
+      if (source) source.close()
+    }
   }, [filtroEstado])
 
   const cargarPedidos = async () => {
@@ -91,15 +107,38 @@ export default function Pedidos() {
 
   const imprimirComanda = async (id) => {
     try {
-      const response = await api.post(`/impresion/comanda/${id}`)
-      toast.success('Comanda enviada a imprimir')
-      // Mostrar preview en nueva ventana
-      const preview = response.data.comandas.cocina
+      await api.post(`/impresion/comanda/${id}/reimprimir`)
+      toast.success('Reimpresion encolada')
+      const preview = await api.get(`/impresion/comanda/${id}/preview?tipo=CAJA`)
       const win = window.open('', '_blank')
-      win.document.write(`<pre style="font-family: monospace; font-size: 14px;">${preview}</pre>`)
+      win.document.write(`<pre style="font-family: monospace; font-size: 14px;">${preview.data}</pre>`)
     } catch (error) {
       console.error('Error:', error)
     }
+  }
+
+  const renderImpresion = (impresion) => {
+    if (!impresion) {
+      return <span className="text-xs text-gray-400">-</span>
+    }
+
+    const label = impresion.status === 'OK'
+      ? `OK ${impresion.ok}/${impresion.total}`
+      : impresion.status === 'ERROR'
+        ? `ERR ${impresion.ok}/${impresion.total}`
+        : `${impresion.ok}/${impresion.total}`
+
+    const color = impresion.status === 'OK'
+      ? 'bg-green-100 text-green-700'
+      : impresion.status === 'ERROR'
+        ? 'bg-red-100 text-red-700'
+        : 'bg-yellow-100 text-yellow-700'
+
+    return (
+      <span title={impresion.lastError || ''} className={`px-2 py-1 text-xs rounded-full ${color}`}>
+        {label}
+      </span>
+    )
   }
 
   if (loading) {
@@ -134,6 +173,7 @@ export default function Pedidos() {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mesa/Cliente</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Impresion</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hora</th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
             </tr>
@@ -161,6 +201,9 @@ export default function Pedidos() {
                   <span className={`px-2 py-1 text-xs rounded-full ${estadoColors[pedido.estado]}`}>
                     {pedido.estado.replace('_', ' ')}
                   </span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {renderImpresion(pedido.impresion)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-gray-500">
                   {new Date(pedido.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}

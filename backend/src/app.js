@@ -17,8 +17,17 @@ const liquidacionesRoutes = require('./routes/liquidaciones.routes');
 const reportesRoutes = require('./routes/reportes.routes');
 const pagosRoutes = require('./routes/pagos.routes');
 const impresionRoutes = require('./routes/impresion.routes');
+const eventosRoutes = require('./routes/eventos.routes');
 const configuracionRoutes = require('./routes/configuracion.routes');
 const publicoRoutes = require('./routes/publico.routes');
+const cierresRoutes = require('./routes/cierres.routes');
+const reservasRoutes = require('./routes/reservas.routes');
+const modificadoresRoutes = require('./routes/modificadores.routes');
+const registroRoutes = require('./routes/registro.routes');
+const superadminRoutes = require('./routes/superadmin.routes');
+
+// Jobs
+const { iniciarJobReservas } = require('./jobs/reservas.job');
 
 const app = express();
 
@@ -51,8 +60,14 @@ app.use('/api/liquidaciones', liquidacionesRoutes);
 app.use('/api/reportes', reportesRoutes);
 app.use('/api/pagos', pagosRoutes);
 app.use('/api/impresion', impresionRoutes);
+app.use('/api/eventos', eventosRoutes);
 app.use('/api/configuracion', configuracionRoutes);
 app.use('/api/publico', publicoRoutes);
+app.use('/api/cierres', cierresRoutes);
+app.use('/api/reservas', reservasRoutes);
+app.use('/api/modificadores', modificadoresRoutes);
+app.use('/api/registro', registroRoutes);
+app.use('/api/super-admin', superadminRoutes);
 
 // Ruta de salud
 app.get('/api/health', (req, res) => {
@@ -80,6 +95,9 @@ const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`🚀 GestioNeo API corriendo en http://localhost:${PORT}`);
   console.log(`📊 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+
+  // Iniciar jobs en background
+  iniciarJobReservas();
 });
 
 module.exports = app;

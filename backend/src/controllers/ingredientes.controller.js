@@ -1,5 +1,55 @@
 const { PrismaClient } = require('@prisma/client');
+const eventBus = require('../services/event-bus');
 const prisma = new PrismaClient();
+
+// Función para verificar y habilitar productos cuando hay stock disponible
+const verificarProductosDisponibles = async (ingredienteId) => {
+  // Buscar productos NO disponibles que usan este ingrediente
+  const productosNoDisponibles = await prisma.producto.findMany({
+    where: {
+      disponible: false,
+      ingredientes: {
+        some: { ingredienteId }
+      }
+    },
+    include: {
+      ingredientes: {
+        include: { ingrediente: true }
+      }
+    }
+  });
+
+  const productosHabilitados = [];
+
+  for (const producto of productosNoDisponibles) {
+    // Verificar si TODOS los ingredientes del producto tienen stock > 0
+    const todosConStock = producto.ingredientes.every(
+      pi => parseFloat(pi.ingrediente.stockActual) > 0
+    );
+
+    if (todosConStock) {
+      await prisma.producto.update({
+        where: { id: producto.id },
+        data: { disponible: true }
+      });
+
+      productosHabilitados.push(producto);
+
+      eventBus.publish('producto.disponible', {
+        id: producto.id,
+        nombre: producto.nombre,
+        motivo: 'Stock repuesto',
+        updatedAt: new Date().toISOString()
+      });
+    }
+  }
+
+  if (productosHabilitados.length > 0) {
+    console.log(`Productos habilitados: ${productosHabilitados.map(p => p.nombre).join(', ')}`);
+  }
+
+  return productosHabilitados;
+};
 
 // Listar ingredientes
 const listar = async (req, res) => {
@@ -159,6 +209,11 @@ const registrarMovimiento = async (req, res) => {
       where: { id: parseInt(id) }
     });
 
+    // Si es entrada de stock, verificar si productos pueden volver a estar disponibles
+    if (tipo === 'ENTRADA' && nuevoStock > 0) {
+      await verificarProductosDisponibles(parseInt(id));
+    }
+
     res.json(ingredienteActualizado);
   } catch (error) {
     console.error('Error al registrar movimiento:', error);
@@ -197,6 +252,11 @@ const ajustarStock = async (req, res) => {
     const ingredienteActualizado = await prisma.ingrediente.findUnique({
       where: { id: parseInt(id) }
     });
+
+    // Si el stock aumentó, verificar si productos pueden volver a estar disponibles
+    if (diferencia > 0 && parseFloat(stockReal) > 0) {
+      await verificarProductosDisponibles(parseInt(id));
+    }
 
     res.json(ingredienteActualizado);
   } catch (error) {

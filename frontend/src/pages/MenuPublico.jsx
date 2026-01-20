@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useParams, useNavigate } from 'react-router-dom'
 import {
   ShoppingCartIcon,
   PlusIcon,
@@ -44,6 +44,8 @@ const getCategoryEmoji = (nombre) => {
 }
 
 export default function MenuPublico() {
+  const { slug } = useParams()
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [config, setConfig] = useState(null)
   const [categorias, setCategorias] = useState([])
@@ -84,13 +86,14 @@ export default function MenuPublico() {
         setError('El pago no pudo ser procesado. Intenta nuevamente.')
       }
     }
-  }, [searchParams])
+  }, [slug, searchParams])
 
   const cargarConfigYMenu = async () => {
     try {
+      const tenantSlug = slug || 'default'
       const [configRes, menuRes] = await Promise.all([
-        fetch(`${API_URL}/publico/config`),
-        fetch(`${API_URL}/publico/menu`)
+        fetch(`${API_URL}/publico/${tenantSlug}/config`),
+        fetch(`${API_URL}/publico/${tenantSlug}/menu`)
       ])
       const configData = await configRes.json()
       const menuData = await menuRes.json()
@@ -192,7 +195,8 @@ export default function MenuPublico() {
         observaciones: clienteData.observaciones
       }
 
-      const response = await fetch(`${API_URL}/publico/pedido`, {
+      const tenantSlug = slug || 'default'
+      const response = await fetch(`${API_URL}/publico/${tenantSlug}/pedido`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(pedidoData)
@@ -206,7 +210,7 @@ export default function MenuPublico() {
 
       // Si es MercadoPago, iniciar pago
       if (metodoPago === 'MERCADOPAGO') {
-        const pagoRes = await fetch(`${API_URL}/publico/pedido/${data.pedido.id}/pagar`, {
+        const pagoRes = await fetch(`${API_URL}/publico/${tenantSlug}/pedido/${data.pedido.id}/pagar`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' }
         })
@@ -294,7 +298,7 @@ export default function MenuPublico() {
             Enviamos un comprobante a tu email. Te contactaremos para coordinar la entrega.
           </p>
           <button
-            onClick={() => { setPedidoExitoso(null); window.location.href = '/menu' }}
+            onClick={() => { setPedidoExitoso(null); navigate(`/menu/${slug || 'default'}`) }}
             className="btn btn-primary w-full py-3"
           >
             Hacer otro pedido

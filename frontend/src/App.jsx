@@ -11,6 +11,8 @@ import RedirectByRole from './components/RedirectByRole'
 // Páginas públicas
 import Login from './pages/Login'
 import MenuPublico from './pages/MenuPublico'
+import Registro from './pages/Registro'
+import VerificarEmail from './pages/VerificarEmail'
 
 // Páginas admin
 import Dashboard from './pages/admin/Dashboard'
@@ -22,6 +24,9 @@ import Ingredientes from './pages/admin/Ingredientes'
 import Liquidaciones from './pages/admin/Liquidaciones'
 import Reportes from './pages/admin/Reportes'
 import Configuracion from './pages/admin/Configuracion'
+import CierreCaja from './pages/admin/CierreCaja'
+import Reservas from './pages/admin/Reservas'
+import Modificadores from './pages/admin/Modificadores'
 
 // Páginas mozo
 import MozoMesas from './pages/mozo/MozoMesas'
@@ -61,11 +66,16 @@ export default function App() {
     <Routes>
       {/* Rutas públicas */}
       <Route path="/login" element={<Login />} />
-      <Route path="/menu" element={
+      <Route path="/login/:slug" element={<Login />} />
+      <Route path="/registro" element={<Registro />} />
+      <Route path="/verificar-email/:token" element={<VerificarEmail />} />
+      <Route path="/menu/:slug" element={
         <PublicLayout>
           <MenuPublico />
         </PublicLayout>
       } />
+      {/* Backwards compatibility - redirect to default tenant */}
+      <Route path="/menu" element={<Navigate to="/menu/default" replace />} />
 
       {/* Rutas protegidas */}
       <Route path="/" element={
@@ -115,6 +125,21 @@ export default function App() {
         <Route path="configuracion" element={
           <ProtectedRoute roles={['ADMIN']}>
             <Configuracion />
+          </ProtectedRoute>
+        } />
+        <Route path="cierre-caja" element={
+          <ProtectedRoute roles={['ADMIN', 'CAJERO']}>
+            <CierreCaja />
+          </ProtectedRoute>
+        } />
+        <Route path="reservas" element={
+          <ProtectedRoute roles={['ADMIN']}>
+            <Reservas />
+          </ProtectedRoute>
+        } />
+        <Route path="modificadores" element={
+          <ProtectedRoute roles={['ADMIN']}>
+            <Modificadores />
           </ProtectedRoute>
         } />
         <Route path="pedidos" element={<Pedidos />} />

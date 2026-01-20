@@ -1,18 +1,39 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
-import { PlusIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, CalendarDaysIcon } from '@heroicons/react/24/outline'
+import { createEventSource } from '../../services/eventos'
 
 export default function MozoMesas() {
   const [mesas, setMesas] = useState([])
+  const [reservasProximas, setReservasProximas] = useState([])
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
   useEffect(() => {
     cargarMesas()
+    cargarReservasProximas()
     // Actualizar cada 30 segundos
-    const interval = setInterval(cargarMesas, 30000)
-    return () => clearInterval(interval)
+    const interval = setInterval(() => {
+      cargarMesas()
+      cargarReservasProximas()
+    }, 30000)
+    const source = createEventSource()
+    const handleUpdate = () => {
+      cargarMesas()
+      cargarReservasProximas()
+    }
+
+    if (source) {
+      source.addEventListener('pedido.updated', handleUpdate)
+      source.addEventListener('mesa.updated', handleUpdate)
+      source.addEventListener('reserva.updated', handleUpdate)
+    }
+
+    return () => {
+      clearInterval(interval)
+      if (source) source.close()
+    }
   }, [])
 
   const cargarMesas = async () => {
@@ -24,6 +45,26 @@ export default function MozoMesas() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const cargarReservasProximas = async () => {
+    try {
+      const response = await api.get('/reservas/proximas')
+      setReservasProximas(response.data)
+    } catch (error) {
+      console.error('Error:', error)
+    }
+  }
+
+  const getReservaProxima = (mesaId) => {
+    return reservasProximas.find(r => r.mesaId === mesaId)
+  }
+
+  const formatHora = (fecha) => {
+    return new Date(fecha).toLocaleTimeString('es-AR', {
+      hour: '2-digit',
+      minute: '2-digit'
+    })
   }
 
   const getEstadoStyle = (estado) => {
@@ -100,25 +141,38 @@ export default function MozoMesas() {
         <div key={zona} className="mb-8">
           <h2 className="text-lg font-semibold text-gray-700 mb-4">{zona}</h2>
           <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            {mesasZona.map((mesa) => (
-              <button
-                key={mesa.id}
-                onClick={() => handleMesaClick(mesa)}
-                className={`p-4 rounded-xl border-2 transition-all ${getEstadoStyle(mesa.estado)}`}
-              >
-                <div className="text-3xl font-bold text-gray-800 mb-1">
-                  {mesa.numero}
-                </div>
-                <div className="text-xs text-gray-600">
-                  {mesa.capacidad} personas
-                </div>
-                {mesa.estado === 'OCUPADA' && mesa.pedidos?.[0] && (
-                  <div className="text-xs text-gray-500 mt-2">
-                    Pedido #{mesa.pedidos[0].id}
+            {mesasZona.map((mesa) => {
+              const reservaProxima = getReservaProxima(mesa.id)
+              return (
+                <button
+                  key={mesa.id}
+                  onClick={() => handleMesaClick(mesa)}
+                  className={`p-4 rounded-xl border-2 transition-all relative ${getEstadoStyle(mesa.estado)}`}
+                >
+                  {reservaProxima && (
+                    <div className="absolute -top-2 -right-2 bg-orange-500 text-white rounded-full p-1" title={`Reserva a las ${formatHora(reservaProxima.fechaHora)} - ${reservaProxima.clienteNombre}`}>
+                      <CalendarDaysIcon className="w-4 h-4" />
+                    </div>
+                  )}
+                  <div className="text-3xl font-bold text-gray-800 mb-1">
+                    {mesa.numero}
                   </div>
-                )}
-              </button>
-            ))}
+                  <div className="text-xs text-gray-600">
+                    {mesa.capacidad} personas
+                  </div>
+                  {mesa.estado === 'OCUPADA' && mesa.pedidos?.[0] && (
+                    <div className="text-xs text-gray-500 mt-2">
+                      Pedido #{mesa.pedidos[0].id}
+                    </div>
+                  )}
+                  {reservaProxima && mesa.estado === 'LIBRE' && (
+                    <div className="text-xs text-orange-600 mt-2 font-medium">
+                      Reserva {formatHora(reservaProxima.fechaHora)}
+                    </div>
+                  )}
+                </button>
+              )
+            })}
           </div>
         </div>
       ))}

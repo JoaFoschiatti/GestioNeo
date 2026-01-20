@@ -1,17 +1,61 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
-const configuracionController = require('../controllers/configuracion.controller');
+const { prisma, getTenantPrisma } = require('../db/prisma');
+const { resolveTenantFromSlug } = require('../middlewares/tenant.middleware');
 const emailService = require('../services/email.service');
+const eventBus = require('../services/event-bus');
 
-// GET /api/publico/config - Configuración pública
-router.get('/config', configuracionController.obtenerPublica);
+/**
+ * All public routes require slug parameter for tenant resolution
+ * Routes: /api/publico/:slug/...
+ */
 
-// GET /api/publico/menu - Menú público (categorías con productos)
-router.get('/menu', async (req, res) => {
+// GET /api/publico/:slug/config - Configuración pública del tenant
+router.get('/:slug/config', resolveTenantFromSlug, async (req, res) => {
   try {
-    const categorias = await prisma.categoria.findMany({
+    const tenantPrisma = req.prisma;
+    const tenant = req.tenant;
+
+    // Get tenant-specific configuration
+    const configs = await tenantPrisma.configuracion.findMany();
+    const configMap = {};
+    configs.forEach(c => {
+      configMap[c.clave] = c.valor;
+    });
+
+    res.json({
+      tenant: {
+        nombre: tenant.nombre,
+        slug: tenant.slug,
+        logo: tenant.logo,
+        bannerUrl: tenant.bannerUrl,
+        colorPrimario: tenant.colorPrimario,
+        colorSecundario: tenant.colorSecundario,
+        telefono: tenant.telefono,
+        direccion: tenant.direccion
+      },
+      config: {
+        tienda_abierta: configMap.tienda_abierta === 'true',
+        horario_apertura: configMap.horario_apertura || '11:00',
+        horario_cierre: configMap.horario_cierre || '23:00',
+        costo_delivery: parseFloat(configMap.costo_delivery || '0'),
+        mercadopago_enabled: configMap.mercadopago_enabled === 'true',
+        nombre_negocio: configMap.nombre_negocio || tenant.nombre,
+        tagline_negocio: configMap.tagline_negocio || ''
+      }
+    });
+  } catch (error) {
+    console.error('Error al obtener config pública:', error);
+    res.status(500).json({ error: { message: 'Error al obtener configuración' } });
+  }
+});
+
+// GET /api/publico/:slug/menu - Menú público (categorías con productos)
+router.get('/:slug/menu', resolveTenantFromSlug, async (req, res) => {
+  try {
+    const tenantPrisma = req.prisma;
+
+    const categorias = await tenantPrisma.categoria.findMany({
       where: { activa: true },
       orderBy: { orden: 'asc' },
       include: {
@@ -29,9 +73,12 @@ router.get('/menu', async (req, res) => {
   }
 });
 
-// POST /api/publico/pedido - Crear pedido público
-router.post('/pedido', async (req, res) => {
+// POST /api/publico/:slug/pedido - Crear pedido público
+router.post('/:slug/pedido', resolveTenantFromSlug, async (req, res) => {
   try {
+    const tenantPrisma = req.prisma;
+    const tenantId = req.tenantId;
+
     const {
       items,
       clienteNombre,
@@ -58,7 +105,9 @@ router.post('/pedido', async (req, res) => {
     }
 
     // Verificar que la tienda esté abierta
-    const tiendaConfig = await prisma.configuracion.findUnique({ where: { clave: 'tienda_abierta' } });
+    const tiendaConfig = await tenantPrisma.configuracion.findFirst({
+      where: { clave: 'tienda_abierta' }
+    });
     if (tiendaConfig && tiendaConfig.valor === 'false') {
       return res.status(400).json({ error: { message: 'La tienda está cerrada en este momento' } });
     }
@@ -66,13 +115,15 @@ router.post('/pedido', async (req, res) => {
     // Obtener costo de delivery
     let costoEnvio = 0;
     if (tipoEntrega === 'DELIVERY') {
-      const deliveryConfig = await prisma.configuracion.findUnique({ where: { clave: 'costo_delivery' } });
+      const deliveryConfig = await tenantPrisma.configuracion.findFirst({
+        where: { clave: 'costo_delivery' }
+      });
       costoEnvio = deliveryConfig ? parseFloat(deliveryConfig.valor) : 0;
     }
 
     // Obtener productos y calcular totales (desde la DB, no del frontend)
     const productoIds = items.map(item => item.productoId);
-    const productos = await prisma.producto.findMany({
+    const productos = await tenantPrisma.producto.findMany({
       where: {
         id: { in: productoIds },
         disponible: true
@@ -94,6 +145,7 @@ router.post('/pedido', async (req, res) => {
       subtotal += itemSubtotal;
 
       return {
+        tenantId,
         productoId: producto.id,
         cantidad,
         precioUnitario,
@@ -104,9 +156,10 @@ router.post('/pedido', async (req, res) => {
 
     const total = subtotal + costoEnvio;
 
-    // Crear pedido
+    // Crear pedido con tenantId
     const pedido = await prisma.pedido.create({
       data: {
+        tenantId,
         tipo: tipoEntrega === 'DELIVERY' ? 'DELIVERY' : 'MOSTRADOR',
         tipoEntrega,
         clienteNombre,
@@ -130,11 +183,22 @@ router.post('/pedido', async (req, res) => {
       }
     });
 
+    // Publish event with tenantId
+    eventBus.publish('pedido.updated', {
+      tenantId,
+      id: pedido.id,
+      estado: pedido.estado,
+      tipo: pedido.tipo,
+      mesaId: pedido.mesaId || null,
+      updatedAt: pedido.updatedAt || new Date().toISOString()
+    });
+
     // Si pago en efectivo, crear registro de pago
     if (metodoPago === 'EFECTIVO' && montoAbonado) {
       const vuelto = parseFloat(montoAbonado) - total;
       await prisma.pago.create({
         data: {
+          tenantId,
           pedidoId: pedido.id,
           monto: total,
           metodo: 'EFECTIVO',
@@ -148,7 +212,7 @@ router.post('/pedido', async (req, res) => {
     // Enviar email de confirmación
     if (pedido.clienteEmail) {
       try {
-        await emailService.sendOrderConfirmation(pedido);
+        await emailService.sendOrderConfirmation(pedido, req.tenant);
         console.log('Email de confirmación enviado a:', pedido.clienteEmail);
       } catch (emailError) {
         console.error('Error al enviar email de confirmación:', emailError);
@@ -168,13 +232,15 @@ router.post('/pedido', async (req, res) => {
   }
 });
 
-// POST /api/publico/pedido/:id/pagar - Iniciar pago MercadoPago
-router.post('/pedido/:id/pagar', async (req, res) => {
+// POST /api/publico/:slug/pedido/:id/pagar - Iniciar pago MercadoPago
+router.post('/:slug/pedido/:id/pagar', resolveTenantFromSlug, async (req, res) => {
   try {
+    const tenantPrisma = req.prisma;
+    const tenantId = req.tenantId;
     const { id } = req.params;
     const pedidoId = parseInt(id);
 
-    const pedido = await prisma.pedido.findUnique({
+    const pedido = await tenantPrisma.pedido.findFirst({
       where: { id: pedidoId },
       include: {
         items: { include: { producto: true } }
@@ -190,7 +256,9 @@ router.post('/pedido/:id/pagar', async (req, res) => {
     }
 
     // Verificar si MercadoPago está habilitado
-    const mpConfig = await prisma.configuracion.findUnique({ where: { clave: 'mercadopago_enabled' } });
+    const mpConfig = await tenantPrisma.configuracion.findFirst({
+      where: { clave: 'mercadopago_enabled' }
+    });
     if (!mpConfig || mpConfig.valor !== 'true') {
       return res.status(400).json({ error: { message: 'MercadoPago no está habilitado' } });
     }
@@ -226,26 +294,28 @@ router.post('/pedido/:id/pagar', async (req, res) => {
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
+    const slug = req.tenantSlug;
 
     const preferenceData = {
       items: mpItems,
       back_urls: {
-        success: `${frontendUrl}/menu?pago=exito&pedido=${pedidoId}`,
-        failure: `${frontendUrl}/menu?pago=error&pedido=${pedidoId}`,
-        pending: `${frontendUrl}/menu?pago=pendiente&pedido=${pedidoId}`
+        success: `${frontendUrl}/menu/${slug}?pago=exito&pedido=${pedidoId}`,
+        failure: `${frontendUrl}/menu/${slug}?pago=error&pedido=${pedidoId}`,
+        pending: `${frontendUrl}/menu/${slug}?pago=pendiente&pedido=${pedidoId}`
       },
       auto_return: 'approved',
-      external_reference: pedidoId.toString(),
+      external_reference: `${tenantId}-${pedidoId}`,
       notification_url: `${backendUrl}/api/pagos/webhook/mercadopago`,
-      statement_descriptor: 'GESTIONEO'
+      statement_descriptor: req.tenant.nombre.substring(0, 22).toUpperCase()
     };
 
     const response = await preference.create({ body: preferenceData });
 
     // Crear registro de pago pendiente
-    const idempotencyKey = `mp-${pedidoId}-${Date.now()}`;
+    const idempotencyKey = `mp-${tenantId}-${pedidoId}-${Date.now()}`;
     await prisma.pago.create({
       data: {
+        tenantId,
         pedidoId,
         monto: parseFloat(pedido.total) + parseFloat(pedido.costoEnvio),
         metodo: 'MERCADOPAGO',
@@ -266,12 +336,13 @@ router.post('/pedido/:id/pagar', async (req, res) => {
   }
 });
 
-// GET /api/publico/pedido/:id - Obtener estado de pedido
-router.get('/pedido/:id', async (req, res) => {
+// GET /api/publico/:slug/pedido/:id - Obtener estado de pedido
+router.get('/:slug/pedido/:id', resolveTenantFromSlug, async (req, res) => {
   try {
+    const tenantPrisma = req.prisma;
     const { id } = req.params;
 
-    const pedido = await prisma.pedido.findUnique({
+    const pedido = await tenantPrisma.pedido.findFirst({
       where: { id: parseInt(id) },
       include: {
         items: { include: { producto: true } },
@@ -288,6 +359,23 @@ router.get('/pedido/:id', async (req, res) => {
     console.error('Error al obtener pedido:', error);
     res.status(500).json({ error: { message: 'Error al obtener pedido' } });
   }
+});
+
+// ============================================
+// BACKWARDS COMPATIBILITY ROUTES
+// These redirect to the default tenant during migration
+// ============================================
+
+// GET /api/publico/config - Redirect to default tenant
+router.get('/config', async (req, res) => {
+  console.warn('[DEPRECATION] /api/publico/config is deprecated. Use /api/publico/:slug/config');
+  res.redirect(301, '/api/publico/default/config');
+});
+
+// GET /api/publico/menu - Redirect to default tenant
+router.get('/menu', async (req, res) => {
+  console.warn('[DEPRECATION] /api/publico/menu is deprecated. Use /api/publico/:slug/menu');
+  res.redirect(301, '/api/publico/default/menu');
 });
 
 module.exports = router;

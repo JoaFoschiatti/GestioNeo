@@ -8,8 +8,18 @@ datasource db {
   directUrl = env("DIRECT_URL")  // Para Supabase con connection pooling
 }
 
-// Enums
+// ============================================
+// ENUMS
+// ============================================
+
+enum PlanTenant {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
 enum Rol {
+  SUPER_ADMIN
   ADMIN
   MOZO
   COCINERO
@@ -67,10 +77,109 @@ enum OrigenPedido {
   MENU_PUBLICO
 }
 
+enum TipoComanda {
+  COCINA
+  CAJA
+  CLIENTE
+}
+
+enum EstadoPrintJob {
+  PENDIENTE
+  IMPRIMIENDO
+  OK
+  ERROR
+}
+
+enum EstadoCaja {
+  ABIERTO
+  CERRADO
+}
+
+enum EstadoReserva {
+  CONFIRMADA
+  CLIENTE_PRESENTE
+  NO_LLEGO
+  CANCELADA
+}
+
+enum TipoModificador {
+  EXCLUSION    // "Sin cebolla" - precio 0
+  ADICION      // "Extra queso" - precio > 0
+}
+
+// ============================================
+// MULTI-TENANCY: Tenant Model
+// ============================================
+
+model Tenant {
+  id              Int         @id @default(autoincrement())
+  slug            String      @unique
+  nombre          String
+  email           String
+  telefono        String?
+  direccion       String?
+  logo            String?
+  bannerUrl       String?
+  colorPrimario   String?     @default("#3B82F6")
+  colorSecundario String?     @default("#1E40AF")
+  plan            PlanTenant  @default(FREE)
+  activo          Boolean     @default(false)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relaciones
+  usuarios          Usuario[]
+  empleados         Empleado[]
+  mesas             Mesa[]
+  categorias        Categoria[]
+  productos         Producto[]
+  ingredientes      Ingrediente[]
+  pedidos           Pedido[]
+  pedidoItems       PedidoItem[]
+  pagos             Pago[]
+  fichajes          Fichaje[]
+  liquidaciones     Liquidacion[]
+  movimientos       MovimientoStock[]
+  reservas          Reserva[]
+  cierres           CierreCaja[]
+  printJobs         PrintJob[]
+  modificadores     Modificador[]
+  configuraciones   Configuracion[]
+  productoIngredientes    ProductoIngrediente[]
+  productoModificadores   ProductoModificador[]
+  pedidoItemModificadores PedidoItemModificador[]
+  emailVerificaciones     EmailVerificacion[]
+
+  @@map("tenants")
+}
+
+// Verificacion de email para onboarding
+model EmailVerificacion {
+  id        Int       @id @default(autoincrement())
+  tenantId  Int
+  usuarioId Int
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, usuarioId])
+  @@index([token])
+  @@map("email_verificaciones")
+}
+
+// ============================================
+// USUARIOS Y EMPLEADOS
+// ============================================
+
 // Usuarios del sistema (login)
 model Usuario {
   id        Int      @id @default(autoincrement())
-  email     String   @unique
+  tenantId  Int?     // Nullable para SUPER_ADMIN (no pertenece a ningún tenant)
+  email     String
   password  String
   nombre    String
   rol       Rol      @default(MOZO)
@@ -79,17 +188,23 @@ model Usuario {
   updatedAt DateTime @updatedAt
 
   // Relaciones
+  tenant    Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   pedidos   Pedido[]
+  cierres   CierreCaja[]
+  emailVerificaciones EmailVerificacion[]
 
+  @@unique([tenantId, email])
+  @@index([tenantId])
   @@map("usuarios")
 }
 
-// Empleados (para fichaje y liquidación)
+// Empleados (para fichaje y liquidacion)
 model Empleado {
   id          Int      @id @default(autoincrement())
+  tenantId    Int
   nombre      String
   apellido    String
-  dni         String   @unique
+  dni         String
   telefono    String?
   direccion   String?
   rol         Rol
@@ -99,15 +214,19 @@ model Empleado {
   updatedAt   DateTime @updatedAt
 
   // Relaciones
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   fichajes      Fichaje[]
   liquidaciones Liquidacion[]
 
+  @@unique([tenantId, dni])
+  @@index([tenantId])
   @@map("empleados")
 }
 
 // Control de fichaje (entrada/salida)
 model Fichaje {
   id         Int       @id @default(autoincrement())
+  tenantId   Int
   empleadoId Int
   entrada    DateTime
   salida     DateTime?
@@ -115,38 +234,49 @@ model Fichaje {
   createdAt  DateTime  @default(now())
 
   // Relaciones
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   empleado Empleado @relation(fields: [empleadoId], references: [id])
 
+  @@index([tenantId])
+  @@index([tenantId, empleadoId, fecha])
   @@map("fichajes")
 }
 
-// Liquidación de sueldos
+// Liquidacion de sueldos
 model Liquidacion {
-  id           Int      @id @default(autoincrement())
+  id           Int       @id @default(autoincrement())
+  tenantId     Int
   empleadoId   Int
-  periodoDesde DateTime @db.Date
-  periodoHasta DateTime @db.Date
-  horasTotales Decimal  @db.Decimal(10, 2)
-  tarifaHora   Decimal  @db.Decimal(10, 2)
-  subtotal     Decimal  @db.Decimal(10, 2)
-  descuentos   Decimal  @default(0) @db.Decimal(10, 2)
-  adicionales  Decimal  @default(0) @db.Decimal(10, 2)
-  totalPagar   Decimal  @db.Decimal(10, 2)
+  periodoDesde DateTime  @db.Date
+  periodoHasta DateTime  @db.Date
+  horasTotales Decimal   @db.Decimal(10, 2)
+  tarifaHora   Decimal   @db.Decimal(10, 2)
+  subtotal     Decimal   @db.Decimal(10, 2)
+  descuentos   Decimal   @default(0) @db.Decimal(10, 2)
+  adicionales  Decimal   @default(0) @db.Decimal(10, 2)
+  totalPagar   Decimal   @db.Decimal(10, 2)
   observaciones String?
-  pagado       Boolean  @default(false)
+  pagado       Boolean   @default(false)
   fechaPago    DateTime?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
 
   // Relaciones
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   empleado Empleado @relation(fields: [empleadoId], references: [id])
 
+  @@index([tenantId])
   @@map("liquidaciones")
 }
+
+// ============================================
+// MESAS Y RESERVAS
+// ============================================
 
 // Mesas del local
 model Mesa {
   id        Int         @id @default(autoincrement())
-  numero    Int         @unique
+  tenantId  Int
+  numero    Int
   zona      String?
   capacidad Int         @default(4)
   estado    EstadoMesa  @default(LIBRE)
@@ -155,30 +285,67 @@ model Mesa {
   updatedAt DateTime    @updatedAt
 
   // Relaciones
-  pedidos Pedido[]
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pedidos   Pedido[]
+  reservas  Reserva[]
 
+  @@unique([tenantId, numero])
+  @@index([tenantId])
   @@map("mesas")
 }
 
-// Categorías de productos
-model Categoria {
-  id        Int      @id @default(autoincrement())
-  nombre    String   @unique
-  descripcion String?
-  orden     Int      @default(0)
-  activa    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// Reservas de mesa
+model Reserva {
+  id                Int           @id @default(autoincrement())
+  tenantId          Int
+  mesaId            Int
+  clienteNombre     String
+  clienteTelefono   String?
+  fechaHora         DateTime
+  cantidadPersonas  Int
+  estado            EstadoReserva @default(CONFIRMADA)
+  observaciones     String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   // Relaciones
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  mesa   Mesa   @relation(fields: [mesaId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, fechaHora])
+  @@index([tenantId, mesaId, fechaHora])
+  @@map("reservas")
+}
+
+// ============================================
+// PRODUCTOS Y CATEGORIAS
+// ============================================
+
+// Categorias de productos
+model Categoria {
+  id          Int      @id @default(autoincrement())
+  tenantId    Int
+  nombre      String
+  descripcion String?
+  orden       Int      @default(0)
+  activa      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relaciones
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   productos Producto[]
 
+  @@unique([tenantId, nombre])
+  @@index([tenantId])
   @@map("categorias")
 }
 
 // Productos (carta)
 model Producto {
   id           Int      @id @default(autoincrement())
+  tenantId     Int
   nombre       String
   descripcion  String?
   precio       Decimal  @db.Decimal(10, 2)
@@ -190,17 +357,64 @@ model Producto {
   updatedAt    DateTime @updatedAt
 
   // Relaciones
-  categoria    Categoria @relation(fields: [categoriaId], references: [id])
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoria    Categoria           @relation(fields: [categoriaId], references: [id])
   ingredientes ProductoIngrediente[]
   pedidoItems  PedidoItem[]
+  modificadores ProductoModificador[]
 
+  @@index([tenantId])
+  @@index([tenantId, categoriaId])
   @@map("productos")
 }
+
+// Modificadores (extras y exclusiones)
+model Modificador {
+  id        Int             @id @default(autoincrement())
+  tenantId  Int
+  nombre    String
+  precio    Decimal         @default(0) @db.Decimal(10, 2)
+  tipo      TipoModificador
+  activo    Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  // Relaciones
+  tenant    Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  productos ProductoModificador[]
+  items     PedidoItemModificador[]
+
+  @@unique([tenantId, nombre])
+  @@index([tenantId])
+  @@map("modificadores")
+}
+
+// Relacion producto-modificador (que modificadores acepta cada producto)
+model ProductoModificador {
+  id            Int @id @default(autoincrement())
+  tenantId      Int
+  productoId    Int
+  modificadorId Int
+
+  // Relaciones
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  producto    Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  modificador Modificador @relation(fields: [modificadorId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, productoId, modificadorId])
+  @@index([tenantId])
+  @@map("producto_modificadores")
+}
+
+// ============================================
+// INVENTARIO
+// ============================================
 
 // Ingredientes/Insumos para stock
 model Ingrediente {
   id           Int      @id @default(autoincrement())
-  nombre       String   @unique
+  tenantId     Int
+  nombre       String
   unidad       String   // kg, litros, unidades, etc.
   stockActual  Decimal  @db.Decimal(10, 3)
   stockMinimo  Decimal  @db.Decimal(10, 3)
@@ -210,30 +424,37 @@ model Ingrediente {
   updatedAt    DateTime @updatedAt
 
   // Relaciones
-  productos    ProductoIngrediente[]
-  movimientos  MovimientoStock[]
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  productos   ProductoIngrediente[]
+  movimientos MovimientoStock[]
 
+  @@unique([tenantId, nombre])
+  @@index([tenantId])
   @@map("ingredientes")
 }
 
-// Relación producto-ingrediente (cuánto de cada ingrediente lleva un producto)
+// Relacion producto-ingrediente (cuanto de cada ingrediente lleva un producto)
 model ProductoIngrediente {
   id            Int     @id @default(autoincrement())
+  tenantId      Int
   productoId    Int
   ingredienteId Int
   cantidad      Decimal @db.Decimal(10, 3)
 
   // Relaciones
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   producto    Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
   ingrediente Ingrediente @relation(fields: [ingredienteId], references: [id])
 
-  @@unique([productoId, ingredienteId])
+  @@unique([tenantId, productoId, ingredienteId])
+  @@index([tenantId])
   @@map("producto_ingredientes")
 }
 
 // Movimientos de stock
 model MovimientoStock {
   id            Int                  @id @default(autoincrement())
+  tenantId      Int
   ingredienteId Int
   tipo          TipoMovimientoStock
   cantidad      Decimal              @db.Decimal(10, 3)
@@ -242,19 +463,27 @@ model MovimientoStock {
   createdAt     DateTime             @default(now())
 
   // Relaciones
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   ingrediente Ingrediente @relation(fields: [ingredienteId], references: [id])
   pedido      Pedido?     @relation(fields: [pedidoId], references: [id])
 
+  @@index([tenantId])
+  @@index([tenantId, ingredienteId])
   @@map("movimientos_stock")
 }
+
+// ============================================
+// PEDIDOS Y PAGOS
+// ============================================
 
 // Pedidos
 model Pedido {
   id              Int          @id @default(autoincrement())
+  tenantId        Int
   tipo            TipoPedido
   estado          EstadoPedido @default(PENDIENTE)
   mesaId          Int?
-  usuarioId       Int?         // Mozo que tomó el pedido (null para pedidos públicos)
+  usuarioId       Int?         // Mozo que tomo el pedido (null para pedidos publicos)
 
   // Datos cliente
   clienteNombre    String?
@@ -283,41 +512,70 @@ model Pedido {
   updatedAt       DateTime     @updatedAt
 
   // Relaciones
+  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   mesa        Mesa?             @relation(fields: [mesaId], references: [id])
   usuario     Usuario?          @relation(fields: [usuarioId], references: [id])
   items       PedidoItem[]
   pagos       Pago[]
   movimientos MovimientoStock[]
+  printJobs   PrintJob[]
 
+  @@index([tenantId])
+  @@index([tenantId, estado])
+  @@index([tenantId, tipo])
+  @@index([tenantId, createdAt])
   @@map("pedidos")
 }
 
 // Items del pedido
 model PedidoItem {
-  id            Int      @id @default(autoincrement())
-  pedidoId      Int
-  productoId    Int
-  cantidad      Int
-  precioUnitario Decimal @db.Decimal(10, 2)
-  subtotal      Decimal  @db.Decimal(10, 2)
-  observaciones String?
-  createdAt     DateTime @default(now())
+  id             Int      @id @default(autoincrement())
+  tenantId       Int
+  pedidoId       Int
+  productoId     Int
+  cantidad       Int
+  precioUnitario Decimal  @db.Decimal(10, 2)
+  subtotal       Decimal  @db.Decimal(10, 2)
+  observaciones  String?
+  createdAt      DateTime @default(now())
 
   // Relaciones
-  pedido   Pedido   @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
-  producto Producto @relation(fields: [productoId], references: [id])
+  tenant        Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pedido        Pedido                  @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  producto      Producto                @relation(fields: [productoId], references: [id])
+  modificadores PedidoItemModificador[]
 
+  @@index([tenantId])
+  @@index([tenantId, pedidoId])
   @@map("pedido_items")
+}
+
+// Modificadores aplicados a items de pedido
+model PedidoItemModificador {
+  id            Int     @id @default(autoincrement())
+  tenantId      Int
+  pedidoItemId  Int
+  modificadorId Int
+  precio        Decimal @db.Decimal(10, 2)
+
+  // Relaciones
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pedidoItem  PedidoItem  @relation(fields: [pedidoItemId], references: [id], onDelete: Cascade)
+  modificador Modificador @relation(fields: [modificadorId], references: [id])
+
+  @@index([tenantId])
+  @@map("pedido_item_modificadores")
 }
 
 // Pagos
 model Pago {
   id               Int         @id @default(autoincrement())
+  tenantId         Int
   pedidoId         Int
   monto            Decimal     @db.Decimal(10, 2)
   metodo           MetodoPago
   estado           EstadoPago  @default(PENDIENTE)
-  referencia       String?     // ID transacción MercadoPago, etc.
+  referencia       String?     // ID transaccion MercadoPago, etc.
   comprobante      String?
 
   // MercadoPago
@@ -325,7 +583,7 @@ model Pago {
   mpPaymentId      String?     // ID de pago MP
 
   // Efectivo
-  montoAbonado     Decimal?    @db.Decimal(10, 2)  // Con cuánto abona
+  montoAbonado     Decimal?    @db.Decimal(10, 2)  // Con cuanto abona
   vuelto           Decimal?    @db.Decimal(10, 2)  // Vuelto a dar
 
   // Seguridad
@@ -335,17 +593,97 @@ model Pago {
   updatedAt        DateTime    @default(now()) @updatedAt
 
   // Relaciones
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   pedido Pedido @relation(fields: [pedidoId], references: [id])
 
+  @@index([tenantId])
+  @@index([tenantId, pedidoId])
   @@map("pagos")
 }
 
-// Configuración del sistema
+// ============================================
+// CAJA
+// ============================================
+
+// Cierre de caja / Arqueo
+model CierreCaja {
+  id              Int         @id @default(autoincrement())
+  tenantId        Int
+  usuarioId       Int
+  fecha           DateTime    @db.Date
+  horaApertura    DateTime
+  horaCierre      DateTime?
+  fondoInicial    Decimal     @db.Decimal(10, 2)
+  totalEfectivo   Decimal     @default(0) @db.Decimal(10, 2)
+  totalTarjeta    Decimal     @default(0) @db.Decimal(10, 2)
+  totalMP         Decimal     @default(0) @db.Decimal(10, 2)
+  efectivoFisico  Decimal?    @db.Decimal(10, 2)
+  diferencia      Decimal?    @db.Decimal(10, 2)
+  estado          EstadoCaja  @default(ABIERTO)
+  observaciones   String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relaciones
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, fecha])
+  @@index([tenantId, usuarioId, fecha])
+  @@map("cierres_caja")
+}
+
+// ============================================
+// IMPRESION
+// ============================================
+
+// Jobs de impresion (cola persistente)
+model PrintJob {
+  id            Int             @id @default(autoincrement())
+  tenantId      Int
+  pedidoId      Int
+  tipo          TipoComanda
+  status        EstadoPrintJob  @default(PENDIENTE)
+  intentos      Int             @default(0)
+  maxIntentos   Int             @default(3)
+  nextAttemptAt DateTime        @default(now())
+  lastError     String?
+  contenido     String
+  anchoMm       Int             @default(80)
+  batchId       String
+  claimedBy     String?
+  claimedAt     DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  // Relaciones
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pedido Pedido @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, status, nextAttemptAt])
+  @@index([tenantId, pedidoId, batchId])
+  @@unique([tenantId, pedidoId, tipo, batchId])
+  @@map("print_jobs")
+}
+
+// ============================================
+// CONFIGURACION
+// ============================================
+
+// Configuracion del sistema (por tenant)
 model Configuracion {
   id        Int      @id @default(autoincrement())
-  clave     String   @unique
+  tenantId  Int
+  clave     String
   valor     String
   updatedAt DateTime @updatedAt
 
+  // Relaciones
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, clave])
+  @@index([tenantId])
   @@map("configuraciones")
 }
