@@ -4,8 +4,8 @@
 
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middlewares/auth.middleware');
-const { tenantMiddleware } = require('../middlewares/tenant.middleware');
+const { verificarToken } = require('../middlewares/auth.middleware');
+const { setTenantFromAuth } = require('../middlewares/tenant.middleware');
 const controller = require('../controllers/mercadopago-oauth.controller');
 
 /**
@@ -32,18 +32,18 @@ router.get('/oauth/callback', controller.callbackOAuth);
 // ============================================
 
 // GET /api/mercadopago/oauth/authorize - Iniciar flujo OAuth
-router.get('/oauth/authorize', auth, requireAdmin, tenantMiddleware, controller.iniciarOAuth);
+router.get('/oauth/authorize', verificarToken, requireAdmin, setTenantFromAuth, controller.iniciarOAuth);
 
 // DELETE /api/mercadopago/oauth/disconnect - Desconectar cuenta
-router.delete('/oauth/disconnect', auth, requireAdmin, tenantMiddleware, controller.desconectarOAuth);
+router.delete('/oauth/disconnect', verificarToken, requireAdmin, setTenantFromAuth, controller.desconectarOAuth);
 
 // GET /api/mercadopago/status - Estado de conexión
-router.get('/status', auth, requireAdmin, tenantMiddleware, controller.obtenerEstado);
+router.get('/status', verificarToken, requireAdmin, setTenantFromAuth, controller.obtenerEstado);
 
 // POST /api/mercadopago/config/manual - Configuración manual con Access Token
-router.post('/config/manual', auth, requireAdmin, tenantMiddleware, controller.configurarManual);
+router.post('/config/manual', verificarToken, requireAdmin, setTenantFromAuth, controller.configurarManual);
 
 // GET /api/mercadopago/transacciones - Historial de transacciones
-router.get('/transacciones', auth, requireAdmin, tenantMiddleware, controller.listarTransacciones);
+router.get('/transacciones', verificarToken, requireAdmin, setTenantFromAuth, controller.listarTransacciones);
 
 module.exports = router;
