@@ -241,6 +241,7 @@ model Fichaje {
 
   @@index([tenantId])
   @@index([tenantId, empleadoId, fecha])
+  @@index([empleadoId])
   @@map("fichajes")
 }
 
@@ -267,6 +268,7 @@ model Liquidacion {
   empleado Empleado @relation(fields: [empleadoId], references: [id])
 
   @@index([tenantId])
+  @@index([empleadoId])
   @@map("liquidaciones")
 }
 
@@ -317,6 +319,7 @@ model Reserva {
   @@index([tenantId])
   @@index([tenantId, fechaHora])
   @@index([tenantId, mesaId, fechaHora])
+  @@index([mesaId])
   @@map("reservas")
 }
 
@@ -358,6 +361,13 @@ model Producto {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // Campos para variantes (Simple, Doble, Triple, etc.)
+  productoBaseId           Int?
+  nombreVariante           String?    // "Simple", "Doble", "Triple"
+  multiplicadorInsumos     Decimal    @default(1.0) @db.Decimal(3, 1)
+  ordenVariante            Int        @default(0)
+  esVariantePredeterminada Boolean    @default(false)
+
   // Relaciones
   tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   categoria    Categoria           @relation(fields: [categoriaId], references: [id])
@@ -365,8 +375,14 @@ model Producto {
   pedidoItems  PedidoItem[]
   modificadores ProductoModificador[]
 
+  // Self-reference para variantes
+  productoBase Producto?  @relation("ProductoVariantes", fields: [productoBaseId], references: [id], onDelete: SetNull)
+  variantes    Producto[] @relation("ProductoVariantes")
+
   @@index([tenantId])
   @@index([tenantId, categoriaId])
+  @@index([tenantId, productoBaseId])
+  @@index([categoriaId])
   @@map("productos")
 }
 
@@ -405,6 +421,8 @@ model ProductoModificador {
 
   @@unique([tenantId, productoId, modificadorId])
   @@index([tenantId])
+  @@index([productoId])
+  @@index([modificadorId])
   @@map("producto_modificadores")
 }
 
@@ -450,6 +468,8 @@ model ProductoIngrediente {
 
   @@unique([tenantId, productoId, ingredienteId])
   @@index([tenantId])
+  @@index([productoId])
+  @@index([ingredienteId])
   @@map("producto_ingredientes")
 }
 
@@ -471,6 +491,7 @@ model MovimientoStock {
 
   @@index([tenantId])
   @@index([tenantId, ingredienteId])
+  @@index([pedidoId])
   @@map("movimientos_stock")
 }
 
@@ -526,6 +547,8 @@ model Pedido {
   @@index([tenantId, estado])
   @@index([tenantId, tipo])
   @@index([tenantId, createdAt])
+  @@index([mesaId])
+  @@index([usuarioId])
   @@map("pedidos")
 }
 
@@ -549,6 +572,8 @@ model PedidoItem {
 
   @@index([tenantId])
   @@index([tenantId, pedidoId])
+  @@index([pedidoId])
+  @@index([productoId])
   @@map("pedido_items")
 }
 
@@ -566,6 +591,8 @@ model PedidoItemModificador {
   modificador Modificador @relation(fields: [modificadorId], references: [id])
 
   @@index([tenantId])
+  @@index([pedidoItemId])
+  @@index([modificadorId])
   @@map("pedido_item_modificadores")
 }
 
@@ -601,6 +628,8 @@ model Pago {
 
   @@index([tenantId])
   @@index([tenantId, pedidoId])
+  @@index([pedidoId])
+  @@index([mpPaymentId])
   @@map("pagos")
 }
 
@@ -667,6 +696,7 @@ model PrintJob {
   @@index([tenantId])
   @@index([tenantId, status, nextAttemptAt])
   @@index([tenantId, pedidoId, batchId])
+  @@index([pedidoId])
   @@unique([tenantId, pedidoId, tipo, batchId])
   @@map("print_jobs")
 }
@@ -744,5 +774,6 @@ model TransaccionMercadoPago {
   @@index([tenantId])
   @@index([tenantId, createdAt])
   @@index([tenantId, status])
+  @@index([pagoId])
   @@map("transacciones_mercadopago")
 }

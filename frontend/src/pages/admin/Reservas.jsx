@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
+import useAsync from '../../hooks/useAsync'
 import {
   CalendarDaysIcon,
   PlusIcon,
@@ -17,7 +18,6 @@ import {
 export default function Reservas() {
   const [reservas, setReservas] = useState([])
   const [mesas, setMesas] = useState([])
-  const [loading, setLoading] = useState(true)
   const [fechaFiltro, setFechaFiltro] = useState(new Date().toISOString().split('T')[0])
   const [showModal, setShowModal] = useState(false)
   const [reservaEdit, setReservaEdit] = useState(null)
@@ -30,34 +30,35 @@ export default function Reservas() {
     observaciones: ''
   })
 
-  useEffect(() => {
-    cargarMesas()
+  const cargarMesas = useCallback(async () => {
+    const response = await api.get('/mesas')
+    setMesas(response.data.filter(m => m.activa))
+    return response.data
   }, [])
 
-  useEffect(() => {
-    cargarReservas()
+  const handleLoadError = useCallback((error) => {
+    console.error('Error:', error)
+  }, [])
+
+  const cargarMesasRequest = useCallback(async (_ctx) => (
+    cargarMesas()
+  ), [cargarMesas])
+
+  const cargarReservas = useCallback(async () => {
+    const response = await api.get(`/reservas?fecha=${fechaFiltro}`)
+    setReservas(response.data)
+    return response.data
   }, [fechaFiltro])
 
-  const cargarMesas = async () => {
-    try {
-      const response = await api.get('/mesas')
-      setMesas(response.data.filter(m => m.activa))
-    } catch (error) {
-      console.error('Error:', error)
-    }
-  }
+  const cargarReservasRequest = useCallback(async (_ctx) => (
+    cargarReservas()
+  ), [cargarReservas])
 
-  const cargarReservas = async () => {
-    try {
-      setLoading(true)
-      const response = await api.get(`/reservas?fecha=${fechaFiltro}`)
-      setReservas(response.data)
-    } catch (error) {
-      console.error('Error:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  useAsync(cargarMesasRequest, { onError: handleLoadError })
+  const { loading, execute: cargarReservasAsync } = useAsync(
+    cargarReservasRequest,
+    { onError: handleLoadError }
+  )
 
   const abrirModal = (reserva = null) => {
     if (reserva) {
@@ -91,32 +92,34 @@ export default function Reservas() {
     e.preventDefault()
     try {
       if (reservaEdit) {
-        await api.put(`/reservas/${reservaEdit.id}`, formData)
+        await api.put(`/reservas/${reservaEdit.id}`, formData, { skipToast: true })
         toast.success('Reserva actualizada')
       } else {
         await api.post('/reservas', {
           ...formData,
           mesaId: parseInt(formData.mesaId)
-        })
+        }, { skipToast: true })
         toast.success('Reserva creada')
       }
       setShowModal(false)
-      cargarReservas()
+      cargarReservasAsync()
     } catch (error) {
+      console.error('Error:', error)
       toast.error(error.response?.data?.error?.message || 'Error al guardar')
     }
   }
 
   const cambiarEstado = async (id, estado) => {
     try {
-      await api.patch(`/reservas/${id}/estado`, { estado })
+      await api.patch(`/reservas/${id}/estado`, { estado }, { skipToast: true })
       toast.success(
         estado === 'CLIENTE_PRESENTE' ? 'Cliente presente' :
         estado === 'NO_LLEGO' ? 'Marcado como no llegó' :
         'Reserva cancelada'
       )
-      cargarReservas()
+      cargarReservasAsync()
     } catch (error) {
+      console.error('Error:', error)
       toast.error(error.response?.data?.error?.message || 'Error')
     }
   }
@@ -124,10 +127,11 @@ export default function Reservas() {
   const eliminarReserva = async (id) => {
     if (!confirm('¿Eliminar esta reserva?')) return
     try {
-      await api.delete(`/reservas/${id}`)
+      await api.delete(`/reservas/${id}`, { skipToast: true })
       toast.success('Reserva eliminada')
-      cargarReservas()
+      cargarReservasAsync()
     } catch (error) {
+      console.error('Error:', error)
       toast.error(error.response?.data?.error?.message || 'Error')
     }
   }
@@ -176,7 +180,9 @@ export default function Reservas() {
       <div className="card mb-6">
         <div className="flex items-center gap-4">
           <CalendarDaysIcon className="w-5 h-5 text-gray-400" />
+          <label htmlFor="reservas-fecha" className="sr-only">Fecha</label>
           <input
+            id="reservas-fecha"
             type="date"
             value={fechaFiltro}
             onChange={(e) => setFechaFiltro(e.target.value)}
@@ -266,6 +272,7 @@ export default function Reservas() {
                     onClick={() => abrirModal(reserva)}
                     className="btn btn-secondary text-sm py-2 px-2"
                     title="Editar"
+                    aria-label={`Editar reserva: ${reserva.clienteNombre}`}
                   >
                     <PencilIcon className="w-4 h-4" />
                   </button>
@@ -273,6 +280,7 @@ export default function Reservas() {
                     onClick={() => cambiarEstado(reserva.id, 'CANCELADA')}
                     className="btn btn-secondary text-sm py-2 px-2 text-red-600 hover:bg-red-50"
                     title="Cancelar"
+                    aria-label={`Cancelar reserva: ${reserva.clienteNombre}`}
                   >
                     <TrashIcon className="w-4 h-4" />
                   </button>
@@ -291,16 +299,17 @@ export default function Reservas() {
               {reservaEdit ? 'Editar Reserva' : 'Nueva Reserva'}
             </h3>
 
-            <form onSubmit={guardarReserva} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Mesa
-                </label>
-                <select
-                  value={formData.mesaId}
-                  onChange={(e) => setFormData({ ...formData, mesaId: e.target.value })}
-                  className="input"
-                  required
+	            <form onSubmit={guardarReserva} className="space-y-4">
+	              <div>
+	                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="reserva-mesa">
+	                  Mesa
+	                </label>
+	                <select
+	                  id="reserva-mesa"
+	                  value={formData.mesaId}
+	                  onChange={(e) => setFormData({ ...formData, mesaId: e.target.value })}
+	                  className="input"
+	                  required
                   disabled={!!reservaEdit}
                 >
                   <option value="">Seleccionar mesa...</option>
@@ -312,68 +321,73 @@ export default function Reservas() {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Fecha y Hora
-                </label>
-                <input
-                  type="datetime-local"
-                  value={formData.fechaHora}
-                  onChange={(e) => setFormData({ ...formData, fechaHora: e.target.value })}
-                  className="input"
+	              <div>
+	                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="reserva-fecha-hora">
+	                  Fecha y Hora
+	                </label>
+	                <input
+	                  id="reserva-fecha-hora"
+	                  type="datetime-local"
+	                  value={formData.fechaHora}
+	                  onChange={(e) => setFormData({ ...formData, fechaHora: e.target.value })}
+	                  className="input"
                   required
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nombre del cliente
-                </label>
-                <input
-                  type="text"
-                  value={formData.clienteNombre}
-                  onChange={(e) => setFormData({ ...formData, clienteNombre: e.target.value })}
-                  className="input"
+	              <div>
+	                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="reserva-cliente-nombre">
+	                  Nombre del cliente
+	                </label>
+	                <input
+	                  id="reserva-cliente-nombre"
+	                  type="text"
+	                  value={formData.clienteNombre}
+	                  onChange={(e) => setFormData({ ...formData, clienteNombre: e.target.value })}
+	                  className="input"
                   required
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Teléfono (opcional)
-                </label>
-                <input
-                  type="tel"
-                  value={formData.clienteTelefono}
-                  onChange={(e) => setFormData({ ...formData, clienteTelefono: e.target.value })}
-                  className="input"
-                />
-              </div>
+	              <div>
+	                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="reserva-cliente-telefono">
+	                  Teléfono (opcional)
+	                </label>
+	                <input
+	                  id="reserva-cliente-telefono"
+	                  type="tel"
+	                  value={formData.clienteTelefono}
+	                  onChange={(e) => setFormData({ ...formData, clienteTelefono: e.target.value })}
+	                  className="input"
+	                />
+	              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Cantidad de personas
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="20"
-                  value={formData.cantidadPersonas}
+	              <div>
+	                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="reserva-cantidad-personas">
+	                  Cantidad de personas
+	                </label>
+	                <input
+	                  id="reserva-cantidad-personas"
+	                  type="number"
+	                  min="1"
+	                  max="20"
+	                  value={formData.cantidadPersonas}
                   onChange={(e) => setFormData({ ...formData, cantidadPersonas: parseInt(e.target.value) })}
                   className="input"
                   required
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Observaciones (opcional)
-                </label>
-                <textarea
-                  value={formData.observaciones}
-                  onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
-                  className="input"
-                  rows="2"
+	              <div>
+	                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="reserva-observaciones">
+	                  Observaciones (opcional)
+	                </label>
+	                <textarea
+	                  id="reserva-observaciones"
+	                  value={formData.observaciones}
+	                  onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
+	                  className="input"
+	                  rows="2"
                 />
               </div>
 

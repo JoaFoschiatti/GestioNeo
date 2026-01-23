@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -28,13 +28,15 @@ const superadminRoutes = require('./routes/superadmin.routes');
 const mercadopagoRoutes = require('./routes/mercadopago.routes');
 const tenantRoutes = require('./routes/tenant.routes');
 
-// Jobs
-const { iniciarJobReservas } = require('./jobs/reservas.job');
+const { errorMiddleware } = require('./middlewares/error.middleware');
+const { createHttpError } = require('./utils/http-error');
 
 const app = express();
 
 // Middlewares de seguridad
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
 
 // CORS
 app.use(cors({
@@ -78,30 +80,10 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Manejo de errores global
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(err.status || 500).json({
-    error: {
-      message: err.message || 'Error interno del servidor',
-      ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-    }
-  });
-});
-
 // Ruta 404
-app.use((req, res) => {
-  res.status(404).json({ error: { message: 'Ruta no encontrada' } });
-});
+app.use((_req, _res, next) => next(createHttpError.notFound('Ruta no encontrada')));
 
-const PORT = process.env.PORT || 3001;
-
-app.listen(PORT, () => {
-  console.log(`🚀 GestioNeo API corriendo en http://localhost:${PORT}`);
-  console.log(`📊 Ambiente: ${process.env.NODE_ENV || 'development'}`);
-
-  // Iniciar jobs en background
-  iniciarJobReservas();
-});
+// Manejo de errores global
+app.use(errorMiddleware);
 
 module.exports = app;

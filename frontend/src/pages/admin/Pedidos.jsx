@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { useAuth } from '../../context/AuthContext'
 import { EyeIcon, PrinterIcon, CurrencyDollarIcon, PlusIcon } from '@heroicons/react/24/outline'
-import { createEventSource } from '../../services/eventos'
+import useEventSource from '../../hooks/useEventSource'
 import NuevoPedidoModal from '../../components/pedidos/NuevoPedidoModal'
+import useAsync from '../../hooks/useAsync'
 
 const estadoColors = {
   PENDIENTE: 'bg-yellow-100 text-yellow-700',
@@ -21,7 +22,6 @@ export default function Pedidos() {
   const puedeCrearPedido = ['ADMIN', 'CAJERO'].includes(usuario?.rol)
 
   const [pedidos, setPedidos] = useState([])
-  const [loading, setLoading] = useState(true)
   const [filtroEstado, setFiltroEstado] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [pedidoSeleccionado, setPedidoSeleccionado] = useState(null)
@@ -29,53 +29,55 @@ export default function Pedidos() {
   const [pagoForm, setPagoForm] = useState({ monto: '', metodo: 'EFECTIVO', referencia: '' })
   const [showNuevoPedidoModal, setShowNuevoPedidoModal] = useState(false)
 
-  // Cargar pedidos cuando cambia el filtro
-  useEffect(() => {
-    cargarPedidos()
+  const cargarPedidos = useCallback(async () => {
+    const params = filtroEstado ? `?estado=${filtroEstado}` : ''
+    const response = await api.get(`/pedidos${params}`)
+    setPedidos(response.data)
+    return response.data
   }, [filtroEstado])
 
-  // Suscripción SSE - solo una vez al montar el componente
+  const handleLoadError = useCallback((error) => {
+    console.error('Error:', error)
+  }, [])
+
+  const cargarPedidosRequest = useCallback(async (_ctx) => (
+    cargarPedidos()
+  ), [cargarPedidos])
+
+  const { loading, execute: cargarPedidosAsync } = useAsync(
+    cargarPedidosRequest,
+    { immediate: false, onError: handleLoadError }
+  )
+
+  // Cargar pedidos cuando cambia el filtro
   useEffect(() => {
-    const source = createEventSource()
+    cargarPedidosAsync()
+      .catch(() => {})
+  }, [cargarPedidosAsync])
 
-    if (source) {
-      const handleUpdate = (e) => {
-        console.log('[SSE] Evento recibido:', e.type)
-        cargarPedidos()
-      }
+  const handleSseUpdate = useCallback((event) => {
+    console.log('[SSE] Evento recibido:', event.type)
+    cargarPedidosAsync()
+      .catch(() => {})
+  }, [cargarPedidosAsync])
 
-      source.addEventListener('pedido.updated', handleUpdate)
-      source.addEventListener('pago.updated', handleUpdate)
-      source.addEventListener('impresion.updated', handleUpdate)
+  const handleSseError = useCallback((err) => {
+    console.error('[SSE] Error en conexión:', err)
+  }, [])
 
-      source.onerror = (err) => {
-        console.error('[SSE] Error en conexión:', err)
-      }
+  const handleSseOpen = useCallback(() => {
+    console.log('[SSE] Conexión establecida')
+  }, [])
 
-      source.onopen = () => {
-        console.log('[SSE] Conexión establecida')
-      }
-    }
-
-    return () => {
-      if (source) {
-        console.log('[SSE] Cerrando conexión')
-        source.close()
-      }
-    }
-  }, []) // Sin dependencias - solo se ejecuta una vez
-
-  const cargarPedidos = async () => {
-    try {
-      const params = filtroEstado ? `?estado=${filtroEstado}` : ''
-      const response = await api.get(`/pedidos${params}`)
-      setPedidos(response.data)
-    } catch (error) {
-      console.error('Error:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  useEventSource({
+    events: {
+      'pedido.updated': handleSseUpdate,
+      'pago.updated': handleSseUpdate,
+      'impresion.updated': handleSseUpdate
+    },
+    onError: handleSseError,
+    onOpen: handleSseOpen
+  })
 
   const verDetalle = async (id) => {
     try {
@@ -91,7 +93,8 @@ export default function Pedidos() {
     try {
       await api.patch(`/pedidos/${id}/estado`, { estado: nuevoEstado })
       toast.success(`Estado cambiado a ${nuevoEstado}`)
-      cargarPedidos()
+      cargarPedidosAsync()
+        .catch(() => {})
       if (pedidoSeleccionado?.id === id) {
         verDetalle(id)
       }
@@ -119,7 +122,8 @@ export default function Pedidos() {
       })
       toast.success('Pago registrado')
       setShowPagoModal(false)
-      cargarPedidos()
+      cargarPedidosAsync()
+        .catch(() => {})
     } catch (error) {
       console.error('Error:', error)
     }
@@ -127,10 +131,14 @@ export default function Pedidos() {
 
   const imprimirComanda = async (id) => {
     try {
-      await api.post(`/impresion/comanda/${id}/reimprimir`)
+      await api.post(`/impresion/comanda/${id}/reimprimir`, {})
       toast.success('Reimpresion encolada')
       const preview = await api.get(`/impresion/comanda/${id}/preview?tipo=CAJA`)
       const win = window.open('', '_blank')
+      if (!win) {
+        toast.error('No se pudo abrir la vista previa')
+        return
+      }
       win.document.write(`<pre style="font-family: monospace; font-size: 14px;">${preview.data}</pre>`)
     } catch (error) {
       console.error('Error:', error)
@@ -161,7 +169,7 @@ export default function Pedidos() {
     )
   }
 
-  if (loading) {
+  if (loading && pedidos.length === 0) {
     return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div></div>
   }
 
@@ -170,7 +178,9 @@ export default function Pedidos() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Pedidos</h1>
         <div className="flex items-center gap-4">
+          <label className="sr-only" htmlFor="pedidos-filtro-estado">Filtrar por estado</label>
           <select
+            id="pedidos-filtro-estado"
             className="input w-48"
             value={filtroEstado}
             onChange={(e) => setFiltroEstado(e.target.value)}
@@ -246,14 +256,29 @@ export default function Pedidos() {
                   {new Date(pedido.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right space-x-2">
-                  <button onClick={() => verDetalle(pedido.id)} className="text-primary-600 hover:text-primary-800">
+                  <button
+                    onClick={() => verDetalle(pedido.id)}
+                    type="button"
+                    aria-label={`Ver detalle del pedido #${pedido.id}`}
+                    className="text-primary-600 hover:text-primary-800"
+                  >
                     <EyeIcon className="w-5 h-5" />
                   </button>
-                  <button onClick={() => imprimirComanda(pedido.id)} className="text-gray-600 hover:text-gray-800">
+                  <button
+                    onClick={() => imprimirComanda(pedido.id)}
+                    type="button"
+                    aria-label={`Reimprimir comanda del pedido #${pedido.id}`}
+                    className="text-gray-600 hover:text-gray-800"
+                  >
                     <PrinterIcon className="w-5 h-5" />
                   </button>
                   {pedido.estado !== 'COBRADO' && pedido.estado !== 'CANCELADO' && !esSoloMozo && (
-                    <button onClick={() => abrirPago(pedido)} className="text-green-600 hover:text-green-800">
+                    <button
+                      onClick={() => abrirPago(pedido)}
+                      type="button"
+                      aria-label={`Registrar pago del pedido #${pedido.id}`}
+                      className="text-green-600 hover:text-green-800"
+                    >
                       <CurrencyDollarIcon className="w-5 h-5" />
                     </button>
                   )}
@@ -353,8 +378,9 @@ export default function Pedidos() {
             <h2 className="text-xl font-bold mb-4">Registrar Pago</h2>
             <form onSubmit={registrarPago} className="space-y-4">
               <div>
-                <label className="label">Monto ($)</label>
+                <label className="label" htmlFor="pago-monto">Monto ($)</label>
                 <input
+                  id="pago-monto"
                   type="number"
                   step="0.01"
                   className="input"
@@ -364,8 +390,9 @@ export default function Pedidos() {
                 />
               </div>
               <div>
-                <label className="label">Metodo de Pago</label>
+                <label className="label" htmlFor="pago-metodo">Metodo de Pago</label>
                 <select
+                  id="pago-metodo"
                   className="input"
                   value={pagoForm.metodo}
                   onChange={(e) => setPagoForm({ ...pagoForm, metodo: e.target.value })}
@@ -377,8 +404,9 @@ export default function Pedidos() {
               </div>
               {pagoForm.metodo !== 'EFECTIVO' && (
                 <div>
-                  <label className="label">Referencia</label>
+                  <label className="label" htmlFor="pago-referencia">Referencia</label>
                   <input
+                    id="pago-referencia"
                     type="text"
                     className="input"
                     value={pagoForm.referencia}

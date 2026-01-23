@@ -1,7 +1,5 @@
-const { PrismaClient } = require('@prisma/client');
 const crypto = require('crypto');
-
-const prisma = new PrismaClient();
+const { createHttpError } = require('../utils/http-error');
 
 const DEFAULT_WIDTH_MM = parseInt(process.env.PRINT_WIDTH_MM || '80', 10);
 const DEFAULT_MAX_RETRIES = parseInt(process.env.PRINT_MAX_RETRIES || '3', 10);
@@ -190,7 +188,7 @@ const generateBatchId = () => {
   return crypto.randomBytes(16).toString('hex');
 };
 
-const enqueuePrintJobs = async (pedidoId, options = {}) => {
+const enqueuePrintJobs = async (prisma, pedidoId, options = {}) => {
   const anchoMm = parseInt(options.anchoMm || DEFAULT_WIDTH_MM, 10);
   const maxIntentos = parseInt(options.maxIntentos || DEFAULT_MAX_RETRIES, 10);
   const batchId = options.batchId || generateBatchId();
@@ -205,7 +203,7 @@ const enqueuePrintJobs = async (pedidoId, options = {}) => {
   });
 
   if (!pedido) {
-    throw new Error('Pedido no encontrado');
+    throw createHttpError.notFound('Pedido no encontrado');
   }
 
   const comandas = {
@@ -267,7 +265,7 @@ const getLatestPrintSummary = (printJobs = []) => {
   return { batchId: latestBatchId, total, ok, error, pending, status, lastError };
 };
 
-const refreshPedidoImpresion = async (pedidoId, batchId) => {
+const refreshPedidoImpresion = async (prisma, pedidoId, batchId) => {
   const jobs = await prisma.printJob.findMany({
     where: { pedidoId: parseInt(pedidoId), batchId }
   });

@@ -2,14 +2,25 @@ const express = require('express');
 const router = express.Router();
 const mesasController = require('../controllers/mesas.controller');
 const { verificarToken, esAdmin, esMozo } = require('../middlewares/auth.middleware');
+const { setTenantFromAuth } = require('../middlewares/tenant.middleware');
+const { validate } = require('../middlewares/validate.middleware');
+const { asyncHandler } = require('../utils/async-handler');
+const {
+  idParamSchema,
+  listarQuerySchema,
+  crearMesaBodySchema,
+  actualizarMesaBodySchema,
+  cambiarEstadoBodySchema
+} = require('../schemas/mesas.schemas');
 
 router.use(verificarToken);
+router.use(setTenantFromAuth);
 
-router.get('/', mesasController.listar);
-router.get('/:id', mesasController.obtener);
-router.post('/', esAdmin, mesasController.crear);
-router.put('/:id', esAdmin, mesasController.actualizar);
-router.patch('/:id/estado', esMozo, mesasController.cambiarEstado);
-router.delete('/:id', esAdmin, mesasController.eliminar);
+router.get('/', validate({ query: listarQuerySchema }), asyncHandler(mesasController.listar));
+router.get('/:id', validate({ params: idParamSchema }), asyncHandler(mesasController.obtener));
+router.post('/', esAdmin, validate({ body: crearMesaBodySchema }), asyncHandler(mesasController.crear));
+router.put('/:id', esAdmin, validate({ params: idParamSchema, body: actualizarMesaBodySchema }), asyncHandler(mesasController.actualizar));
+router.patch('/:id/estado', esMozo, validate({ params: idParamSchema, body: cambiarEstadoBodySchema }), asyncHandler(mesasController.cambiarEstado));
+router.delete('/:id', esAdmin, validate({ params: idParamSchema }), asyncHandler(mesasController.eliminar));
 
 module.exports = router;

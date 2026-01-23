@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import {
@@ -8,53 +8,71 @@ import {
   TrashIcon,
   ShoppingCartIcon
 } from '@heroicons/react/24/outline'
+import usePedidoConModificadores from '../../hooks/usePedidoConModificadores'
+import useAsync from '../../hooks/useAsync'
 
 export default function NuevoPedidoModal({ isOpen, onClose, onSuccess }) {
-  const [loading, setLoading] = useState(true)
   const [categorias, setCategorias] = useState([])
   const [mesas, setMesas] = useState([])
   const [categoriaActiva, setCategoriaActiva] = useState(null)
-  const [carrito, setCarrito] = useState([])
   const [tipo, setTipo] = useState('MOSTRADOR')
   const [mesaId, setMesaId] = useState('')
   const [clienteNombre, setClienteNombre] = useState('')
   const [observaciones, setObservaciones] = useState('')
   const [enviando, setEnviando] = useState(false)
+  const {
+    carrito,
+    showModModal,
+    productoSeleccionado,
+    modificadoresProducto,
+    modificadoresSeleccionados,
+    handleClickProducto,
+    toggleModificador,
+    confirmarProductoConModificadores,
+    agregarAlCarrito,
+    actualizarCantidad,
+    eliminarDelCarrito,
+    resetCarrito,
+    closeModModal
+  } = usePedidoConModificadores({
+    onItemAdded: (producto) => toast.success(`${producto.nombre} agregado`)
+  })
 
-  // Modal de modificadores
-  const [showModModal, setShowModModal] = useState(false)
-  const [productoSeleccionado, setProductoSeleccionado] = useState(null)
-  const [modificadoresProducto, setModificadoresProducto] = useState([])
-  const [modificadoresSeleccionados, setModificadoresSeleccionados] = useState([])
+  const cargarDatos = useCallback(async () => {
+    const [catRes, mesasRes] = await Promise.all([
+      api.get('/categorias/publicas', { skipToast: true }),
+      api.get('/mesas', { skipToast: true })
+    ])
+    setCategorias(catRes.data)
+    setMesas(mesasRes.data.filter(m => m.estado === 'LIBRE'))
+    if (catRes.data.length > 0) {
+      setCategoriaActiva(catRes.data[0].id)
+    }
+    return { categorias: catRes.data }
+  }, [])
+
+  const handleLoadError = useCallback((error) => {
+    console.error('Error:', error)
+    toast.error('Error al cargar datos')
+  }, [])
+
+  const cargarDatosRequest = useCallback(async (_ctx) => (
+    cargarDatos()
+  ), [cargarDatos])
+
+  const { loading, execute: cargarDatosAsync } = useAsync(
+    cargarDatosRequest,
+    { immediate: false, onError: handleLoadError }
+  )
 
   useEffect(() => {
     if (isOpen) {
-      cargarDatos()
+      cargarDatosAsync().catch(() => {})
     }
-  }, [isOpen])
-
-  const cargarDatos = async () => {
-    setLoading(true)
-    try {
-      const [catRes, mesasRes] = await Promise.all([
-        api.get('/categorias/publicas'),
-        api.get('/mesas')
-      ])
-      setCategorias(catRes.data)
-      setMesas(mesasRes.data.filter(m => m.estado === 'LIBRE'))
-      if (catRes.data.length > 0) {
-        setCategoriaActiva(catRes.data[0].id)
-      }
-    } catch (error) {
-      console.error('Error:', error)
-      toast.error('Error al cargar datos')
-    } finally {
-      setLoading(false)
-    }
-  }
+  }, [isOpen, cargarDatosAsync])
 
   const resetForm = () => {
-    setCarrito([])
+    resetCarrito()
     setTipo('MOSTRADOR')
     setMesaId('')
     setClienteNombre('')
@@ -64,86 +82,6 @@ export default function NuevoPedidoModal({ isOpen, onClose, onSuccess }) {
   const handleClose = () => {
     resetForm()
     onClose()
-  }
-
-  const handleClickProducto = async (producto) => {
-    try {
-      const response = await api.get(`/modificadores/producto/${producto.id}`)
-      const mods = response.data.filter(m => m.activo)
-
-      if (mods.length > 0) {
-        setProductoSeleccionado(producto)
-        setModificadoresProducto(mods)
-        setModificadoresSeleccionados([])
-        setShowModModal(true)
-      } else {
-        agregarAlCarrito(producto, [])
-      }
-    } catch (error) {
-      agregarAlCarrito(producto, [])
-    }
-  }
-
-  const toggleModificador = (mod) => {
-    setModificadoresSeleccionados(prev => {
-      const existe = prev.find(m => m.id === mod.id)
-      if (existe) {
-        return prev.filter(m => m.id !== mod.id)
-      }
-      return [...prev, mod]
-    })
-  }
-
-  const confirmarProductoConModificadores = () => {
-    if (productoSeleccionado) {
-      agregarAlCarrito(productoSeleccionado, modificadoresSeleccionados)
-      setShowModModal(false)
-      setProductoSeleccionado(null)
-      setModificadoresProducto([])
-      setModificadoresSeleccionados([])
-    }
-  }
-
-  const agregarAlCarrito = (producto, modificadores = []) => {
-    const precioMods = modificadores.reduce((sum, m) => sum + parseFloat(m.precio), 0)
-    const precioTotal = parseFloat(producto.precio) + precioMods
-    const itemId = `${producto.id}-${Date.now()}`
-
-    setCarrito(prev => [
-      ...prev,
-      {
-        itemId,
-        productoId: producto.id,
-        nombre: producto.nombre,
-        precioBase: producto.precio,
-        precio: precioTotal,
-        cantidad: 1,
-        observaciones: '',
-        modificadores: modificadores.map(m => ({
-          id: m.id,
-          nombre: m.nombre,
-          tipo: m.tipo,
-          precio: m.precio
-        }))
-      }
-    ])
-    toast.success(`${producto.nombre} agregado`)
-  }
-
-  const actualizarCantidad = (itemId, delta) => {
-    setCarrito(prev =>
-      prev.map(item => {
-        if (item.itemId === itemId) {
-          const nuevaCantidad = item.cantidad + delta
-          return nuevaCantidad > 0 ? { ...item, cantidad: nuevaCantidad } : item
-        }
-        return item
-      }).filter(item => item.cantidad > 0)
-    )
-  }
-
-  const eliminarDelCarrito = (itemId) => {
-    setCarrito(prev => prev.filter(item => item.itemId !== itemId))
   }
 
   const calcularTotal = () => {
@@ -169,14 +107,14 @@ export default function NuevoPedidoModal({ isOpen, onClose, onSuccess }) {
         items: carrito.map(item => ({
           productoId: item.productoId,
           cantidad: item.cantidad,
-          observaciones: item.observaciones || null,
+          observaciones: item.observaciones || undefined,
           modificadores: item.modificadores.map(m => m.id)
         })),
-        observaciones: observaciones || null,
-        clienteNombre: clienteNombre || null
+        observaciones: observaciones || undefined,
+        clienteNombre: clienteNombre || undefined
       }
 
-      const response = await api.post('/pedidos', pedidoData)
+      const response = await api.post('/pedidos', pedidoData, { skipToast: true })
       toast.success(`Pedido #${response.data.id} creado!`)
       resetForm()
       onSuccess()
@@ -198,7 +136,12 @@ export default function NuevoPedidoModal({ isOpen, onClose, onSuccess }) {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
           <h2 className="text-xl font-bold text-gray-900">Nuevo Pedido Manual</h2>
-          <button onClick={handleClose} className="text-gray-400 hover:text-gray-600">
+          <button
+            onClick={handleClose}
+            type="button"
+            aria-label="Cerrar modal de pedido"
+            className="text-gray-400 hover:text-gray-600"
+          >
             <XMarkIcon className="w-6 h-6" />
           </button>
         </div>
@@ -214,8 +157,9 @@ export default function NuevoPedidoModal({ isOpen, onClose, onSuccess }) {
               {/* Tipo y Mesa */}
               <div className="flex gap-4 mb-4">
                 <div className="flex-1">
-                  <label className="label">Tipo de Pedido</label>
+                  <label className="label" htmlFor="pedido-tipo">Tipo de Pedido</label>
                   <select
+                    id="pedido-tipo"
                     className="input"
                     value={tipo}
                     onChange={(e) => {
@@ -229,8 +173,9 @@ export default function NuevoPedidoModal({ isOpen, onClose, onSuccess }) {
                 </div>
                 {tipo === 'MESA' && (
                   <div className="flex-1">
-                    <label className="label">Mesa</label>
+                    <label className="label" htmlFor="pedido-mesa">Mesa</label>
                     <select
+                      id="pedido-mesa"
                       className="input"
                       value={mesaId}
                       onChange={(e) => setMesaId(e.target.value)}
@@ -245,8 +190,9 @@ export default function NuevoPedidoModal({ isOpen, onClose, onSuccess }) {
                   </div>
                 )}
                 <div className="flex-1">
-                  <label className="label">Cliente (opcional)</label>
+                  <label className="label" htmlFor="pedido-cliente">Cliente (opcional)</label>
                   <input
+                    id="pedido-cliente"
                     type="text"
                     className="input"
                     placeholder="Nombre del cliente"
@@ -346,6 +292,8 @@ export default function NuevoPedidoModal({ isOpen, onClose, onSuccess }) {
                         </div>
                         <button
                           onClick={() => eliminarDelCarrito(item.itemId)}
+                          type="button"
+                          aria-label={`Eliminar ${item.nombre} del carrito`}
                           className="text-red-400 hover:text-red-600 ml-2"
                         >
                           <TrashIcon className="w-4 h-4" />
@@ -355,6 +303,8 @@ export default function NuevoPedidoModal({ isOpen, onClose, onSuccess }) {
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => actualizarCantidad(item.itemId, -1)}
+                            type="button"
+                            aria-label={`Reducir cantidad de ${item.nombre}`}
                             className="p-1 bg-gray-100 rounded hover:bg-gray-200"
                           >
                             <MinusIcon className="w-3 h-3" />
@@ -362,6 +312,8 @@ export default function NuevoPedidoModal({ isOpen, onClose, onSuccess }) {
                           <span className="w-6 text-center text-sm font-medium">{item.cantidad}</span>
                           <button
                             onClick={() => actualizarCantidad(item.itemId, 1)}
+                            type="button"
+                            aria-label={`Aumentar cantidad de ${item.nombre}`}
                             className="p-1 bg-gray-100 rounded hover:bg-gray-200"
                           >
                             <PlusIcon className="w-3 h-3" />
@@ -378,7 +330,9 @@ export default function NuevoPedidoModal({ isOpen, onClose, onSuccess }) {
 
               {/* Observaciones y Total */}
               <div className="p-4 border-t bg-white space-y-3">
+                <label htmlFor="pedido-observaciones" className="sr-only">Observaciones</label>
                 <textarea
+                  id="pedido-observaciones"
                   className="input text-sm"
                   placeholder="Observaciones (opcional)"
                   rows="2"
@@ -415,7 +369,9 @@ export default function NuevoPedidoModal({ isOpen, onClose, onSuccess }) {
                   </p>
                 </div>
                 <button
-                  onClick={() => setShowModModal(false)}
+                  onClick={closeModModal}
+                  type="button"
+                  aria-label="Cerrar modificadores"
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <XMarkIcon className="w-6 h-6" />
@@ -458,7 +414,7 @@ export default function NuevoPedidoModal({ isOpen, onClose, onSuccess }) {
                 <button
                   onClick={() => {
                     agregarAlCarrito(productoSeleccionado, [])
-                    setShowModModal(false)
+                    closeModModal()
                   }}
                   className="btn btn-secondary flex-1"
                 >

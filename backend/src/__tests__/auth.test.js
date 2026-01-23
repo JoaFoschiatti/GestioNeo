@@ -1,5 +1,10 @@
 const request = require('supertest');
 const app = require('../app');
+const { prisma } = require('../db/prisma');
+
+afterAll(async () => {
+  await prisma.$disconnect();
+});
 
 describe('Auth Endpoints', () => {
   describe('POST /api/auth/login', () => {
@@ -20,9 +25,9 @@ describe('Auth Endpoints', () => {
         .post('/api/auth/login')
         .send({});
 
-      // Retorna 500 porque Prisma requiere email
-      expect([400, 401, 500]).toContain(response.status);
-      expect(response.body.error).toBeDefined();
+      expect(response.status).toBe(400);
+      expect(response.body.error.message).toBe('Datos inválidos');
+      expect(response.body.error.details).toBeDefined();
     });
 
     it('should include rate limit headers', async () => {

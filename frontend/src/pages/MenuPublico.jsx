@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useParams, useNavigate } from 'react-router-dom'
+import useAsync from '../hooks/useAsync'
 import {
   ShoppingCartIcon,
   PlusIcon,
@@ -43,20 +44,38 @@ const getCategoryEmoji = (nombre) => {
   return categoryIcons.default
 }
 
+const fetchJson = async (url, options = {}, fallbackMessage = 'Error inesperado') => {
+  const res = await fetch(url, options)
+  let data = null
+  try {
+    data = await res.json()
+  } catch (err) {
+    data = null
+  }
+
+  if (!res.ok) {
+    const message = data?.error?.message || data?.message || fallbackMessage
+    throw new Error(message)
+  }
+
+  return data
+}
+
 export default function MenuPublico() {
   const { slug } = useParams()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [config, setConfig] = useState(null)
   const [categorias, setCategorias] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(null)
   const [categoriaActiva, setCategoriaActiva] = useState('all')
   const [carrito, setCarrito] = useState([])
   const [showCarrito, setShowCarrito] = useState(false)
   const [showCheckout, setShowCheckout] = useState(false)
   const [enviandoPedido, setEnviandoPedido] = useState(false)
   const [pedidoExitoso, setPedidoExitoso] = useState(null)
-  const [error, setError] = useState(null)
+  const [pageError, setPageError] = useState(null)
+  const [checkoutError, setCheckoutError] = useState(null)
 
   // Estado para pedido pendiente de pago en nueva pestaña (desktop)
   const [pedidoPendienteMP, setPedidoPendienteMP] = useState(null)
@@ -67,6 +86,9 @@ export default function MenuPublico() {
 
   // Delivery vs Retiro
   const [tipoEntrega, setTipoEntrega] = useState('DELIVERY')
+
+  // Variantes seleccionadas por producto
+  const [variantesSeleccionadas, setVariantesSeleccionadas] = useState({})
 
   // Cliente data
   const [clienteData, setClienteData] = useState({
@@ -81,9 +103,58 @@ export default function MenuPublico() {
   const [metodoPago, setMetodoPago] = useState('EFECTIVO')
   const [montoAbonado, setMontoAbonado] = useState('')
 
-  useEffect(() => {
-    cargarConfigYMenu()
+  const cargarConfigYMenu = useCallback(async () => {
+    setLoadError(null)
+    const tenantSlug = slug || 'default'
+    const [configData, menuData] = await Promise.all([
+      fetchJson(
+        `${API_URL}/publico/${tenantSlug}/config`,
+        {},
+        'Error al cargar la configuracion'
+      ),
+      fetchJson(
+        `${API_URL}/publico/${tenantSlug}/menu`,
+        {},
+        'Error al cargar el menu'
+      )
+    ])
+    // Flatten tenant and config into a single object for easier access
+    const flatConfig = { ...configData.tenant, ...configData.config }
+    setConfig(flatConfig)
+    setCategorias(menuData)
+
+    // Set default tipo entrega based on config
+    if (!flatConfig.delivery_habilitado) {
+      setTipoEntrega('RETIRO')
+    }
+    // Set default metodo pago based on config
+    if (flatConfig.mercadopago_enabled && !flatConfig.efectivo_enabled) {
+      setMetodoPago('MERCADOPAGO')
+    } else if (!flatConfig.mercadopago_enabled && flatConfig.efectivo_enabled) {
+      setMetodoPago('EFECTIVO')
+    }
+    return { config: flatConfig, categorias: menuData }
   }, [slug])
+
+  const handleLoadError = useCallback((err) => {
+    console.error('Error cargando datos:', err)
+    setLoadError(err.message || 'Error al cargar el menu')
+  }, [])
+
+  const cargarConfigYMenuRequest = useCallback(async (_ctx) => (
+    cargarConfigYMenu()
+  ), [cargarConfigYMenu])
+
+  const { loading, execute: cargarConfigYMenuAsync } = useAsync(
+    cargarConfigYMenuRequest,
+    { onError: handleLoadError }
+  )
+
+  useEffect(() => {
+    if (showCheckout) {
+      setCheckoutError(null)
+    }
+  }, [showCheckout])
 
   // Recuperar estado de pedido pendiente de MP al cargar
   useEffect(() => {
@@ -109,9 +180,11 @@ export default function MenuPublico() {
     const pedidoId = searchParams.get('pedido')
 
     if (!pagoResult || !pedidoId) return
+    let cancelled = false
+    let intervalId = null
 
     if (pagoResult === 'error') {
-      setError('El pago no pudo ser procesado. Intenta nuevamente.')
+      setPageError('El pago no pudo ser procesado. Intenta nuevamente.')
       return
     }
 
@@ -125,9 +198,13 @@ export default function MenuPublico() {
 
       const verificarPago = async () => {
         try {
-          const res = await fetch(`${API_URL}/publico/${tenantSlug}/pedido/${pedidoId}`)
-          const pedido = await res.json()
+          const pedido = await fetchJson(
+            `${API_URL}/publico/${tenantSlug}/pedido/${pedidoId}`,
+            {},
+            'Error al verificar el pago'
+          )
 
+          if (cancelled) return false
           if (pedido.estadoPago === 'APROBADO') {
             setVerificandoPago(false)
             setPedidoExitoso({ ...pedido, pagoAprobado: true })
@@ -144,28 +221,38 @@ export default function MenuPublico() {
       }
 
       // Primera verificación inmediata
-      verificarPago().then(aprobado => {
-        if (aprobado) return
+      const iniciarPolling = async () => {
+        const aprobado = await verificarPago()
+        if (aprobado || cancelled) return
 
         // Si no está aprobado, iniciar polling
-        const interval = setInterval(async () => {
+        intervalId = setInterval(async () => {
           intentos++
+          if (cancelled) return
           setTiempoEspera(intentos * 3)
 
           const aprobado = await verificarPago()
           if (aprobado || intentos >= maxIntentos) {
-            clearInterval(interval)
+            clearInterval(intervalId)
+            intervalId = null
             if (!aprobado && intentos >= maxIntentos) {
               setVerificandoPago(false)
-              setError('No pudimos confirmar tu pago. Si ya pagaste, por favor contacta al local. Tu número de pedido es: #' + pedidoId)
+              setPageError(
+                'No pudimos confirmar tu pago. Si ya pagaste, por favor contacta al local. Tu número de pedido es: #' +
+                  pedidoId
+              )
               navigate(`/menu/${tenantSlug}`, { replace: true })
             }
           }
         }, 3000)
+      }
 
-        // Cleanup
-        return () => clearInterval(interval)
-      })
+      iniciarPolling()
+    }
+
+    return () => {
+      cancelled = true
+      if (intervalId) clearInterval(intervalId)
     }
   }, [searchParams, slug, navigate])
 
@@ -176,12 +263,17 @@ export default function MenuPublico() {
     const tenantSlug = slug || 'default'
     let intentos = 0
     const maxIntentos = 60 // 3 minutos (60 * 3 segundos)
+    let cancelled = false
 
     const verificarPago = async () => {
       try {
-        const res = await fetch(`${API_URL}/publico/${tenantSlug}/pedido/${pedidoPendienteMP.id}`)
-        const pedido = await res.json()
+        const pedido = await fetchJson(
+          `${API_URL}/publico/${tenantSlug}/pedido/${pedidoPendienteMP.id}`,
+          {},
+          'Error al verificar el pago'
+        )
 
+        if (cancelled) return false
         if (pedido.estadoPago === 'APROBADO') {
           setPedidoPendienteMP(null)
           setPedidoExitoso({ ...pedido, pagoAprobado: true })
@@ -201,63 +293,70 @@ export default function MenuPublico() {
 
     const interval = setInterval(async () => {
       intentos++
+      if (cancelled) return
       const aprobado = await verificarPago()
 
       if (aprobado || intentos >= maxIntentos) {
         clearInterval(interval)
         if (!aprobado && intentos >= maxIntentos) {
-          setError('No pudimos confirmar el pago. Si ya pagaste, el pedido se actualizará pronto.')
+          setPageError('No pudimos confirmar el pago. Si ya pagaste, el pedido se actualizará pronto.')
           setPedidoPendienteMP(null)
           localStorage.removeItem('mp_pedido_pendiente')
         }
       }
     }, 3000)
 
-    return () => clearInterval(interval)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
   }, [pedidoPendienteMP, slug])
 
-  const cargarConfigYMenu = async () => {
-    try {
-      const tenantSlug = slug || 'default'
-      const [configRes, menuRes] = await Promise.all([
-        fetch(`${API_URL}/publico/${tenantSlug}/config`),
-        fetch(`${API_URL}/publico/${tenantSlug}/menu`)
-      ])
-      const configData = await configRes.json()
-      const menuData = await menuRes.json()
-      // Flatten tenant and config into a single object for easier access
-      const flatConfig = { ...configData.tenant, ...configData.config }
-      setConfig(flatConfig)
-      setCategorias(menuData)
-
-      // Set default tipo entrega based on config
-      if (!flatConfig.delivery_habilitado) {
-        setTipoEntrega('RETIRO')
-      }
-      // Set default metodo pago based on config
-      if (flatConfig.mercadopago_enabled && !flatConfig.efectivo_enabled) {
-        setMetodoPago('MERCADOPAGO')
-      } else if (!flatConfig.mercadopago_enabled && flatConfig.efectivo_enabled) {
-        setMetodoPago('EFECTIVO')
-      }
-    } catch (err) {
-      console.error('Error cargando datos:', err)
-      setError('Error al cargar el menu')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const agregarAlCarrito = (producto) => {
+    // Si el producto tiene variantes, usar la variante seleccionada o la predeterminada
+    let productoAAgregar = producto
+    if (producto.variantes && producto.variantes.length > 0) {
+      const varianteSeleccionada = variantesSeleccionadas[producto.id]
+      if (varianteSeleccionada) {
+        productoAAgregar = varianteSeleccionada
+      } else {
+        // Buscar variante predeterminada o usar la primera
+        const predeterminada = producto.variantes.find(v => v.esVariantePredeterminada)
+        productoAAgregar = predeterminada || producto.variantes[0]
+      }
+    }
+
     setCarrito((prev) => {
-      const existe = prev.find((item) => item.id === producto.id)
+      const existe = prev.find((item) => item.id === productoAAgregar.id)
       if (existe) {
         return prev.map((item) =>
-          item.id === producto.id ? { ...item, cantidad: item.cantidad + 1 } : item
+          item.id === productoAAgregar.id ? { ...item, cantidad: item.cantidad + 1 } : item
         )
       }
-      return [...prev, { ...producto, cantidad: 1 }]
+      return [...prev, { ...productoAAgregar, cantidad: 1 }]
     })
+  }
+
+  // Seleccionar variante para un producto
+  const seleccionarVariante = (productoId, variante) => {
+    setVariantesSeleccionadas(prev => ({
+      ...prev,
+      [productoId]: variante
+    }))
+  }
+
+  // Obtener precio a mostrar (variante seleccionada o precio base)
+  const getPrecioMostrar = (producto) => {
+    if (producto.variantes && producto.variantes.length > 0) {
+      const varianteSeleccionada = variantesSeleccionadas[producto.id]
+      if (varianteSeleccionada) {
+        return parseFloat(varianteSeleccionada.precio)
+      }
+      const predeterminada = producto.variantes.find(v => v.esVariantePredeterminada)
+      if (predeterminada) return parseFloat(predeterminada.precio)
+      return parseFloat(producto.variantes[0].precio)
+    }
+    return parseFloat(producto.precio)
   }
 
   const actualizarCantidad = (id, delta) => {
@@ -302,12 +401,12 @@ export default function MenuPublico() {
   const enviarPedido = async () => {
     const errorValidacion = validarFormulario()
     if (errorValidacion) {
-      setError(errorValidacion)
+      setCheckoutError(errorValidacion)
       return
     }
 
     setEnviandoPedido(true)
-    setError(null)
+    setCheckoutError(null)
 
     try {
       const pedidoData = {
@@ -326,17 +425,15 @@ export default function MenuPublico() {
       }
 
       const tenantSlug = slug || 'default'
-      const response = await fetch(`${API_URL}/publico/${tenantSlug}/pedido`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(pedidoData)
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error?.message || 'Error al crear pedido')
-      }
+      const data = await fetchJson(
+        `${API_URL}/publico/${tenantSlug}/pedido`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(pedidoData)
+        },
+        'Error al crear pedido'
+      )
 
       // Si es MercadoPago, redirigir según dispositivo
       if (metodoPago === 'MERCADOPAGO' && data.initPoint) {
@@ -377,7 +474,7 @@ export default function MenuPublico() {
       setShowCheckout(false)
     } catch (err) {
       console.error('Error:', err)
-      setError(err.message || 'Error al procesar el pedido')
+      setCheckoutError(err.message || 'Error al procesar el pedido')
     } finally {
       setEnviandoPedido(false)
     }
@@ -465,6 +562,25 @@ export default function MenuPublico() {
           <p className="text-xs text-gray-400 mt-4">
             No cierres esta ventana
           </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="bg-white rounded-2xl shadow-xl p-6 max-w-md w-full text-center">
+          <ExclamationCircleIcon className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">No pudimos cargar el menu</h1>
+          <p className="text-gray-600 mb-6">{loadError}</p>
+          <button
+            type="button"
+            onClick={cargarConfigYMenuAsync}
+            className="btn btn-primary w-full py-3"
+          >
+            Reintentar
+          </button>
         </div>
       </div>
     )
@@ -572,6 +688,23 @@ export default function MenuPublico() {
         </div>
       </header>
 
+      {pageError && (
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <div className="bg-red-50 text-red-700 p-4 rounded-xl flex items-start gap-3">
+            <ExclamationCircleIcon className="w-6 h-6 flex-shrink-0" />
+            <span className="flex-1">{pageError}</span>
+            <button
+              type="button"
+              className="text-red-500 hover:text-red-600"
+              onClick={() => setPageError(null)}
+              aria-label="Cerrar alerta"
+            >
+              <XMarkIcon className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Sticky Category Navigation */}
       <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4">
@@ -610,49 +743,85 @@ export default function MenuPublico() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-24 lg:mb-6">
-                {productosFiltrados.map((producto) => (
-                  <div key={producto.id} className="product-card group">
-                    <div className="relative h-48 overflow-hidden bg-gray-100">
-                      {producto.imagen ? (
-                        <img
-                          src={producto.imagen.startsWith('http') ? producto.imagen : `${BACKEND_URL}${producto.imagen}`}
-                          alt={producto.nombre}
-                          className="product-card-image"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
-                          <CubeIcon className="w-16 h-16 text-gray-300" />
-                        </div>
-                      )}
-                      <button
-                        onClick={() => agregarAlCarrito(producto)}
-                        className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity bg-primary-500 text-white p-3 rounded-full shadow-lg hover:bg-primary-600 hidden lg:block"
-                        title="Agregar al carrito"
-                      >
-                        <PlusIcon className="w-5 h-5" />
-                      </button>
-                    </div>
+                {productosFiltrados.map((producto) => {
+                  const tieneVariantes = producto.variantes && producto.variantes.length > 0
+                  const varianteActual = variantesSeleccionadas[producto.id]
+                  const precioMostrar = getPrecioMostrar(producto)
 
-                    <div className="p-4">
-                      <h3 className="font-bold text-gray-900 text-lg mb-1">{producto.nombre}</h3>
-                      <p className="text-gray-500 text-sm line-clamp-2 mb-3 min-h-[2.5rem]">
-                        {producto.descripcion || 'Delicioso producto'}
-                      </p>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xl font-bold text-primary-600">
-                          ${parseFloat(producto.precio).toLocaleString('es-AR')}
-                        </span>
+                  return (
+                    <div key={producto.id} className="product-card group">
+                      <div className="relative h-48 overflow-hidden bg-gray-100">
+                        {producto.imagen ? (
+                          <img
+                            src={producto.imagen.startsWith('http') ? producto.imagen : `${BACKEND_URL}${producto.imagen}`}
+                            alt={producto.nombre}
+                            className="product-card-image"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
+                            <CubeIcon className="w-16 h-16 text-gray-300" />
+                          </div>
+                        )}
                         <button
                           onClick={() => agregarAlCarrito(producto)}
-                          className="btn btn-primary text-sm py-2 px-4 lg:hidden flex items-center gap-1"
+                          className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity bg-primary-500 text-white p-3 rounded-full shadow-lg hover:bg-primary-600 hidden lg:block"
+                          title="Agregar al carrito"
+                          aria-label="Agregar al carrito"
                         >
-                          <PlusIcon className="w-4 h-4" />
-                          Agregar
+                          <PlusIcon className="w-5 h-5" />
                         </button>
                       </div>
+
+                      <div className="p-4">
+                        <h3 className="font-bold text-gray-900 text-lg mb-1">{producto.nombre}</h3>
+                        <p className="text-gray-500 text-sm line-clamp-2 mb-2 min-h-[2.5rem]">
+                          {producto.descripcion || 'Delicioso producto'}
+                        </p>
+
+                        {/* Selector de Variantes */}
+                        {tieneVariantes && (
+                          <div className="flex flex-wrap gap-1.5 mb-3">
+                            {producto.variantes.map((variante) => {
+                              const isSelected = varianteActual?.id === variante.id ||
+                                (!varianteActual && variante.esVariantePredeterminada) ||
+                                (!varianteActual && !producto.variantes.some(v => v.esVariantePredeterminada) && variante === producto.variantes[0])
+
+                              return (
+                                <button
+                                  key={variante.id}
+                                  onClick={() => seleccionarVariante(producto.id, variante)}
+                                  className={`px-2.5 py-1 text-xs rounded-full font-medium transition-all ${
+                                    isSelected
+                                      ? 'bg-primary-500 text-white'
+                                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                  }`}
+                                >
+                                  {variante.nombreVariante}
+                                  <span className="ml-1 opacity-75">
+                                    ${parseFloat(variante.precio).toLocaleString('es-AR')}
+                                  </span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between">
+                          <span className="text-xl font-bold text-primary-600">
+                            ${precioMostrar.toLocaleString('es-AR')}
+                          </span>
+                          <button
+                            onClick={() => agregarAlCarrito(producto)}
+                            className="btn btn-primary text-sm py-2 px-4 lg:hidden flex items-center gap-1"
+                          >
+                            <PlusIcon className="w-4 h-4" />
+                            Agregar
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </main>
@@ -689,11 +858,19 @@ export default function MenuPublico() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button onClick={() => actualizarCantidad(item.id, -1)} className="qty-btn">
+                        <button
+                          onClick={() => actualizarCantidad(item.id, -1)}
+                          className="qty-btn"
+                          aria-label="Reducir cantidad"
+                        >
                           <MinusIcon className="w-4 h-4" />
                         </button>
                         <span className="w-6 text-center font-medium text-sm">{item.cantidad}</span>
-                        <button onClick={() => actualizarCantidad(item.id, 1)} className="qty-btn">
+                        <button
+                          onClick={() => actualizarCantidad(item.id, 1)}
+                          className="qty-btn"
+                          aria-label="Aumentar cantidad"
+                        >
                           <PlusIcon className="w-4 h-4" />
                         </button>
                       </div>
@@ -791,7 +968,11 @@ export default function MenuPublico() {
                 <ShoppingCartIcon className="w-6 h-6 text-primary-500" />
                 <h2 className="text-xl font-bold">Tu Pedido</h2>
               </div>
-              <button onClick={() => setShowCarrito(false)} className="p-2 hover:bg-gray-100 rounded-full">
+              <button
+                onClick={() => setShowCarrito(false)}
+                className="p-2 hover:bg-gray-100 rounded-full"
+                aria-label="Cerrar carrito"
+              >
                 <XMarkIcon className="w-6 h-6 text-gray-500" />
               </button>
             </div>
@@ -806,11 +987,19 @@ export default function MenuPublico() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => actualizarCantidad(item.id, -1)} className="qty-btn">
+                    <button
+                      onClick={() => actualizarCantidad(item.id, -1)}
+                      className="qty-btn"
+                      aria-label="Reducir cantidad"
+                    >
                       <MinusIcon className="w-4 h-4" />
                     </button>
                     <span className="w-8 text-center font-medium">{item.cantidad}</span>
-                    <button onClick={() => actualizarCantidad(item.id, 1)} className="qty-btn">
+                    <button
+                      onClick={() => actualizarCantidad(item.id, 1)}
+                      className="qty-btn"
+                      aria-label="Aumentar cantidad"
+                    >
                       <PlusIcon className="w-4 h-4" />
                     </button>
                   </div>
@@ -888,17 +1077,21 @@ export default function MenuPublico() {
           <div className="relative bg-white w-full md:max-w-lg md:rounded-2xl rounded-t-3xl max-h-[90vh] overflow-y-auto">
             <div className="p-4 border-b flex justify-between items-center sticky top-0 bg-white z-10">
               <h2 className="text-xl font-bold">Datos de Entrega</h2>
-              <button onClick={() => setShowCheckout(false)} className="p-2 hover:bg-gray-100 rounded-full">
+              <button
+                onClick={() => setShowCheckout(false)}
+                className="p-2 hover:bg-gray-100 rounded-full"
+                aria-label="Cerrar checkout"
+              >
                 <XMarkIcon className="w-6 h-6 text-gray-500" />
               </button>
             </div>
 
             <div className="p-4 space-y-4">
               {/* Error message */}
-              {error && (
+              {checkoutError && (
                 <div className="bg-red-50 text-red-700 p-3 rounded-lg flex items-center gap-2">
                   <ExclamationCircleIcon className="w-5 h-5 flex-shrink-0" />
-                  <span>{error}</span>
+                  <span>{checkoutError}</span>
                 </div>
               )}
 

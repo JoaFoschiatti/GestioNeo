@@ -1,29 +1,30 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline'
+import useAsync from '../../hooks/useAsync'
 
 export default function Categorias() {
   const [categorias, setCategorias] = useState([])
-  const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editando, setEditando] = useState(null)
   const [form, setForm] = useState({ nombre: '', descripcion: '', orden: 0 })
 
-  useEffect(() => {
-    cargarCategorias()
+  const cargarCategorias = useCallback(async () => {
+    const response = await api.get('/categorias')
+    setCategorias(response.data)
+    return response.data
   }, [])
 
-  const cargarCategorias = async () => {
-    try {
-      const response = await api.get('/categorias')
-      setCategorias(response.data)
-    } catch (error) {
-      console.error('Error:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const handleLoadError = useCallback((error) => {
+    console.error('Error:', error)
+  }, [])
+
+  const cargarCategoriasRequest = useCallback(async (_ctx) => (
+    cargarCategorias()
+  ), [cargarCategorias])
+
+  const { loading, execute: cargarCategoriasAsync } = useAsync(cargarCategoriasRequest, { onError: handleLoadError })
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -37,7 +38,7 @@ export default function Categorias() {
       }
       setShowModal(false)
       resetForm()
-      cargarCategorias()
+      cargarCategoriasAsync()
     } catch (error) {
       console.error('Error:', error)
     }
@@ -58,7 +59,7 @@ export default function Categorias() {
     try {
       await api.delete(`/categorias/${id}`)
       toast.success('Categoría eliminada')
-      cargarCategorias()
+      cargarCategoriasAsync()
     } catch (error) {
       console.error('Error:', error)
     }
@@ -69,7 +70,7 @@ export default function Categorias() {
     setEditando(null)
   }
 
-  if (loading) {
+  if (loading && categorias.length === 0) {
     return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div></div>
   }
 
@@ -111,17 +112,25 @@ export default function Categorias() {
                   }`}>
                     {categoria.activa ? 'Activa' : 'Inactiva'}
                   </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right space-x-2">
-                  <button onClick={() => handleEdit(categoria)} className="text-primary-600 hover:text-primary-800">
-                    <PencilIcon className="w-5 h-5" />
-                  </button>
-                  <button onClick={() => handleDelete(categoria.id)} className="text-red-600 hover:text-red-800">
-                    <TrashIcon className="w-5 h-5" />
-                  </button>
-                </td>
-              </tr>
-            ))}
+	                </td>
+	                <td className="px-6 py-4 whitespace-nowrap text-right space-x-2">
+	                  <button
+	                    aria-label={`Editar categoría: ${categoria.nombre}`}
+	                    onClick={() => handleEdit(categoria)}
+	                    className="text-primary-600 hover:text-primary-800"
+	                  >
+	                    <PencilIcon className="w-5 h-5" />
+	                  </button>
+	                  <button
+	                    aria-label={`Eliminar categoría: ${categoria.nombre}`}
+	                    onClick={() => handleDelete(categoria.id)}
+	                    className="text-red-600 hover:text-red-800"
+	                  >
+	                    <TrashIcon className="w-5 h-5" />
+	                  </button>
+	                </td>
+	              </tr>
+	            ))}
           </tbody>
         </table>
       </div>
@@ -133,34 +142,37 @@ export default function Categorias() {
             <h2 className="text-xl font-bold mb-4">
               {editando ? 'Editar Categoría' : 'Nueva Categoría'}
             </h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="label">Nombre</label>
-                <input
-                  type="text"
-                  className="input"
-                  value={form.nombre}
-                  onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label className="label">Descripción</label>
-                <textarea
-                  className="input"
-                  value={form.descripcion}
-                  onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
-                  rows="3"
-                />
-              </div>
-              <div>
-                <label className="label">Orden</label>
-                <input
-                  type="number"
-                  className="input"
-                  value={form.orden}
-                  onChange={(e) => setForm({ ...form, orden: parseInt(e.target.value) })}
-                />
+	            <form onSubmit={handleSubmit} className="space-y-4">
+	              <div>
+	                <label className="label" htmlFor="categoria-nombre">Nombre</label>
+	                <input
+	                  id="categoria-nombre"
+	                  type="text"
+	                  className="input"
+	                  value={form.nombre}
+	                  onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+	                  required
+	                />
+	              </div>
+	              <div>
+	                <label className="label" htmlFor="categoria-descripcion">Descripción</label>
+	                <textarea
+	                  id="categoria-descripcion"
+	                  className="input"
+	                  value={form.descripcion}
+	                  onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
+	                  rows="3"
+	                />
+	              </div>
+	              <div>
+	                <label className="label" htmlFor="categoria-orden">Orden</label>
+	                <input
+	                  id="categoria-orden"
+	                  type="number"
+	                  className="input"
+	                  value={form.orden}
+	                  onChange={(e) => setForm({ ...form, orden: parseInt(e.target.value) })}
+	                />
               </div>
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary flex-1">

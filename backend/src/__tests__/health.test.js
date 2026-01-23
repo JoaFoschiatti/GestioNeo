@@ -1,5 +1,10 @@
 const request = require('supertest');
 const app = require('../app');
+const { prisma } = require('../db/prisma');
+
+afterAll(async () => {
+  await prisma.$disconnect();
+});
 
 describe('Health Endpoint', () => {
   it('GET /api/health should return status ok', async () => {

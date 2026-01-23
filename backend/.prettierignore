@@ -1,0 +1,6 @@
+node_modules
+coverage
+uploads
+prisma/migrations
+prisma/migrations_legacy
+

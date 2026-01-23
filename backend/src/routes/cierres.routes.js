@@ -2,24 +2,34 @@ const express = require('express');
 const router = express.Router();
 const cierresController = require('../controllers/cierres.controller');
 const { verificarToken, esAdminOCajero } = require('../middlewares/auth.middleware');
+const { setTenantFromAuth } = require('../middlewares/tenant.middleware');
+const { validate } = require('../middlewares/validate.middleware');
+const { asyncHandler } = require('../utils/async-handler');
+const {
+  idParamSchema,
+  listarQuerySchema,
+  abrirCajaBodySchema,
+  cerrarCajaBodySchema
+} = require('../schemas/cierres.schemas');
 
 // Todas las rutas requieren autenticación y rol ADMIN o CAJERO
 router.use(verificarToken);
+router.use(setTenantFromAuth);
 router.use(esAdminOCajero);
 
 // GET /api/cierres/actual - Estado actual de caja
-router.get('/actual', cierresController.obtenerActual);
+router.get('/actual', asyncHandler(cierresController.obtenerActual));
 
 // GET /api/cierres/resumen - Resumen de ventas de caja abierta
-router.get('/resumen', cierresController.resumenActual);
+router.get('/resumen', asyncHandler(cierresController.resumenActual));
 
 // POST /api/cierres - Abrir nueva caja
-router.post('/', cierresController.abrirCaja);
+router.post('/', validate({ body: abrirCajaBodySchema }), asyncHandler(cierresController.abrirCaja));
 
 // PATCH /api/cierres/:id/cerrar - Cerrar caja
-router.patch('/:id/cerrar', cierresController.cerrarCaja);
+router.patch('/:id/cerrar', validate({ params: idParamSchema, body: cerrarCajaBodySchema }), asyncHandler(cierresController.cerrarCaja));
 
 // GET /api/cierres - Histórico de cierres
-router.get('/', cierresController.listar);
+router.get('/', validate({ query: listarQuerySchema }), asyncHandler(cierresController.listar));
 
 module.exports = router;

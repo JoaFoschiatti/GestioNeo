@@ -1,60 +1,59 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
-import { PlusIcon, CalendarDaysIcon } from '@heroicons/react/24/outline'
-import { createEventSource } from '../../services/eventos'
+import { PlusIcon, CalendarDaysIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline'
+import useAsync from '../../hooks/useAsync'
+import usePolling from '../../hooks/usePolling'
+import useEventSource from '../../hooks/useEventSource'
 
 export default function MozoMesas() {
   const [mesas, setMesas] = useState([])
   const [reservasProximas, setReservasProximas] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(null)
+  const [reservasError, setReservasError] = useState(null)
   const navigate = useNavigate()
 
-  useEffect(() => {
-    cargarMesas()
-    cargarReservasProximas()
-    // Actualizar cada 30 segundos
-    const interval = setInterval(() => {
-      cargarMesas()
-      cargarReservasProximas()
-    }, 30000)
-    const source = createEventSource()
-    const handleUpdate = () => {
-      cargarMesas()
-      cargarReservasProximas()
-    }
-
-    if (source) {
-      source.addEventListener('pedido.updated', handleUpdate)
-      source.addEventListener('mesa.updated', handleUpdate)
-      source.addEventListener('reserva.updated', handleUpdate)
-    }
-
-    return () => {
-      clearInterval(interval)
-      if (source) source.close()
+  const cargarMesas = useCallback(async () => {
+    try {
+      const response = await api.get('/mesas?activa=true', { skipToast: true })
+      setMesas(response.data)
+      setLoadError(null)
+    } catch (error) {
+      console.error('Error:', error)
+      setLoadError('No pudimos cargar las mesas.')
     }
   }, [])
 
-  const cargarMesas = async () => {
+  const cargarReservasProximas = useCallback(async () => {
     try {
-      const response = await api.get('/mesas?activa=true')
-      setMesas(response.data)
-    } catch (error) {
-      console.error('Error:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const cargarReservasProximas = async () => {
-    try {
-      const response = await api.get('/reservas/proximas')
+      const response = await api.get('/reservas/proximas', { skipToast: true })
       setReservasProximas(response.data)
+      setReservasError(null)
     } catch (error) {
       console.error('Error:', error)
+      setReservasError('No pudimos cargar las reservas proximas.')
     }
-  }
+  }, [])
+
+  const refrescar = useCallback(async () => {
+    await Promise.all([cargarMesas(), cargarReservasProximas()])
+  }, [cargarMesas, cargarReservasProximas])
+
+  const refrescarRequest = useCallback(async (_ctx) => (
+    refrescar()
+  ), [refrescar])
+
+  const { loading, execute: refrescarAsync } = useAsync(refrescarRequest)
+
+  usePolling(refrescarAsync, 30000, { immediate: false })
+
+  useEventSource({
+    events: {
+      'pedido.updated': refrescarAsync,
+      'mesa.updated': refrescarAsync,
+      'reserva.updated': refrescarAsync
+    }
+  })
 
   const getReservaProxima = (mesaId) => {
     return reservasProximas.find(r => r.mesaId === mesaId)
@@ -92,10 +91,28 @@ export default function MozoMesas() {
     }
   }
 
-  if (loading) {
+  const handleRetry = () => {
+    setLoadError(null)
+    refrescarAsync()
+  }
+
+  if (loading && mesas.length === 0) {
     return (
       <div className="flex justify-center py-12">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+      </div>
+    )
+  }
+
+  if (loadError && mesas.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <ExclamationCircleIcon className="w-10 h-10 text-red-500 mb-3" />
+        <h2 className="text-lg font-semibold text-gray-900">No pudimos cargar las mesas</h2>
+        <p className="text-sm text-gray-600 mb-4">{loadError}</p>
+        <button type="button" onClick={handleRetry} className="btn btn-primary">
+          Reintentar
+        </button>
       </div>
     )
   }
@@ -110,6 +127,32 @@ export default function MozoMesas() {
 
   return (
     <div>
+      {loadError && mesas.length > 0 && (
+        <div className="mb-4 bg-red-50 text-red-700 px-4 py-3 rounded-lg flex items-center gap-3">
+          <ExclamationCircleIcon className="w-5 h-5" />
+          <span className="flex-1 text-sm">{loadError}</span>
+          <button
+            type="button"
+            onClick={handleRetry}
+            className="text-sm font-medium hover:underline"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
+      {reservasError && (
+        <div className="mb-4 bg-amber-50 text-amber-700 px-4 py-3 rounded-lg flex items-center gap-3">
+          <ExclamationCircleIcon className="w-5 h-5" />
+          <span className="flex-1 text-sm">{reservasError}</span>
+          <button
+            type="button"
+            onClick={cargarReservasProximas}
+            className="text-sm font-medium hover:underline"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Mesas</h1>
         <button

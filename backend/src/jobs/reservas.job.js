@@ -1,6 +1,8 @@
-const { PrismaClient } = require('@prisma/client');
 const eventBus = require('../services/event-bus');
-const prisma = new PrismaClient();
+const { prisma } = require('../db/prisma');
+const { logger } = require('../utils/logger');
+
+let intervalId = null;
 
 // Procesar reservas cada minuto
 const procesarReservas = async () => {
@@ -26,13 +28,14 @@ const procesarReservas = async () => {
         });
 
         eventBus.publish('mesa.updated', {
+          tenantId: reserva.tenantId,
           mesaId: reserva.mesaId,
           estado: 'RESERVADA',
           reservaId: reserva.id,
           updatedAt: new Date().toISOString()
         });
 
-        console.log(`Mesa ${reserva.mesa.numero} marcada como RESERVADA para reserva #${reserva.id}`);
+        logger.info(`Mesa ${reserva.mesa.numero} marcada como RESERVADA para reserva #${reserva.id}`);
       }
     }
 
@@ -61,6 +64,7 @@ const procesarReservas = async () => {
         });
 
         eventBus.publish('mesa.updated', {
+          tenantId: reserva.tenantId,
           mesaId: reserva.mesaId,
           estado: 'LIBRE',
           updatedAt: new Date().toISOString()
@@ -68,27 +72,43 @@ const procesarReservas = async () => {
       }
 
       eventBus.publish('reserva.updated', {
+        tenantId: reserva.tenantId,
         id: reserva.id,
         estado: 'NO_LLEGO',
         mesaId: reserva.mesaId
       });
 
-      console.log(`Reserva #${reserva.id} marcada como NO_LLEGO (cliente no llegó)`);
+      logger.info(`Reserva #${reserva.id} marcada como NO_LLEGO (cliente no llegó)`);
     }
   } catch (error) {
-    console.error('Error procesando reservas:', error);
+    logger.error('Error procesando reservas:', error);
   }
 };
 
 // Iniciar el job (ejecutar cada minuto)
 const iniciarJobReservas = () => {
-  console.log('🗓️  Job de reservas iniciado');
+  if (process.env.NODE_ENV === 'test') {
+    return null;
+  }
+
+  if (intervalId) {
+    return intervalId;
+  }
+
+  logger.info('🗓️  Job de reservas iniciado');
 
   // Ejecutar inmediatamente al iniciar
   procesarReservas();
 
   // Ejecutar cada minuto
-  setInterval(procesarReservas, 60 * 1000);
+  intervalId = setInterval(procesarReservas, 60 * 1000);
+  return intervalId;
 };
 
-module.exports = { iniciarJobReservas, procesarReservas };
+const detenerJobReservas = () => {
+  if (!intervalId) return;
+  clearInterval(intervalId);
+  intervalId = null;
+};
+
+module.exports = { iniciarJobReservas, detenerJobReservas, procesarReservas };

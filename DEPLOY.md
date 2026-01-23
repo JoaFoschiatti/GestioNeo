@@ -95,7 +95,7 @@ DIRECT_URL=postgresql://postgres.xxxxx:TU_PASSWORD@aws-0-sa-east-1.pooler.supaba
 1. Click en el servicio creado
 2. Ir a **Settings**:
    - **Root Directory:** `backend`
-   - **Build Command:** `npm install && npx prisma generate && npx prisma db push`
+   - **Build Command:** `npm install && npx prisma generate && npx prisma migrate deploy`
    - **Start Command:** `npm start`
 
 ### 3.3 Configurar variables de entorno
@@ -136,7 +136,7 @@ Una vez que el deploy esté completo:
 O desde tu terminal local:
 ```bash
 cd backend
-DATABASE_URL="tu-connection-string-de-supabase" npx prisma db push
+DATABASE_URL="tu-connection-string-de-supabase" DIRECT_URL="tu-connection-string-directo-de-supabase" npx prisma migrate deploy
 DATABASE_URL="tu-connection-string-de-supabase" node prisma/seed-ewald.js
 DATABASE_URL="tu-connection-string-de-supabase" node prisma/seed-test-data.js
 ```
@@ -219,7 +219,8 @@ Esto permite que el frontend pueda comunicarse con el backend.
 ```bash
 # Ejecutar desde tu máquina local
 cd backend
-DATABASE_URL="tu-url" npx prisma db push --force-reset
+DATABASE_URL="tu-url" DIRECT_URL="tu-url-directa" npx prisma migrate deploy
+npx prisma generate
 ```
 
 ### El frontend no carga datos
@@ -228,7 +229,7 @@ DATABASE_URL="tu-url" npx prisma db push --force-reset
 
 ### Railway: Build fails
 - Verificar que `package.json` tenga script `start`
-- El script start debe ser: `"start": "node src/app.js"`
+- El script start debe ser: `"start": "node src/server.js"`
 
 ---
 
@@ -249,9 +250,13 @@ Railway y Vercel detectan el push y re-deployean automáticamente.
 
 Si modificas el schema de Prisma:
 ```bash
-# Desde tu máquina local
+# Desde tu máquina local (crea y commitea la migración)
 cd backend
-DATABASE_URL="tu-url-produccion" npx prisma db push
+npx prisma migrate dev
+
+# En producción: Railway aplica automáticamente con `npx prisma migrate deploy` en el build.
+# Si necesitás aplicarlas manualmente:
+DATABASE_URL="tu-url" DIRECT_URL="tu-url-directa-produccion" npx prisma migrate deploy
 ```
 
 ### Ver logs en producción

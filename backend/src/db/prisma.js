@@ -8,6 +8,7 @@
  */
 
 const { PrismaClient } = require('@prisma/client');
+const { createHttpError } = require('../utils/http-error');
 
 // Singleton Prisma client
 const prisma = new PrismaClient();
@@ -34,6 +35,8 @@ const TENANT_SCOPED_MODELS = [
   'pedidoItem',
   'pedidoItemModificador',
   'pago',
+  'mercadoPagoConfig',
+  'transaccionMercadoPago',
   'cierreCaja',
   'printJob',
   'configuracion',
@@ -72,17 +75,20 @@ const getTenantPrisma = (tenantId, isSuperAdmin = false) => {
           // Initialize args if undefined
           if (!args) args = {};
 
-          // Read operations - add tenantId to where clause
-          if (['findMany', 'findFirst', 'findUnique', 'count', 'aggregate', 'groupBy'].includes(operation)) {
+          const shouldScopeWhere = [
+            'findMany',
+            'findFirst',
+            'count',
+            'aggregate',
+            'groupBy',
+            'updateMany',
+            'deleteMany'
+          ].includes(operation);
+
+          if (shouldScopeWhere) {
             args.where = { ...(args.where || {}), tenantId };
           }
 
-          // Update/Delete operations - add tenantId to where clause
-          if (['update', 'updateMany', 'delete', 'deleteMany', 'upsert'].includes(operation)) {
-            args.where = { ...(args.where || {}), tenantId };
-          }
-
-          // Create operations - add tenantId to data
           if (operation === 'create') {
             args.data = { ...(args.data || {}), tenantId };
           }
@@ -95,10 +101,53 @@ const getTenantPrisma = (tenantId, isSuperAdmin = false) => {
             }
           }
 
-          // Upsert - add tenantId to both create and update
           if (operation === 'upsert') {
             args.create = { ...(args.create || {}), tenantId };
-            args.update = { ...(args.update || {}) };
+
+            const existing = await prisma[modelLower].findUnique({
+              where: args.where,
+              select: { tenantId: true }
+            });
+
+            if (existing && existing.tenantId !== tenantId) {
+              throw createHttpError.notFound('Registro no encontrado');
+            }
+
+            return query(args);
+          }
+
+          if (operation === 'update' || operation === 'delete') {
+            const existing = await prisma[modelLower].findUnique({
+              where: args.where,
+              select: { tenantId: true }
+            });
+
+            if (existing && existing.tenantId !== tenantId) {
+              throw createHttpError.notFound('Registro no encontrado');
+            }
+
+            return query(args);
+          }
+
+          if (operation === 'findUnique') {
+            const hadSelect = Boolean(args.select);
+            const hadTenantSelected = hadSelect && args.select && args.select.tenantId === true;
+
+            if (hadSelect && !hadTenantSelected) {
+              args.select = { ...args.select, tenantId: true };
+            }
+
+            const result = await query(args);
+
+            if (!result) return null;
+            if (result.tenantId !== tenantId) return null;
+
+            if (hadSelect && !hadTenantSelected) {
+              const { tenantId: _ignored, ...rest } = result;
+              return rest;
+            }
+
+            return result;
           }
 
           return query(args);

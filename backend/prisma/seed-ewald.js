@@ -1,31 +1,63 @@
+require('dotenv').config()
 const { PrismaClient } = require('@prisma/client')
 const prisma = new PrismaClient()
 
 async function main() {
-  console.log('🗑️  Limpiando datos existentes...')
+  console.log('🍽️  Cargando menú Estación Ewald...\n')
 
-  // Eliminar en orden correcto por foreign keys
-  await prisma.pedidoItem.deleteMany({})
-  await prisma.productoIngrediente.deleteMany({})
-  await prisma.producto.deleteMany({})
-  await prisma.categoria.deleteMany({})
+  const tenantSlug = process.env.SEED_TENANT_SLUG || 'ewald'
+  const tenantNombre = process.env.SEED_TENANT_NOMBRE || 'Estación Ewald'
+  const tenantEmail = process.env.SEED_TENANT_EMAIL || 'admin@ewald.com'
+
+  const tenant = await prisma.tenant.upsert({
+    where: { slug: tenantSlug },
+    update: { nombre: tenantNombre, email: tenantEmail, activo: true },
+    create: { slug: tenantSlug, nombre: tenantNombre, email: tenantEmail, activo: true }
+  })
+
+  const tenantId = tenant.id
+
+  const upsertProducto = async (data) => {
+    const existente = await prisma.producto.findFirst({
+      where: { tenantId, nombre: data.nombre }
+    })
+
+    if (existente) {
+      return prisma.producto.update({
+        where: { id: existente.id },
+        data
+      })
+    }
+
+    return prisma.producto.create({
+      data: { tenantId, ...data }
+    })
+  }
 
   console.log('📁 Creando categorías...')
 
-  const hamburguesa = await prisma.categoria.create({
-    data: { nombre: 'Hamburguesa', orden: 1, activa: true }
+  const hamburguesa = await prisma.categoria.upsert({
+    where: { tenantId_nombre: { tenantId, nombre: 'Hamburguesa' } },
+    update: { orden: 1, activa: true },
+    create: { tenantId, nombre: 'Hamburguesa', orden: 1, activa: true }
   })
 
-  const pizzas = await prisma.categoria.create({
-    data: { nombre: 'Pizzas', orden: 2, activa: true }
+  const pizzas = await prisma.categoria.upsert({
+    where: { tenantId_nombre: { tenantId, nombre: 'Pizzas' } },
+    update: { orden: 2, activa: true },
+    create: { tenantId, nombre: 'Pizzas', orden: 2, activa: true }
   })
 
-  const paraPicar = await prisma.categoria.create({
-    data: { nombre: 'Para Picar', orden: 3, activa: true }
+  const paraPicar = await prisma.categoria.upsert({
+    where: { tenantId_nombre: { tenantId, nombre: 'Para Picar' } },
+    update: { orden: 3, activa: true },
+    create: { tenantId, nombre: 'Para Picar', orden: 3, activa: true }
   })
 
-  const salsas = await prisma.categoria.create({
-    data: { nombre: 'Salsas', orden: 4, activa: true }
+  const salsas = await prisma.categoria.upsert({
+    where: { tenantId_nombre: { tenantId, nombre: 'Salsas' } },
+    update: { orden: 4, activa: true },
+    create: { tenantId, nombre: 'Salsas', orden: 4, activa: true }
   })
 
   console.log('🍔 Creando productos...')
@@ -88,57 +120,49 @@ async function main() {
   let totalProductos = 0
 
   for (const prod of hamburguesasData) {
-    await prisma.producto.create({
-      data: {
-        nombre: prod.nombre,
-        descripcion: prod.descripcion,
-        precio: prod.precio,
-        categoriaId: hamburguesa.id,
-        disponible: true,
-        destacado: false,
-      }
+    await upsertProducto({
+      nombre: prod.nombre,
+      descripcion: prod.descripcion,
+      precio: prod.precio,
+      categoriaId: hamburguesa.id,
+      disponible: true,
+      destacado: false,
     })
     totalProductos++
   }
 
   for (const prod of pizzasData) {
-    await prisma.producto.create({
-      data: {
-        nombre: prod.nombre,
-        descripcion: prod.descripcion,
-        precio: prod.precio,
-        categoriaId: pizzas.id,
-        disponible: true,
-        destacado: false,
-      }
+    await upsertProducto({
+      nombre: prod.nombre,
+      descripcion: prod.descripcion,
+      precio: prod.precio,
+      categoriaId: pizzas.id,
+      disponible: true,
+      destacado: false,
     })
     totalProductos++
   }
 
   for (const prod of paraPicarData) {
-    await prisma.producto.create({
-      data: {
-        nombre: prod.nombre,
-        descripcion: prod.descripcion,
-        precio: prod.precio,
-        categoriaId: paraPicar.id,
-        disponible: true,
-        destacado: false,
-      }
+    await upsertProducto({
+      nombre: prod.nombre,
+      descripcion: prod.descripcion,
+      precio: prod.precio,
+      categoriaId: paraPicar.id,
+      disponible: true,
+      destacado: false,
     })
     totalProductos++
   }
 
   for (const prod of salsasData) {
-    await prisma.producto.create({
-      data: {
-        nombre: prod.nombre,
-        descripcion: prod.descripcion,
-        precio: prod.precio,
-        categoriaId: salsas.id,
-        disponible: true,
-        destacado: false,
-      }
+    await upsertProducto({
+      nombre: prod.nombre,
+      descripcion: prod.descripcion,
+      precio: prod.precio,
+      categoriaId: salsas.id,
+      disponible: true,
+      destacado: false,
     })
     totalProductos++
   }

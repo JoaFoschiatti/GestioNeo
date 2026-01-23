@@ -1,5 +1,6 @@
 const nodemailer = require('nodemailer');
 const { prisma, getTenantPrisma } = require('../db/prisma');
+const { logger } = require('../utils/logger');
 
 class EmailService {
   constructor() {
@@ -41,11 +42,11 @@ class EmailService {
     const pass = process.env.SMTP_PASS;
 
     if (!host || !user || !pass) {
-      console.log('Email service: Credenciales SMTP no configuradas');
+      logger.info('Email service: Credenciales SMTP no configuradas');
       return null;
     }
 
-    return nodemailer.createTransporter({
+    return nodemailer.createTransport({
       host,
       port: parseInt(port) || 587,
       secure: port === '465',
@@ -59,13 +60,13 @@ class EmailService {
   async sendOrderConfirmation(pedido, tenant = null) {
     try {
       if (!pedido.clienteEmail) {
-        console.log('Email service: Pedido sin email, saltando envío');
+        logger.info('Email service: Pedido sin email, saltando envío');
         return null;
       }
 
       const transporter = await this.createTransporter();
       if (!transporter) {
-        console.log('Email service: Transporter no disponible');
+        logger.info('Email service: Transporter no disponible');
         return null;
       }
 
@@ -81,10 +82,10 @@ class EmailService {
         html
       });
 
-      console.log('Email enviado:', info.messageId);
+      logger.info('Email enviado:', info.messageId);
       return info;
     } catch (error) {
-      console.error('Error al enviar email:', error);
+      logger.error('Error al enviar email:', error);
       return null;
     }
   }
@@ -186,7 +187,7 @@ class EmailService {
     try {
       const transporter = await this.createTransporter();
       if (!transporter) {
-        console.log('Email service: Transporter no disponible para verificación');
+        logger.info('Email service: Transporter no disponible para verificación');
         return null;
       }
 
@@ -250,10 +251,10 @@ class EmailService {
         html
       });
 
-      console.log('Email de verificación enviado:', info.messageId);
+      logger.info('Email de verificación enviado:', info.messageId);
       return info;
     } catch (error) {
-      console.error('Error al enviar email de verificación:', error);
+      logger.error('Error al enviar email de verificación:', error);
       throw error;
     }
   }

@@ -1,12 +1,12 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { PlusIcon, CheckIcon } from '@heroicons/react/24/outline'
+import useAsync from '../../hooks/useAsync'
 
 export default function Liquidaciones() {
   const [liquidaciones, setLiquidaciones] = useState([])
   const [empleados, setEmpleados] = useState([])
-  const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState({
     empleadoId: '', periodoDesde: '', periodoHasta: '', horasTotales: '', descuentos: 0, adicionales: 0, observaciones: ''
@@ -23,24 +23,28 @@ export default function Liquidaciones() {
   const subtotal = horas * tarifaHora
   const totalPagar = subtotal - (parseFloat(form.descuentos) || 0) + (parseFloat(form.adicionales) || 0)
 
-  useEffect(() => {
-    cargarDatos()
+  const cargarDatos = useCallback(async () => {
+    const [liqRes, empRes] = await Promise.all([
+      api.get('/liquidaciones'),
+      api.get('/empleados?activo=true')
+    ])
+    setLiquidaciones(liqRes.data)
+    setEmpleados(empRes.data)
+    return { liquidaciones: liqRes.data, empleados: empRes.data }
   }, [])
 
-  const cargarDatos = async () => {
-    try {
-      const [liqRes, empRes] = await Promise.all([
-        api.get('/liquidaciones'),
-        api.get('/empleados?activo=true')
-      ])
-      setLiquidaciones(liqRes.data)
-      setEmpleados(empRes.data)
-    } catch (error) {
-      console.error('Error:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const handleLoadError = useCallback((error) => {
+    console.error('Error:', error)
+  }, [])
+
+  const cargarDatosRequest = useCallback(async (_ctx) => (
+    cargarDatos()
+  ), [cargarDatos])
+
+  const { loading, execute: cargarDatosAsync } = useAsync(
+    cargarDatosRequest,
+    { onError: handleLoadError }
+  )
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -61,7 +65,7 @@ export default function Liquidaciones() {
       toast.success('Liquidación creada')
       setShowModal(false)
       setForm({ empleadoId: '', periodoDesde: '', periodoHasta: '', horasTotales: '', descuentos: 0, adicionales: 0, observaciones: '' })
-      cargarDatos()
+      cargarDatosAsync()
     } catch (error) {
       console.error('Error:', error)
     }
@@ -72,13 +76,13 @@ export default function Liquidaciones() {
     try {
       await api.patch(`/liquidaciones/${id}/pagar`)
       toast.success('Marcada como pagada')
-      cargarDatos()
+      cargarDatosAsync()
     } catch (error) {
       console.error('Error:', error)
     }
   }
 
-  if (loading) {
+  if (loading && liquidaciones.length === 0 && empleados.length === 0) {
     return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div></div>
   }
 
@@ -138,6 +142,7 @@ export default function Liquidaciones() {
                       onClick={() => marcarPagada(liq.id)}
                       className="text-green-600 hover:text-green-800"
                       title="Marcar como pagada"
+                      aria-label={`Marcar liquidación #${liq.id} como pagada`}
                     >
                       <CheckIcon className="w-5 h-5" />
                     </button>
@@ -156,8 +161,9 @@ export default function Liquidaciones() {
             <h2 className="text-xl font-bold mb-4">Nueva Liquidación</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="label">Empleado</label>
+                <label className="label" htmlFor="liquidacion-empleado">Empleado</label>
                 <select
+                  id="liquidacion-empleado"
                   className="input"
                   value={form.empleadoId}
                   onChange={(e) => setForm({ ...form, empleadoId: e.target.value })}
@@ -173,8 +179,9 @@ export default function Liquidaciones() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="label">Período Desde</label>
+                  <label className="label" htmlFor="liquidacion-desde">Período Desde</label>
                   <input
+                    id="liquidacion-desde"
                     type="date"
                     className="input"
                     value={form.periodoDesde}
@@ -183,8 +190,9 @@ export default function Liquidaciones() {
                   />
                 </div>
                 <div>
-                  <label className="label">Período Hasta</label>
+                  <label className="label" htmlFor="liquidacion-hasta">Período Hasta</label>
                   <input
+                    id="liquidacion-hasta"
                     type="date"
                     className="input"
                     value={form.periodoHasta}
@@ -195,8 +203,9 @@ export default function Liquidaciones() {
               </div>
 
               <div>
-                <label className="label">Horas trabajadas</label>
+                <label className="label" htmlFor="liquidacion-horas">Horas trabajadas</label>
                 <input
+                  id="liquidacion-horas"
                   type="number"
                   className="input"
                   placeholder="Ej: 160"
@@ -228,8 +237,9 @@ export default function Liquidaciones() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="label">Descuentos ($)</label>
+                  <label className="label" htmlFor="liquidacion-descuentos">Descuentos ($)</label>
                   <input
+                    id="liquidacion-descuentos"
                     type="number"
                     className="input"
                     value={form.descuentos}
@@ -237,8 +247,9 @@ export default function Liquidaciones() {
                   />
                 </div>
                 <div>
-                  <label className="label">Adicionales ($)</label>
+                  <label className="label" htmlFor="liquidacion-adicionales">Adicionales ($)</label>
                   <input
+                    id="liquidacion-adicionales"
                     type="number"
                     className="input"
                     value={form.adicionales}
@@ -248,8 +259,9 @@ export default function Liquidaciones() {
               </div>
 
               <div>
-                <label className="label">Observaciones</label>
+                <label className="label" htmlFor="liquidacion-observaciones">Observaciones</label>
                 <textarea
+                  id="liquidacion-observaciones"
                   className="input"
                   value={form.observaciones}
                   onChange={(e) => setForm({ ...form, observaciones: e.target.value })}

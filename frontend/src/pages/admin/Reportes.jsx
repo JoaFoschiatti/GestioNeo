@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import api from '../../services/api'
+import toast from 'react-hot-toast'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
+import { ChevronDownIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
+import useAsync from '../../hooks/useAsync'
 
-// Colores para los gráficos
+// Colores para los graficos
 const COLORS_METODO = {
   EFECTIVO: '#22c55e',      // verde
   MERCADOPAGO: '#06b6d4',   // celeste
@@ -16,47 +19,79 @@ const COLORS_TIPO = {
 }
 
 // Componente: Top 5 Productos con ranking visual
-const TopProductosRanking = ({ data }) => {
+const TopProductosRanking = ({ data, agrupadoPorBase }) => {
+  const [expandedItems, setExpandedItems] = useState({})
+
   if (!data || data.length === 0) {
     return <p className="text-gray-500 text-center py-4">Sin datos de productos</p>
   }
 
   const top5 = data.slice(0, 5)
   const maxVentas = Math.max(...top5.map(p => Number(p.totalVentas) || 0))
-  const medals = ['🥇', '🥈', '🥉', '4.', '5.']
+  const medals = ['1.', '2.', '3.', '4.', '5.']
   const colors = ['#FFD700', '#C0C0C0', '#CD7F32', '#9CA3AF', '#9CA3AF']
+
+  const toggleExpand = (index) => {
+    setExpandedItems(prev => ({ ...prev, [index]: !prev[index] }))
+  }
 
   return (
     <div className="space-y-4">
       {top5.map((prod, i) => (
-        <div key={i} className="flex items-center gap-3">
-          <span className="text-2xl w-10 text-center">{medals[i]}</span>
-          <div className="flex-1 min-w-0">
-            <div className="flex justify-between items-center mb-1">
-              <span className="font-medium text-gray-900 truncate pr-2">{prod.producto}</span>
-              <span className="text-xs text-gray-500 whitespace-nowrap">{prod.cantidadVendida} uds</span>
-            </div>
-            <div className="h-5 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{
-                  width: maxVentas > 0 ? `${(Number(prod.totalVentas) / maxVentas) * 100}%` : '0%',
-                  backgroundColor: colors[i]
-                }}
-              />
-            </div>
-            <div className="text-right text-sm font-bold text-green-600 mt-1">
-              ${Number(prod.totalVentas).toLocaleString('es-AR')}
+        <div key={i}>
+          <div className="flex items-center gap-3">
+            {agrupadoPorBase && prod.variantes && prod.variantes.length > 0 && (
+              <button
+                onClick={() => toggleExpand(i)}
+                type="button"
+                className="p-1 hover:bg-gray-100 rounded"
+                aria-label={`${expandedItems[i] ? 'Contraer' : 'Expandir'} variantes de ${prod.producto}`}
+              >
+                {expandedItems[i]
+                  ? <ChevronDownIcon className="w-4 h-4 text-gray-500" />
+                  : <ChevronRightIcon className="w-4 h-4 text-gray-500" />
+                }
+              </button>
+            )}
+            <span className="text-2xl w-10 text-center">{medals[i]}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex justify-between items-center mb-1">
+                <span className="font-medium text-gray-900 truncate pr-2">{prod.producto}</span>
+                <span className="text-xs text-gray-500 whitespace-nowrap">{prod.cantidadVendida} uds</span>
+              </div>
+              <div className="h-5 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: maxVentas > 0 ? `${(Number(prod.totalVentas) / maxVentas) * 100}%` : '0%',
+                    backgroundColor: colors[i]
+                  }}
+                />
+              </div>
+              <div className="text-right text-sm font-bold text-green-600 mt-1">
+                ${Number(prod.totalVentas).toLocaleString('es-AR')}
+              </div>
             </div>
           </div>
+          {/* Detalle de variantes */}
+          {agrupadoPorBase && prod.variantes && prod.variantes.length > 0 && expandedItems[i] && (
+            <div className="ml-16 mt-2 space-y-1">
+              {prod.variantes.map((v, vi) => (
+                <div key={vi} className="flex justify-between text-sm text-gray-600 bg-gray-50 px-3 py-1.5 rounded">
+                  <span>{v.nombreVariante || v.nombre}</span>
+                  <span>{v.cantidadVendida} uds - ${Number(v.totalVentas).toLocaleString('es-AR')}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ))}
     </div>
   )
 }
 
-// Componente: Donut Chart genérico
-const DonutChart = ({ data, colors, title, formatValue }) => {
+// Componente: Donut Chart generico
+const DonutChart = ({ data, colors, formatValue }) => {
   if (!data || data.length === 0) {
     return <p className="text-gray-500 text-center py-4">Sin datos</p>
   }
@@ -101,7 +136,7 @@ const DonutChart = ({ data, colors, title, formatValue }) => {
           <Legend
             verticalAlign="bottom"
             height={36}
-            formatter={(value, entry) => (
+            formatter={(value) => (
               <span className="text-sm text-gray-700">{value}</span>
             )}
           />
@@ -147,16 +182,126 @@ const VentasPorMozoRanking = ({ data }) => {
   )
 }
 
+// Componente: Consumo de Insumos
+const ConsumoInsumosTable = ({ data }) => {
+  const [expandedItems, setExpandedItems] = useState({})
+
+  if (!data || !data.ingredientes || data.ingredientes.length === 0) {
+    return <p className="text-gray-500 text-center py-4">Sin datos de consumo</p>
+  }
+
+  const toggleExpand = (id) => {
+    setExpandedItems(prev => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  return (
+    <div>
+      {/* Resumen */}
+      <div className="grid grid-cols-3 gap-4 mb-4">
+        <div className="bg-gray-50 p-3 rounded-lg text-center">
+          <p className="text-2xl font-bold text-gray-900">{data.resumen.totalIngredientes}</p>
+          <p className="text-xs text-gray-500">Ingredientes</p>
+        </div>
+        <div className="bg-red-50 p-3 rounded-lg text-center">
+          <p className="text-2xl font-bold text-red-600">{data.resumen.ingredientesBajoStock}</p>
+          <p className="text-xs text-gray-500">Bajo Stock</p>
+        </div>
+        <div className="bg-green-50 p-3 rounded-lg text-center">
+          <p className="text-lg font-bold text-green-600">
+            ${data.resumen.costoTotalEstimado?.toLocaleString('es-AR', { maximumFractionDigits: 0 }) || '-'}
+          </p>
+          <p className="text-xs text-gray-500">Costo Total</p>
+        </div>
+      </div>
+
+      {/* Tabla */}
+      <div className="border rounded-lg overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="text-left p-3 font-medium">Ingrediente</th>
+              <th className="text-right p-3 font-medium">Consumo</th>
+              <th className="text-right p-3 font-medium">Stock</th>
+              <th className="text-right p-3 font-medium">Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.ingredientes.slice(0, 10).map((ing) => (
+              <React.Fragment key={ing.ingredienteId}>
+                <tr className="border-t hover:bg-gray-50">
+                  <td className="p-3">
+                    <div className="flex items-center gap-2">
+                      {ing.detalleProductos && ing.detalleProductos.length > 0 && (
+                        <button
+                          onClick={() => toggleExpand(ing.ingredienteId)}
+                          type="button"
+                          className="p-0.5 hover:bg-gray-200 rounded"
+                          aria-label={`${expandedItems[ing.ingredienteId] ? 'Contraer' : 'Expandir'} detalle de ${ing.nombre}`}
+                        >
+                          {expandedItems[ing.ingredienteId]
+                            ? <ChevronDownIcon className="w-4 h-4 text-gray-500" />
+                            : <ChevronRightIcon className="w-4 h-4 text-gray-500" />
+                          }
+                        </button>
+                      )}
+                      <span className="font-medium">{ing.nombre}</span>
+                    </div>
+                  </td>
+                  <td className="p-3 text-right">
+                    {ing.consumoTotal.toFixed(2)} {ing.unidad}
+                  </td>
+                  <td className="p-3 text-right">
+                    {ing.stockActual.toFixed(2)} {ing.unidad}
+                  </td>
+                  <td className="p-3 text-right">
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                      ing.estado === 'BAJO' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                    }`}>
+                      {ing.estado}
+                    </span>
+                  </td>
+                </tr>
+                {/* Detalle de productos */}
+                {expandedItems[ing.ingredienteId] && ing.detalleProductos && (
+                  <tr>
+                    <td colSpan={4} className="bg-gray-50 px-6 py-2">
+                      <div className="text-xs space-y-1">
+                        {ing.detalleProductos.map((prod, pi) => (
+                          <div key={pi} className="flex justify-between text-gray-600">
+                            <span>
+                              {prod.producto}
+                              {prod.multiplicador !== 1 && (
+                                <span className="text-purple-600 ml-1">(x{prod.multiplicador})</span>
+                              )}
+                            </span>
+                            <span>{prod.cantidad} uds = {prod.consumo.toFixed(2)} {ing.unidad}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 export default function Reportes() {
   const [fechaDesde, setFechaDesde] = useState('')
   const [fechaHasta, setFechaHasta] = useState('')
   const [ventas, setVentas] = useState(null)
   const [productosMasVendidos, setProductosMasVendidos] = useState([])
   const [ventasPorMozo, setVentasPorMozo] = useState([])
-  const [loading, setLoading] = useState(false)
+  const [consumoInsumos, setConsumoInsumos] = useState(null)
+  const [agruparPorBase, setAgruparPorBase] = useState(false)
+  const [tabActiva, setTabActiva] = useState('ventas')
 
   useEffect(() => {
-    // Fechas por defecto: último mes
+    // Fechas por defecto: ultimo mes
     const hoy = new Date()
     const hace30Dias = new Date()
     hace30Dias.setDate(hace30Dias.getDate() - 30)
@@ -165,31 +310,70 @@ export default function Reportes() {
     setFechaDesde(hace30Dias.toISOString().split('T')[0])
   }, [])
 
+  const cargarReportes = useCallback(async () => {
+    // Cargar reportes en paralelo pero manejar errores individualmente
+    const results = await Promise.allSettled([
+      api.get(`/reportes/ventas?fechaDesde=${fechaDesde}&fechaHasta=${fechaHasta}`, { skipToast: true }),
+      api.get(`/reportes/productos-mas-vendidos?fechaDesde=${fechaDesde}&fechaHasta=${fechaHasta}&limite=10&agruparPorBase=${agruparPorBase}`, { skipToast: true }),
+      api.get(`/reportes/ventas-por-mozo?fechaDesde=${fechaDesde}&fechaHasta=${fechaHasta}`, { skipToast: true }),
+      api.get(`/reportes/consumo-insumos?fechaDesde=${fechaDesde}&fechaHasta=${fechaHasta}`, { skipToast: true })
+    ])
+
+    if (results[0].status === 'fulfilled') {
+      setVentas(results[0].value.data)
+    } else {
+      console.error('Error en ventas:', results[0].reason)
+    }
+
+    if (results[1].status === 'fulfilled') {
+      setProductosMasVendidos(results[1].value.data || [])
+    } else {
+      console.error('Error en productos:', results[1].reason)
+      setProductosMasVendidos([])
+    }
+
+    if (results[2].status === 'fulfilled') {
+      setVentasPorMozo(results[2].value.data || [])
+    } else {
+      console.error('Error en mozos:', results[2].reason)
+      setVentasPorMozo([])
+    }
+
+    if (results[3].status === 'fulfilled') {
+      setConsumoInsumos(results[3].value.data)
+    } else {
+      console.error('Error en consumo:', results[3].reason)
+      setConsumoInsumos({ resumen: { totalIngredientes: 0, ingredientesBajoStock: 0, costoTotalEstimado: 0 }, ingredientes: [] })
+    }
+
+    // Si todos fallaron, mostrar error
+    const allFailed = results.every(r => r.status === 'rejected')
+    if (allFailed) {
+      toast.error('Error al cargar reportes')
+    }
+  }, [agruparPorBase, fechaDesde, fechaHasta])
+
+  const handleLoadError = useCallback((error) => {
+    console.error('Error general:', error)
+    toast.error('Error al cargar reportes')
+  }, [])
+
+  const cargarReportesRequest = useCallback(async (_ctx) => (
+    cargarReportes()
+  ), [cargarReportes])
+
+  const { loading: loadingReportes, execute: cargarReportesAsync } = useAsync(
+    cargarReportesRequest,
+    { immediate: false, onError: handleLoadError }
+  )
+
   useEffect(() => {
     if (fechaDesde && fechaHasta) {
-      cargarReportes()
+      cargarReportesAsync()
     }
-  }, [fechaDesde, fechaHasta])
+  }, [fechaDesde, fechaHasta, cargarReportesAsync])
 
-  const cargarReportes = async () => {
-    setLoading(true)
-    try {
-      const [ventasRes, productosRes, mozosRes] = await Promise.all([
-        api.get(`/reportes/ventas?fechaDesde=${fechaDesde}&fechaHasta=${fechaHasta}`),
-        api.get(`/reportes/productos-mas-vendidos?fechaDesde=${fechaDesde}&fechaHasta=${fechaHasta}&limite=10`),
-        api.get(`/reportes/ventas-por-mozo?fechaDesde=${fechaDesde}&fechaHasta=${fechaHasta}`)
-      ])
-      setVentas(ventasRes.data)
-      setProductosMasVendidos(productosRes.data)
-      setVentasPorMozo(mozosRes.data)
-    } catch (error) {
-      console.error('Error:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Preparar datos para donut de métodos de pago
+  // Preparar datos para donut de metodos de pago
   const datosMetodosPago = ventas?.ventasPorMetodo
     ? Object.entries(ventas.ventasPorMetodo).map(([metodo, monto]) => ({
         name: metodo,
@@ -216,8 +400,9 @@ export default function Reportes() {
       <div className="card mb-6">
         <div className="flex flex-wrap gap-4 items-end">
           <div>
-            <label className="label">Desde</label>
+            <label className="label" htmlFor="reportes-fecha-desde">Desde</label>
             <input
+              id="reportes-fecha-desde"
               type="date"
               className="input"
               value={fechaDesde}
@@ -225,21 +410,38 @@ export default function Reportes() {
             />
           </div>
           <div>
-            <label className="label">Hasta</label>
+            <label className="label" htmlFor="reportes-fecha-hasta">Hasta</label>
             <input
+              id="reportes-fecha-hasta"
               type="date"
               className="input"
               value={fechaHasta}
               onChange={(e) => setFechaHasta(e.target.value)}
             />
           </div>
-          <button onClick={cargarReportes} className="btn btn-primary" disabled={loading}>
-            {loading ? 'Cargando...' : 'Actualizar'}
+          <button onClick={cargarReportesAsync} className="btn btn-primary" disabled={loadingReportes}>
+            {loadingReportes ? 'Cargando...' : 'Actualizar'}
           </button>
         </div>
       </div>
 
-      {ventas && (
+      {/* Tabs */}
+      <div className="flex gap-2 mb-6">
+        <button
+          onClick={() => setTabActiva('ventas')}
+          className={`px-4 py-2 rounded-lg font-medium ${tabActiva === 'ventas' ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600'}`}
+        >
+          Ventas
+        </button>
+        <button
+          onClick={() => setTabActiva('insumos')}
+          className={`px-4 py-2 rounded-lg font-medium ${tabActiva === 'insumos' ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600'}`}
+        >
+          Consumo de Insumos
+        </button>
+      </div>
+
+      {tabActiva === 'ventas' && ventas && (
         <>
           {/* Resumen de ventas - KPIs */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -272,18 +474,29 @@ export default function Reportes() {
             </div>
           </div>
 
-          {/* Fila 1: Top Productos + Métodos de Pago */}
+          {/* Fila 1: Top Productos + Metodos de Pago */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <div className="card">
-              <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <span className="text-xl">🏆</span>
-                Top 5 Productos por Ingresos
-              </h3>
-              <TopProductosRanking data={productosMasVendidos} />
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                  <span className="text-xl">1.</span>
+                  Top 5 Productos por Ingresos
+                </h3>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={agruparPorBase}
+                    onChange={(e) => setAgruparPorBase(e.target.checked)}
+                    className="rounded"
+                  />
+                  <span className="text-gray-600">Agrupar variantes</span>
+                </label>
+              </div>
+              <TopProductosRanking data={productosMasVendidos} agrupadoPorBase={agruparPorBase} />
             </div>
 
             <div className="card">
-              <h3 className="font-semibold text-gray-900 mb-4">Métodos de Pago</h3>
+              <h3 className="font-semibold text-gray-900 mb-4">Metodos de Pago</h3>
               {datosMetodosPago.length > 0 ? (
                 <DonutChart
                   data={datosMetodosPago}
@@ -313,13 +526,24 @@ export default function Reportes() {
 
             <div className="card">
               <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <span className="text-xl">👤</span>
+                <span className="text-xl">2.</span>
                 Ventas por Mozo
               </h3>
               <VentasPorMozoRanking data={ventasPorMozo} />
             </div>
           </div>
         </>
+      )}
+
+      {tabActiva === 'insumos' && (
+        <div className="card">
+          <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <span className="text-xl">3.</span>
+            Consumo de Insumos
+            <span className="text-sm font-normal text-gray-500">(con multiplicadores de variantes)</span>
+          </h3>
+          <ConsumoInsumosTable data={consumoInsumos} />
+        </div>
       )}
     </div>
   )

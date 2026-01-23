@@ -1,158 +1,76 @@
-const { prisma } = require('../db/prisma');
-const path = require('path');
-const fs = require('fs');
+const { prisma: basePrisma } = require('../db/prisma');
+const configuracionService = require('../services/configuracion.service');
+const { createHttpError } = require('../utils/http-error');
+const { getPrisma } = require('../utils/get-prisma');
 
 // Obtener configuración pública (sin auth) - DEPRECATED, usar /api/publico/:slug/config
 const obtenerPublica = async (req, res) => {
-  try {
-    // Para backwards compatibility, usar tenant por defecto
-    const tenantId = req.tenantId || 1;
+  // Para backwards compatibility, usar tenant por defecto
+  const prisma = getPrisma(req);
+  const tenantId = req.tenantId || 1;
 
-    const configs = await prisma.configuracion.findMany({
-      where: { tenantId }
-    });
+  const configs = await prisma.configuracion.findMany({
+    where: { tenantId }
+  });
 
-    // Convertir a objeto
-    const configObj = {};
-    configs.forEach(c => {
-      // Convertir strings a tipos apropiados
-      if (c.valor === 'true') configObj[c.clave] = true;
-      else if (c.valor === 'false') configObj[c.clave] = false;
-      else if (!isNaN(c.valor) && c.valor !== '') configObj[c.clave] = parseFloat(c.valor);
-      else configObj[c.clave] = c.valor;
-    });
+  // Convertir a objeto
+  const configObj = {};
+  configs.forEach(c => {
+    // Convertir strings a tipos apropiados
+    if (c.valor === 'true') configObj[c.clave] = true;
+    else if (c.valor === 'false') configObj[c.clave] = false;
+    else if (!isNaN(c.valor) && c.valor !== '') configObj[c.clave] = parseFloat(c.valor);
+    else configObj[c.clave] = c.valor;
+  });
 
-    // Valores por defecto si no existen
-    const defaults = {
-      tienda_abierta: true,
-      horario_apertura: '11:00',
-      horario_cierre: '23:00',
-      nombre_negocio: 'Nuestro Restaurante',
-      tagline_negocio: 'Los mejores sabores',
-      costo_delivery: 0,
-      delivery_habilitado: true,
-      direccion_retiro: '',
-      mercadopago_enabled: false,
-      efectivo_enabled: true
-    };
+  // Valores por defecto si no existen
+  const defaults = {
+    tienda_abierta: true,
+    horario_apertura: '11:00',
+    horario_cierre: '23:00',
+    nombre_negocio: 'Nuestro Restaurante',
+    tagline_negocio: 'Los mejores sabores',
+    costo_delivery: 0,
+    delivery_habilitado: true,
+    direccion_retiro: '',
+    mercadopago_enabled: false,
+    efectivo_enabled: true
+  };
 
-    res.json({ ...defaults, ...configObj });
-  } catch (error) {
-    console.error('Error al obtener configuración pública:', error);
-    res.status(500).json({ error: { message: 'Error al obtener configuración' } });
-  }
+  res.json({ ...defaults, ...configObj });
 };
 
 // Obtener todas las configuraciones (admin)
 const obtenerTodas = async (req, res) => {
-  try {
-    const tenantId = req.tenantId;
-
-    if (!tenantId) {
-      return res.status(400).json({ error: { message: 'Tenant no identificado' } });
-    }
-
-    const configs = await prisma.configuracion.findMany({
-      where: { tenantId }
-    });
-
-    // Convertir a objeto
-    const configObj = {};
-    configs.forEach(c => {
-      configObj[c.clave] = c.valor;
-    });
-
-    res.json(configObj);
-  } catch (error) {
-    console.error('Error al obtener configuraciones:', error);
-    res.status(500).json({ error: { message: 'Error al obtener configuraciones' } });
-  }
+  const prisma = getPrisma(req);
+  const config = await configuracionService.obtenerTodas(prisma, req.tenantId);
+  res.json(config);
 };
 
 // Actualizar una configuración
 const actualizar = async (req, res) => {
-  try {
-    const tenantId = req.tenantId;
-    const { clave } = req.params;
-    const { valor } = req.body;
+  const prisma = getPrisma(req);
 
-    if (!tenantId) {
-      return res.status(400).json({ error: { message: 'Tenant no identificado' } });
-    }
-
-    const config = await prisma.configuracion.upsert({
-      where: {
-        tenantId_clave: { tenantId, clave }
-      },
-      update: { valor: String(valor) },
-      create: { tenantId, clave, valor: String(valor) }
-    });
-
-    res.json(config);
-  } catch (error) {
-    console.error('Error al actualizar configuración:', error);
-    res.status(500).json({ error: { message: 'Error al actualizar configuración' } });
+  if (!req.params.clave) {
+    throw createHttpError.badRequest('Clave requerida');
   }
+
+  const config = await configuracionService.actualizar(prisma, req.tenantId, req.params.clave, req.body.valor);
+  res.json(config);
 };
 
 // Actualizar múltiples configuraciones
 const actualizarBulk = async (req, res) => {
-  try {
-    const tenantId = req.tenantId;
-    const configs = req.body;
-
-    if (!tenantId) {
-      return res.status(400).json({ error: { message: 'Tenant no identificado' } });
-    }
-
-    const updates = await Promise.all(
-      Object.entries(configs).map(([clave, valor]) =>
-        prisma.configuracion.upsert({
-          where: {
-            tenantId_clave: { tenantId, clave }
-          },
-          update: { valor: String(valor) },
-          create: { tenantId, clave, valor: String(valor) }
-        })
-      )
-    );
-
-    res.json({ message: 'Configuraciones actualizadas', count: updates.length });
-  } catch (error) {
-    console.error('Error al actualizar configuraciones:', error);
-    res.status(500).json({ error: { message: 'Error al actualizar configuraciones' } });
-  }
+  const prisma = getPrisma(req);
+  const result = await configuracionService.actualizarBulk(prisma, req.tenantId, req.body);
+  res.json(result);
 };
 
 // Subir banner
 const subirBanner = async (req, res) => {
-  try {
-    const tenantId = req.tenantId;
-
-    if (!tenantId) {
-      return res.status(400).json({ error: { message: 'Tenant no identificado' } });
-    }
-
-    if (!req.file) {
-      return res.status(400).json({ error: { message: 'No se subió ninguna imagen' } });
-    }
-
-    const bannerUrl = `/uploads/${req.file.filename}`;
-
-    // Guardar en configuración
-    await prisma.configuracion.upsert({
-      where: {
-        tenantId_clave: { tenantId, clave: 'banner_imagen' }
-      },
-      update: { valor: bannerUrl },
-      create: { tenantId, clave: 'banner_imagen', valor: bannerUrl }
-    });
-
-    res.json({ url: bannerUrl, message: 'Banner subido correctamente' });
-  } catch (error) {
-    console.error('Error al subir banner:', error);
-    res.status(500).json({ error: { message: 'Error al subir banner' } });
-  }
+  const prisma = getPrisma(req);
+  const result = await configuracionService.subirBanner(prisma, req.tenantId, req.file);
+  res.json(result);
 };
 
 // Semilla de configuraciones iniciales para un tenant
@@ -172,7 +90,7 @@ const seedConfiguraciones = async (tenantId = 1) => {
   ];
 
   for (const config of defaults) {
-    await prisma.configuracion.upsert({
+    await basePrisma.configuracion.upsert({
       where: {
         tenantId_clave: { tenantId, clave: config.clave }
       },

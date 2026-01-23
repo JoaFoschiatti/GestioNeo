@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import api from '../../services/api'
 import {
   Cog6ToothIcon,
@@ -14,6 +14,8 @@ import {
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline'
 import MercadoPagoConfig from '../../components/configuracion/MercadoPagoConfig'
+import useTimeout from '../../hooks/useTimeout'
+import useAsync from '../../hooks/useAsync'
 
 export default function Configuracion() {
   // Estado del tenant (datos del negocio)
@@ -45,55 +47,64 @@ export default function Configuracion() {
     efectivo_enabled: true,
     whatsapp_numero: ''
   })
-  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploadingBanner, setUploadingBanner] = useState(false)
   const [message, setMessage] = useState(null)
+  const { set: setMessageTimeout } = useTimeout()
 
-  useEffect(() => {
-    cargarDatos()
+  const mostrarMensaje = useCallback((texto, tipo = 'success') => {
+    setMessage({ texto, tipo })
+    setMessageTimeout(() => setMessage(null), 3000)
+  }, [setMessageTimeout])
+
+  const cargarDatos = useCallback(async () => {
+    // Cargar tenant y configuracion en paralelo
+    const [tenantRes, configRes] = await Promise.all([
+      api.get('/tenant', { skipToast: true }),
+      api.get('/configuracion', { skipToast: true })
+    ])
+
+    // Procesar tenant
+    setTenant({
+      slug: tenantRes.data.slug || '',
+      nombre: tenantRes.data.nombre || '',
+      email: tenantRes.data.email || '',
+      telefono: tenantRes.data.telefono || '',
+      direccion: tenantRes.data.direccion || '',
+      colorPrimario: tenantRes.data.colorPrimario || '#3B82F6',
+      colorSecundario: tenantRes.data.colorSecundario || '#1E40AF'
+    })
+
+    // Procesar configuracion
+    const configData = {}
+    Object.entries(configRes.data).forEach(([key, value]) => {
+      if (value === 'true') configData[key] = true
+      else if (value === 'false') configData[key] = false
+      else if (!isNaN(value) && value !== '') configData[key] = parseFloat(value)
+      else configData[key] = value
+    })
+    setConfig(prev => ({ ...prev, ...configData }))
   }, [])
 
-  const cargarDatos = async () => {
-    try {
-      // Cargar tenant y configuracion en paralelo
-      const [tenantRes, configRes] = await Promise.all([
-        api.get('/tenant'),
-        api.get('/configuracion')
-      ])
+  const handleLoadError = useCallback((error) => {
+    console.error('Error al cargar datos:', error)
+    mostrarMensaje('Error al cargar configuracion', 'error')
+  }, [mostrarMensaje])
 
-      // Procesar tenant
-      setTenant({
-        slug: tenantRes.data.slug || '',
-        nombre: tenantRes.data.nombre || '',
-        email: tenantRes.data.email || '',
-        telefono: tenantRes.data.telefono || '',
-        direccion: tenantRes.data.direccion || '',
-        colorPrimario: tenantRes.data.colorPrimario || '#3B82F6',
-        colorSecundario: tenantRes.data.colorSecundario || '#1E40AF'
-      })
+  const cargarDatosRequest = useCallback(async (_ctx) => (
+    cargarDatos()
+  ), [cargarDatos])
 
-      // Procesar configuracion
-      const configData = {}
-      Object.entries(configRes.data).forEach(([key, value]) => {
-        if (value === 'true') configData[key] = true
-        else if (value === 'false') configData[key] = false
-        else if (!isNaN(value) && value !== '') configData[key] = parseFloat(value)
-        else configData[key] = value
-      })
-      setConfig(prev => ({ ...prev, ...configData }))
-    } catch (error) {
-      console.error('Error al cargar datos:', error)
-      mostrarMensaje('Error al cargar configuracion', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const { loading, execute: cargarDatosAsync } = useAsync(
+    cargarDatosRequest,
+    { immediate: false, onError: handleLoadError }
+  )
 
-  const mostrarMensaje = (texto, tipo = 'success') => {
-    setMessage({ texto, tipo })
-    setTimeout(() => setMessage(null), 3000)
-  }
+  useEffect(() => {
+    cargarDatosAsync()
+      .catch(() => {})
+  }, [cargarDatosAsync])
+
 
   // Funciones de tenant
   const handleTenantChange = (key, value) => {
@@ -122,7 +133,7 @@ export default function Configuracion() {
 
     setSlugChecking(true)
     try {
-      const response = await api.get(`/tenant/verificar-slug/${slug}`)
+      const response = await api.get(`/tenant/verificar-slug/${slug}`, { skipToast: true })
       if (!response.data.disponible) {
         setSlugError(response.data.error || 'Este slug no esta disponible')
       } else {
@@ -151,7 +162,7 @@ export default function Configuracion() {
 
     setSavingTenant(true)
     try {
-      const response = await api.put('/tenant', tenant)
+      const response = await api.put('/tenant', tenant, { skipToast: true })
       setTenant(prev => ({ ...prev, ...response.data.tenant }))
 
       if (response.data.slugChanged) {
@@ -171,7 +182,7 @@ export default function Configuracion() {
   const guardarConfiguracion = async () => {
     setSaving(true)
     try {
-      await api.put('/configuracion', config)
+      await api.put('/configuracion', config, { skipToast: true })
       mostrarMensaje('Configuracion guardada correctamente')
     } catch (error) {
       console.error('Error al guardar:', error)
@@ -195,7 +206,8 @@ export default function Configuracion() {
     setUploadingBanner(true)
     try {
       const response = await api.post('/configuracion/banner', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' },
+        skipToast: true
       })
       setConfig(prev => ({ ...prev, banner_imagen: response.data.url }))
       mostrarMensaje('Banner subido correctamente')
@@ -212,7 +224,7 @@ export default function Configuracion() {
     handleChange('tienda_abierta', nuevoEstado)
 
     try {
-      await api.put('/configuracion/tienda_abierta', { valor: nuevoEstado })
+      await api.put('/configuracion/tienda_abierta', { valor: nuevoEstado }, { skipToast: true })
       mostrarMensaje(nuevoEstado ? 'Tienda ABIERTA' : 'Tienda CERRADA')
     } catch (error) {
       console.error('Error al cambiar estado:', error)
@@ -264,10 +276,11 @@ export default function Configuracion() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="tenant-nombre">
                 Nombre del Negocio *
               </label>
               <input
+                id="tenant-nombre"
                 type="text"
                 value={tenant.nombre}
                 onChange={(e) => handleTenantChange('nombre', e.target.value)}
@@ -277,7 +290,7 @@ export default function Configuracion() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="tenant-slug">
                 URL del Menu (slug) *
               </label>
               <div className="flex">
@@ -285,6 +298,7 @@ export default function Configuracion() {
                   {frontendUrl}/menu/
                 </span>
                 <input
+                  id="tenant-slug"
                   type="text"
                   value={tenant.slug}
                   onChange={(e) => handleTenantChange('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
@@ -313,10 +327,11 @@ export default function Configuracion() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="tenant-email">
                 Email de Contacto
               </label>
               <input
+                id="tenant-email"
                 type="email"
                 value={tenant.email}
                 onChange={(e) => handleTenantChange('email', e.target.value)}
@@ -326,10 +341,11 @@ export default function Configuracion() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="tenant-telefono">
                 Telefono
               </label>
               <input
+                id="tenant-telefono"
                 type="text"
                 value={tenant.telefono}
                 onChange={(e) => handleTenantChange('telefono', e.target.value)}
@@ -340,10 +356,11 @@ export default function Configuracion() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="tenant-direccion">
               Direccion
             </label>
             <input
+              id="tenant-direccion"
               type="text"
               value={tenant.direccion}
               onChange={(e) => handleTenantChange('direccion', e.target.value)}
@@ -354,7 +371,7 @@ export default function Configuracion() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="tenant-color-primario">
                 Color Primario
               </label>
               <div className="flex items-center gap-2">
@@ -363,8 +380,10 @@ export default function Configuracion() {
                   value={tenant.colorPrimario}
                   onChange={(e) => handleTenantChange('colorPrimario', e.target.value)}
                   className="w-12 h-10 rounded border cursor-pointer"
+                  aria-label="Seleccionar color primario"
                 />
                 <input
+                  id="tenant-color-primario"
                   type="text"
                   value={tenant.colorPrimario}
                   onChange={(e) => handleTenantChange('colorPrimario', e.target.value)}
@@ -375,7 +394,7 @@ export default function Configuracion() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="tenant-color-secundario">
                 Color Secundario
               </label>
               <div className="flex items-center gap-2">
@@ -384,8 +403,10 @@ export default function Configuracion() {
                   value={tenant.colorSecundario}
                   onChange={(e) => handleTenantChange('colorSecundario', e.target.value)}
                   className="w-12 h-10 rounded border cursor-pointer"
+                  aria-label="Seleccionar color secundario"
                 />
                 <input
+                  id="tenant-color-secundario"
                   type="text"
                   value={tenant.colorSecundario}
                   onChange={(e) => handleTenantChange('colorSecundario', e.target.value)}
@@ -449,10 +470,11 @@ export default function Configuracion() {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="config-horario-apertura">
               Horario de Apertura
             </label>
             <input
+              id="config-horario-apertura"
               type="time"
               value={config.horario_apertura}
               onChange={(e) => handleChange('horario_apertura', e.target.value)}
@@ -460,10 +482,11 @@ export default function Configuracion() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="config-horario-cierre">
               Horario de Cierre
             </label>
             <input
+              id="config-horario-cierre"
               type="time"
               value={config.horario_cierre}
               onChange={(e) => handleChange('horario_cierre', e.target.value)}
@@ -482,10 +505,11 @@ export default function Configuracion() {
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="config-nombre-negocio">
               Nombre para mostrar en el Menu
             </label>
             <input
+              id="config-nombre-negocio"
               type="text"
               value={config.nombre_negocio}
               onChange={(e) => handleChange('nombre_negocio', e.target.value)}
@@ -498,10 +522,11 @@ export default function Configuracion() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="config-tagline">
               Tagline / Slogan
             </label>
             <input
+              id="config-tagline"
               type="text"
               value={config.tagline_negocio}
               onChange={(e) => handleChange('tagline_negocio', e.target.value)}
@@ -511,12 +536,13 @@ export default function Configuracion() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="config-banner">
               Banner del Menu Publico
             </label>
             <div className="flex items-center gap-4">
-              <label className="cursor-pointer">
+              <label className="cursor-pointer" htmlFor="config-banner">
                 <input
+                  id="config-banner"
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
                   onChange={handleBannerUpload}
@@ -569,10 +595,11 @@ export default function Configuracion() {
           </label>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="config-costo-delivery">
               Costo de Envio ($)
             </label>
             <input
+              id="config-costo-delivery"
               type="number"
               value={config.costo_delivery || ''}
               onChange={(e) => handleChange('costo_delivery', parseFloat(e.target.value) || 0)}
@@ -583,10 +610,11 @@ export default function Configuracion() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="config-direccion-retiro">
               Direccion para Retiro
             </label>
             <input
+              id="config-direccion-retiro"
               type="text"
               value={config.direccion_retiro}
               onChange={(e) => handleChange('direccion_retiro', e.target.value)}
@@ -596,10 +624,11 @@ export default function Configuracion() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="config-whatsapp">
               WhatsApp (opcional)
             </label>
             <input
+              id="config-whatsapp"
               type="text"
               value={config.whatsapp_numero}
               onChange={(e) => handleChange('whatsapp_numero', e.target.value)}

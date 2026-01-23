@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
-import { createEventSource } from '../../services/eventos'
+import useEventSource from '../../hooks/useEventSource'
+import useAsync from '../../hooks/useAsync'
 import {
   CurrencyDollarIcon,
   ShoppingCartIcon,
@@ -14,52 +15,62 @@ import {
 
 export default function Dashboard() {
   const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState(null)
 
-  useEffect(() => {
-    cargarDashboard()
-
-    // Escuchar eventos de productos agotados/disponibles
-    const source = createEventSource()
-    if (source) {
-      source.addEventListener('producto.agotado', (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          toast.error(`⚠️ Producto agotado: ${data.nombre}`, { duration: 5000 })
-          cargarDashboard() // Recargar para actualizar alertas
-        } catch (e) {
-          console.error('Error parsing producto.agotado event:', e)
-        }
-      })
-
-      source.addEventListener('producto.disponible', (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          toast.success(`✓ Producto disponible: ${data.nombre}`, { duration: 4000 })
-          cargarDashboard()
-        } catch (e) {
-          console.error('Error parsing producto.disponible event:', e)
-        }
-      })
-    }
-
-    return () => {
-      if (source) source.close()
-    }
+  const cargarDashboard = useCallback(async () => {
+    const response = await api.get('/reportes/dashboard', { skipToast: true })
+    setData(response.data)
+    setErrorMessage(null)
+    return response.data
   }, [])
 
-  const cargarDashboard = async () => {
-    try {
-      const response = await api.get('/reportes/dashboard')
-      setData(response.data)
-    } catch (error) {
-      console.error('Error al cargar dashboard:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const handleLoadError = useCallback((error) => {
+    console.error('Error al cargar dashboard:', error)
+    setErrorMessage(error.response?.data?.error?.message || 'Error al cargar dashboard')
+  }, [])
 
-  if (loading) {
+  const cargarDashboardRequest = useCallback(async (_ctx) => (
+    cargarDashboard()
+  ), [cargarDashboard])
+
+  const { loading, execute: cargarDashboardAsync } = useAsync(
+    cargarDashboardRequest,
+    { immediate: false, onError: handleLoadError }
+  )
+
+  const handleProductoAgotado = useCallback((event) => {
+    try {
+      const data = JSON.parse(event.data)
+      toast.error(`⚠️ Producto agotado: ${data.nombre}`, { duration: 5000 })
+      cargarDashboardAsync().catch(() => {}) // Recargar para actualizar alertas
+    } catch (e) {
+      console.error('Error parsing producto.agotado event:', e)
+    }
+  }, [cargarDashboardAsync])
+
+  const handleProductoDisponible = useCallback((event) => {
+    try {
+      const data = JSON.parse(event.data)
+      toast.success(`✓ Producto disponible: ${data.nombre}`, { duration: 4000 })
+      cargarDashboardAsync().catch(() => {})
+    } catch (e) {
+      console.error('Error parsing producto.disponible event:', e)
+    }
+  }, [cargarDashboardAsync])
+
+  useEffect(() => {
+    cargarDashboardAsync()
+      .catch(() => {})
+  }, [cargarDashboardAsync])
+
+  useEventSource({
+    events: {
+      'producto.agotado': handleProductoAgotado,
+      'producto.disponible': handleProductoDisponible
+    }
+  })
+
+  if (loading && !data) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
@@ -112,6 +123,22 @@ export default function Dashboard() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Dashboard</h1>
+
+      {errorMessage && (
+        <div className="card mb-6 border border-red-200 bg-red-50 text-red-700 flex items-center justify-between">
+          <span>{errorMessage}</span>
+          <button
+            type="button"
+            onClick={() => {
+              cargarDashboardAsync()
+                .catch(() => {})
+            }}
+            className="btn btn-secondary"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {stats.map((stat) => {

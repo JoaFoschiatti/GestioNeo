@@ -5,6 +5,14 @@ const path = require('path');
 const configuracionController = require('../controllers/configuracion.controller');
 const { verificarToken, verificarRol } = require('../middlewares/auth.middleware');
 const { setTenantFromAuth } = require('../middlewares/tenant.middleware');
+const { validate } = require('../middlewares/validate.middleware');
+const { asyncHandler } = require('../utils/async-handler');
+const { createHttpError } = require('../utils/http-error');
+const {
+  claveParamSchema,
+  actualizarBodySchema,
+  actualizarBulkBodySchema
+} = require('../schemas/configuracion.schemas');
 
 // Configurar multer para subir banner
 const storage = multer.diskStorage({
@@ -27,15 +35,19 @@ const upload = multer({
     if (extname && mimetype) {
       cb(null, true);
     } else {
-      cb(new Error('Solo se permiten imágenes (jpg, jpeg, png, webp)'));
+      cb(createHttpError.badRequest('Solo se permiten imágenes (jpg, jpeg, png, webp)'));
     }
   }
 });
 
 // Rutas (todas requieren rol ADMIN + tenant context)
-router.get('/', verificarToken, setTenantFromAuth, verificarRol('ADMIN'), configuracionController.obtenerTodas);
-router.put('/:clave', verificarToken, setTenantFromAuth, verificarRol('ADMIN'), configuracionController.actualizar);
-router.put('/', verificarToken, setTenantFromAuth, verificarRol('ADMIN'), configuracionController.actualizarBulk);
-router.post('/banner', verificarToken, setTenantFromAuth, verificarRol('ADMIN'), upload.single('banner'), configuracionController.subirBanner);
+router.use(verificarToken);
+router.use(setTenantFromAuth);
+router.use(verificarRol('ADMIN'));
+
+router.get('/', asyncHandler(configuracionController.obtenerTodas));
+router.put('/:clave', validate({ params: claveParamSchema, body: actualizarBodySchema }), asyncHandler(configuracionController.actualizar));
+router.put('/', validate({ body: actualizarBulkBodySchema }), asyncHandler(configuracionController.actualizarBulk));
+router.post('/banner', upload.single('banner'), asyncHandler(configuracionController.subirBanner));
 
 module.exports = router;

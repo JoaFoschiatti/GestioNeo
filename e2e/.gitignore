@@ -1,0 +1,4 @@
+.e2e-test-data.json
+node_modules/
+test-results/
+playwright-report/

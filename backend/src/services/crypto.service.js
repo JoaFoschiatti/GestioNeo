@@ -7,7 +7,6 @@ const crypto = require('crypto');
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
-const AUTH_TAG_LENGTH = 16;
 
 /**
  * Obtiene la clave de encriptación del entorno
@@ -20,7 +19,7 @@ function getEncryptionKey() {
     throw new Error('ENCRYPTION_KEY no está configurada en las variables de entorno');
   }
 
-  if (key.length !== 64) {
+  if (!isValidEncryptionKey(key)) {
     throw new Error('ENCRYPTION_KEY debe ser de 64 caracteres hexadecimales (32 bytes)');
   }
 

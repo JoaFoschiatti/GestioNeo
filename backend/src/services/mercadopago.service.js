@@ -5,7 +5,61 @@
 
 const { MercadoPagoConfig, Preference, Payment } = require('mercadopago');
 const { prisma } = require('../db/prisma');
-const { decrypt } = require('./crypto.service');
+const { decrypt, encrypt } = require('./crypto.service');
+
+const refreshOAuthToken = async (tenantId, config) => {
+  if (!config?.refreshToken) {
+    return null;
+  }
+
+  if (!process.env.MP_APP_ID || !process.env.MP_APP_SECRET) {
+    console.warn('MercadoPago OAuth no configurado para refresco de token');
+    return null;
+  }
+
+  let refreshToken;
+  try {
+    refreshToken = decrypt(config.refreshToken);
+  } catch (error) {
+    console.error(`Error al desencriptar refresh token de MP para tenant ${tenantId}:`, error);
+    return null;
+  }
+
+  const tokenResponse = await fetch('https://api.mercadopago.com/oauth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      client_id: process.env.MP_APP_ID,
+      client_secret: process.env.MP_APP_SECRET,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken
+    })
+  });
+
+  const tokenData = await tokenResponse.json().catch(() => ({}));
+
+  if (!tokenResponse.ok || tokenData.error) {
+    console.warn('Error al refrescar token de MP:', tokenData);
+    return null;
+  }
+
+  const expiresAt = tokenData.expires_in
+    ? new Date(Date.now() + tokenData.expires_in * 1000)
+    : null;
+
+  await prisma.mercadoPagoConfig.update({
+    where: { tenantId },
+    data: {
+      accessToken: encrypt(tokenData.access_token),
+      refreshToken: tokenData.refresh_token ? encrypt(tokenData.refresh_token) : config.refreshToken,
+      expiresAt,
+      isActive: true,
+      updatedAt: new Date()
+    }
+  });
+
+  return tokenData.access_token;
+};
 
 /**
  * Obtiene un cliente de MercadoPago configurado para un tenant específico
@@ -23,9 +77,12 @@ async function getMercadoPagoClient(tenantId) {
 
   // Verificar si el token expiró (para OAuth)
   if (config.isOAuth && config.expiresAt && new Date() > config.expiresAt) {
-    // TODO: Implementar refresh de token
-    console.warn(`Token de MercadoPago expirado para tenant ${tenantId}`);
-    return null;
+    const refreshedToken = await refreshOAuthToken(tenantId, config);
+    if (!refreshedToken) {
+      console.warn(`Token de MercadoPago expirado para tenant ${tenantId}`);
+      return null;
+    }
+    return new MercadoPagoConfig({ accessToken: refreshedToken });
   }
 
   try {

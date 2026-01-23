@@ -13,6 +13,7 @@ api.interceptors.response.use(
   response => response,
   error => {
     const message = error.response?.data?.error?.message || 'Error de conexión'
+    const skipToast = Boolean(error.config?.skipToast)
 
     // Si es error 401 y no es la ruta de login, redirigir
     if (error.response?.status === 401 && !error.config.url.includes('/auth/login')) {
@@ -23,7 +24,9 @@ api.interceptors.response.use(
     }
 
     // Mostrar toast de error
-    toast.error(message)
+    if (!skipToast) {
+      toast.error(message)
+    }
 
     return Promise.reject(error)
   }

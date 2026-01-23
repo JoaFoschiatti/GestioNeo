@@ -7,6 +7,7 @@
  */
 
 const { prisma, getTenantPrisma, getTenantBySlug } = require('../db/prisma');
+const { createHttpError } = require('../utils/http-error');
 
 /**
  * Middleware to resolve tenant from URL slug (for public routes)
@@ -144,9 +145,45 @@ const optionalTenantFromSlug = async (req, res, next) => {
   }
 };
 
+/**
+ * Middleware to require tenant context from header (e.g., bridge)
+ * Header: x-tenant-slug
+ */
+const setTenantFromSlugHeader = async (req, _res, next) => {
+  try {
+    const rawSlug = req.headers['x-tenant-slug'];
+    const slug = typeof rawSlug === 'string' ? rawSlug.trim() : null;
+
+    if (!slug) {
+      throw createHttpError.badRequest('Slug de restaurante requerido');
+    }
+
+    const tenant = await getTenantBySlug(slug);
+
+    if (!tenant) {
+      throw createHttpError.notFound('Restaurante no encontrado');
+    }
+
+    if (!tenant.activo) {
+      throw createHttpError.forbidden('Este restaurante no está activo');
+    }
+
+    req.tenantId = tenant.id;
+    req.tenantSlug = tenant.slug;
+    req.tenant = tenant;
+    req.isSuperAdmin = false;
+    req.prisma = getTenantPrisma(tenant.id);
+
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+};
+
 module.exports = {
   resolveTenantFromSlug,
   setTenantFromAuth,
   requireSuperAdmin,
-  optionalTenantFromSlug
+  optionalTenantFromSlug,
+  setTenantFromSlugHeader
 };

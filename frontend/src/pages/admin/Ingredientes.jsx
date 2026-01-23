@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { PlusIcon, PencilIcon, ArrowUpIcon, ArrowDownIcon } from '@heroicons/react/24/outline'
+import useAsync from '../../hooks/useAsync'
 
 export default function Ingredientes() {
   const [ingredientes, setIngredientes] = useState([])
-  const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [showMovModal, setShowMovModal] = useState(false)
   const [editando, setEditando] = useState(null)
@@ -13,20 +13,24 @@ export default function Ingredientes() {
   const [form, setForm] = useState({ nombre: '', unidad: '', stockActual: '', stockMinimo: '', costo: '' })
   const [movForm, setMovForm] = useState({ tipo: 'ENTRADA', cantidad: '', motivo: '' })
 
-  useEffect(() => {
-    cargarIngredientes()
+  const cargarIngredientes = useCallback(async () => {
+    const response = await api.get('/ingredientes')
+    setIngredientes(response.data)
+    return response.data
   }, [])
 
-  const cargarIngredientes = async () => {
-    try {
-      const response = await api.get('/ingredientes')
-      setIngredientes(response.data)
-    } catch (error) {
-      console.error('Error:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const handleLoadError = useCallback((error) => {
+    console.error('Error:', error)
+  }, [])
+
+  const cargarIngredientesRequest = useCallback(async (_ctx) => (
+    cargarIngredientes()
+  ), [cargarIngredientes])
+
+  const { loading, execute: cargarIngredientesAsync } = useAsync(
+    cargarIngredientesRequest,
+    { onError: handleLoadError }
+  )
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -46,7 +50,7 @@ export default function Ingredientes() {
       }
       setShowModal(false)
       resetForm()
-      cargarIngredientes()
+      cargarIngredientesAsync()
     } catch (error) {
       console.error('Error:', error)
     }
@@ -63,7 +67,7 @@ export default function Ingredientes() {
       toast.success('Movimiento registrado')
       setShowMovModal(false)
       setMovForm({ tipo: 'ENTRADA', cantidad: '', motivo: '' })
-      cargarIngredientes()
+      cargarIngredientesAsync()
     } catch (error) {
       console.error('Error:', error)
     }
@@ -93,7 +97,7 @@ export default function Ingredientes() {
 
   const stockBajo = (ing) => parseFloat(ing.stockActual) <= parseFloat(ing.stockMinimo)
 
-  if (loading) {
+  if (loading && ingredientes.length === 0) {
     return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div></div>
   }
 
@@ -142,19 +146,24 @@ export default function Ingredientes() {
                     {stockBajo(ing) ? 'Stock Bajo' : 'OK'}
                   </span>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right space-x-2">
-                  <button
-                    onClick={() => abrirMovimiento(ing)}
-                    className="text-green-600 hover:text-green-800"
-                    title="Registrar movimiento"
-                  >
+	                <td className="px-6 py-4 whitespace-nowrap text-right space-x-2">
+	                  <button
+	                    aria-label={`Movimiento de stock: ${ing.nombre}`}
+	                    onClick={() => abrirMovimiento(ing)}
+	                    className="text-green-600 hover:text-green-800"
+	                    title="Registrar movimiento"
+	                  >
                     <ArrowUpIcon className="w-5 h-5 inline" />
                     <ArrowDownIcon className="w-5 h-5 inline" />
                   </button>
-                  <button onClick={() => handleEdit(ing)} className="text-primary-600 hover:text-primary-800">
-                    <PencilIcon className="w-5 h-5" />
-                  </button>
-                </td>
+	                  <button
+	                    aria-label={`Editar ingrediente: ${ing.nombre}`}
+	                    onClick={() => handleEdit(ing)}
+	                    className="text-primary-600 hover:text-primary-800"
+	                  >
+	                    <PencilIcon className="w-5 h-5" />
+	                  </button>
+	                </td>
               </tr>
             ))}
           </tbody>
@@ -168,64 +177,69 @@ export default function Ingredientes() {
             <h2 className="text-xl font-bold mb-4">
               {editando ? 'Editar Ingrediente' : 'Nuevo Ingrediente'}
             </h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="label">Nombre</label>
-                <input
-                  type="text"
-                  className="input"
-                  value={form.nombre}
-                  onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Unidad</label>
-                  <input
-                    type="text"
-                    className="input"
-                    value={form.unidad}
-                    onChange={(e) => setForm({ ...form, unidad: e.target.value })}
-                    placeholder="kg, litros, unidades"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="label">Costo Unitario ($)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="input"
-                    value={form.costo}
-                    onChange={(e) => setForm({ ...form, costo: e.target.value })}
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Stock Actual</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="input"
-                    value={form.stockActual}
-                    onChange={(e) => setForm({ ...form, stockActual: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="label">Stock Mínimo</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="input"
-                    value={form.stockMinimo}
-                    onChange={(e) => setForm({ ...form, stockMinimo: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
+	            <form onSubmit={handleSubmit} className="space-y-4">
+	              <div>
+	                <label className="label" htmlFor="ingrediente-nombre">Nombre</label>
+	                <input
+	                  id="ingrediente-nombre"
+	                  type="text"
+	                  className="input"
+	                  value={form.nombre}
+	                  onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+	                  required
+	                />
+	              </div>
+	              <div className="grid grid-cols-2 gap-4">
+	                <div>
+	                  <label className="label" htmlFor="ingrediente-unidad">Unidad</label>
+	                  <input
+	                    id="ingrediente-unidad"
+	                    type="text"
+	                    className="input"
+	                    value={form.unidad}
+	                    onChange={(e) => setForm({ ...form, unidad: e.target.value })}
+	                    placeholder="kg, litros, unidades"
+	                    required
+	                  />
+	                </div>
+	                <div>
+	                  <label className="label" htmlFor="ingrediente-costo">Costo Unitario ($)</label>
+	                  <input
+	                    id="ingrediente-costo"
+	                    type="number"
+	                    step="0.01"
+	                    className="input"
+	                    value={form.costo}
+	                    onChange={(e) => setForm({ ...form, costo: e.target.value })}
+	                  />
+	                </div>
+	              </div>
+	              <div className="grid grid-cols-2 gap-4">
+	                <div>
+	                  <label className="label" htmlFor="ingrediente-stock-actual">Stock Actual</label>
+	                  <input
+	                    id="ingrediente-stock-actual"
+	                    type="number"
+	                    step="0.01"
+	                    className="input"
+	                    value={form.stockActual}
+	                    onChange={(e) => setForm({ ...form, stockActual: e.target.value })}
+	                    required
+	                  />
+	                </div>
+	                <div>
+	                  <label className="label" htmlFor="ingrediente-stock-minimo">Stock Mínimo</label>
+	                  <input
+	                    id="ingrediente-stock-minimo"
+	                    type="number"
+	                    step="0.01"
+	                    className="input"
+	                    value={form.stockMinimo}
+	                    onChange={(e) => setForm({ ...form, stockMinimo: e.target.value })}
+	                    required
+	                  />
+	                </div>
+	              </div>
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary flex-1">
                   Cancelar
@@ -246,39 +260,42 @@ export default function Ingredientes() {
             <h2 className="text-xl font-bold mb-4">
               Movimiento de Stock: {ingredienteSeleccionado?.nombre}
             </h2>
-            <form onSubmit={handleMovimiento} className="space-y-4">
-              <div>
-                <label className="label">Tipo de Movimiento</label>
-                <select
-                  className="input"
-                  value={movForm.tipo}
-                  onChange={(e) => setMovForm({ ...movForm, tipo: e.target.value })}
-                >
+	            <form onSubmit={handleMovimiento} className="space-y-4">
+	              <div>
+	                <label className="label" htmlFor="ingrediente-mov-tipo">Tipo de Movimiento</label>
+	                <select
+	                  id="ingrediente-mov-tipo"
+	                  className="input"
+	                  value={movForm.tipo}
+	                  onChange={(e) => setMovForm({ ...movForm, tipo: e.target.value })}
+	                >
                   <option value="ENTRADA">Entrada (Compra/Recepción)</option>
                   <option value="SALIDA">Salida (Merma/Pérdida)</option>
                 </select>
               </div>
-              <div>
-                <label className="label">Cantidad ({ingredienteSeleccionado?.unidad})</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  className="input"
-                  value={movForm.cantidad}
-                  onChange={(e) => setMovForm({ ...movForm, cantidad: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label className="label">Motivo</label>
-                <input
-                  type="text"
-                  className="input"
-                  value={movForm.motivo}
-                  onChange={(e) => setMovForm({ ...movForm, motivo: e.target.value })}
-                  placeholder="Compra proveedor, merma, etc."
-                />
-              </div>
+	              <div>
+	                <label className="label" htmlFor="ingrediente-mov-cantidad">Cantidad ({ingredienteSeleccionado?.unidad})</label>
+	                <input
+	                  id="ingrediente-mov-cantidad"
+	                  type="number"
+	                  step="0.01"
+	                  className="input"
+	                  value={movForm.cantidad}
+	                  onChange={(e) => setMovForm({ ...movForm, cantidad: e.target.value })}
+	                  required
+	                />
+	              </div>
+	              <div>
+	                <label className="label" htmlFor="ingrediente-mov-motivo">Motivo</label>
+	                <input
+	                  id="ingrediente-mov-motivo"
+	                  type="text"
+	                  className="input"
+	                  value={movForm.motivo}
+	                  onChange={(e) => setMovForm({ ...movForm, motivo: e.target.value })}
+	                  placeholder="Compra proveedor, merma, etc."
+	                />
+	              </div>
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowMovModal(false)} className="btn btn-secondary flex-1">
                   Cancelar

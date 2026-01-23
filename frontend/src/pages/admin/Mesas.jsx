@@ -1,45 +1,48 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline'
+import useAsync from '../../hooks/useAsync'
 
 export default function Mesas() {
   const [mesas, setMesas] = useState([])
-  const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editando, setEditando] = useState(null)
   const [form, setForm] = useState({ numero: '', zona: '', capacidad: 4 })
 
-  useEffect(() => {
-    cargarMesas()
+  const cargarMesas = useCallback(async () => {
+    const response = await api.get('/mesas', { skipToast: true })
+    setMesas(response.data)
+    return response.data
   }, [])
 
-  const cargarMesas = async () => {
-    try {
-      const response = await api.get('/mesas')
-      setMesas(response.data)
-    } catch (error) {
-      console.error('Error:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const handleLoadError = useCallback((error) => {
+    console.error('Error:', error)
+    toast.error(error.response?.data?.error?.message || 'Error al cargar mesas')
+  }, [])
+
+  const cargarMesasRequest = useCallback(async (_ctx) => (
+    cargarMesas()
+  ), [cargarMesas])
+
+  const { loading, execute: cargarMesasAsync } = useAsync(cargarMesasRequest, { onError: handleLoadError })
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
       if (editando) {
-        await api.put(`/mesas/${editando.id}`, form)
+        await api.put(`/mesas/${editando.id}`, form, { skipToast: true })
         toast.success('Mesa actualizada')
       } else {
-        await api.post('/mesas', form)
+        await api.post('/mesas', form, { skipToast: true })
         toast.success('Mesa creada')
       }
       setShowModal(false)
       resetForm()
-      cargarMesas()
+      cargarMesasAsync()
     } catch (error) {
       console.error('Error:', error)
+      toast.error(error.response?.data?.error?.message || 'Error al guardar mesa')
     }
   }
 
@@ -52,11 +55,12 @@ export default function Mesas() {
   const handleDelete = async (id) => {
     if (!confirm('¿Desactivar esta mesa?')) return
     try {
-      await api.delete(`/mesas/${id}`)
+      await api.delete(`/mesas/${id}`, { skipToast: true })
       toast.success('Mesa desactivada')
-      cargarMesas()
+      cargarMesasAsync()
     } catch (error) {
       console.error('Error:', error)
+      toast.error(error.response?.data?.error?.message || 'Error al desactivar mesa')
     }
   }
 
@@ -74,7 +78,7 @@ export default function Mesas() {
     }
   }
 
-  if (loading) {
+  if (loading && mesas.length === 0) {
     return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div></div>
   }
 
@@ -104,10 +108,20 @@ export default function Mesas() {
               {mesa.estado}
             </span>
             <div className="flex justify-center gap-2 mt-4">
-              <button onClick={() => handleEdit(mesa)} className="text-primary-600 hover:text-primary-800">
+              <button
+                onClick={() => handleEdit(mesa)}
+                type="button"
+                aria-label={`Editar mesa ${mesa.numero}`}
+                className="text-primary-600 hover:text-primary-800"
+              >
                 <PencilIcon className="w-5 h-5" />
               </button>
-              <button onClick={() => handleDelete(mesa.id)} className="text-red-600 hover:text-red-800">
+              <button
+                onClick={() => handleDelete(mesa.id)}
+                type="button"
+                aria-label={`Desactivar mesa ${mesa.numero}`}
+                className="text-red-600 hover:text-red-800"
+              >
                 <TrashIcon className="w-5 h-5" />
               </button>
             </div>
@@ -124,18 +138,23 @@ export default function Mesas() {
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="label">Número de Mesa</label>
+                <label className="label" htmlFor="mesa-numero">Número de Mesa</label>
                 <input
+                  id="mesa-numero"
                   type="number"
                   className="input"
                   value={form.numero}
-                  onChange={(e) => setForm({ ...form, numero: parseInt(e.target.value) })}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setForm({ ...form, numero: value === '' ? '' : parseInt(value) })
+                  }}
                   required
                 />
               </div>
               <div>
-                <label className="label">Zona</label>
+                <label className="label" htmlFor="mesa-zona">Zona</label>
                 <input
+                  id="mesa-zona"
                   type="text"
                   className="input"
                   value={form.zona}
@@ -144,12 +163,16 @@ export default function Mesas() {
                 />
               </div>
               <div>
-                <label className="label">Capacidad</label>
+                <label className="label" htmlFor="mesa-capacidad">Capacidad</label>
                 <input
+                  id="mesa-capacidad"
                   type="number"
                   className="input"
                   value={form.capacidad}
-                  onChange={(e) => setForm({ ...form, capacidad: parseInt(e.target.value) })}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setForm({ ...form, capacidad: value === '' ? '' : parseInt(value) })
+                  }}
                   min="1"
                   required
                 />

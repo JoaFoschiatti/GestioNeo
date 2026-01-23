@@ -1,5 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
+import api from '../../services/api'
+import useDebouncedValue from '../../hooks/useDebouncedValue'
+import useAsync from '../../hooks/useAsync'
 import {
   CreditCardIcon,
   ArrowPathIcon,
@@ -12,53 +15,57 @@ import {
   CurrencyDollarIcon
 } from '@heroicons/react/24/outline'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
-
 export default function TransaccionesMercadoPago() {
   const [transacciones, setTransacciones] = useState([])
   const [totales, setTotales] = useState({ bruto: 0, comisiones: 0, neto: 0, cantidadAprobadas: 0 })
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 })
-  const [loading, setLoading] = useState(true)
   const [filtros, setFiltros] = useState({
     desde: '',
     hasta: '',
     status: ''
   })
   const [showFiltros, setShowFiltros] = useState(false)
+  const [errorMessage, setErrorMessage] = useState(null)
 
-  useEffect(() => {
-    cargarTransacciones()
-  }, [pagination.page, filtros])
+  const debouncedFiltros = useDebouncedValue(filtros, 300)
 
-  const cargarTransacciones = async () => {
-    try {
-      setLoading(true)
-      const token = localStorage.getItem('token')
-
-      const params = new URLSearchParams({
+  const cargarTransacciones = useCallback(async () => {
+    const response = await api.get('/mercadopago/transacciones', {
+      params: {
         page: pagination.page,
-        limit: 20
-      })
+        limit: 20,
+        ...(debouncedFiltros.desde ? { desde: debouncedFiltros.desde } : {}),
+        ...(debouncedFiltros.hasta ? { hasta: debouncedFiltros.hasta } : {}),
+        ...(debouncedFiltros.status ? { status: debouncedFiltros.status } : {})
+      },
+      skipToast: true
+    })
 
-      if (filtros.desde) params.append('desde', filtros.desde)
-      if (filtros.hasta) params.append('hasta', filtros.hasta)
-      if (filtros.status) params.append('status', filtros.status)
+    const data = response.data
+    setTransacciones(data.transacciones || [])
+    setTotales(data.totales || { bruto: 0, comisiones: 0, neto: 0, cantidadAprobadas: 0 })
+    setPagination(data.pagination || { page: 1, pages: 1, total: 0 })
+    setErrorMessage(null)
+    return data
+  }, [debouncedFiltros, pagination.page])
 
-      const response = await fetch(`${API_URL}/mercadopago/transacciones?${params}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
+  const handleLoadError = useCallback((error) => {
+    console.error('Error:', error)
+    setErrorMessage(error.response?.data?.error?.message || 'Error al cargar transacciones')
+  }, [])
 
-      if (!response.ok) throw new Error('Error al cargar transacciones')
+  const cargarTransaccionesRequest = useCallback(async (_ctx) => (
+    cargarTransacciones()
+  ), [cargarTransacciones])
 
-      const data = await response.json()
-      setTransacciones(data.transacciones)
-      setTotales(data.totales)
-      setPagination(data.pagination)
-    } catch (error) {
-      console.error('Error:', error)
-    } finally {
-      setLoading(false)
-    }
+  const { loading, execute: cargarTransaccionesAsync } = useAsync(
+    cargarTransaccionesRequest,
+    { onError: handleLoadError }
+  )
+
+  const updateFiltros = (next) => {
+    setFiltros(prev => (typeof next === 'function' ? next(prev) : next))
+    setPagination(prev => (prev.page === 1 ? prev : { ...prev, page: 1 }))
   }
 
   const formatMoney = (amount) => {
@@ -145,28 +152,31 @@ export default function TransaccionesMercadoPago() {
         <div className="card mb-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Desde</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="tx-desde">Desde</label>
               <input
+                id="tx-desde"
                 type="date"
                 value={filtros.desde}
-                onChange={(e) => setFiltros({ ...filtros, desde: e.target.value })}
+                onChange={(e) => updateFiltros(prev => ({ ...prev, desde: e.target.value }))}
                 className="input"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Hasta</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="tx-hasta">Hasta</label>
               <input
+                id="tx-hasta"
                 type="date"
                 value={filtros.hasta}
-                onChange={(e) => setFiltros({ ...filtros, hasta: e.target.value })}
+                onChange={(e) => updateFiltros(prev => ({ ...prev, hasta: e.target.value }))}
                 className="input"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="tx-estado">Estado</label>
               <select
+                id="tx-estado"
                 value={filtros.status}
-                onChange={(e) => setFiltros({ ...filtros, status: e.target.value })}
+                onChange={(e) => updateFiltros(prev => ({ ...prev, status: e.target.value }))}
                 className="input"
               >
                 <option value="">Todos</option>
@@ -178,8 +188,7 @@ export default function TransaccionesMercadoPago() {
             <div className="flex items-end">
               <button
                 onClick={() => {
-                  setFiltros({ desde: '', hasta: '', status: '' })
-                  setPagination({ ...pagination, page: 1 })
+                  updateFiltros({ desde: '', hasta: '', status: '' })
                 }}
                 className="btn btn-secondary w-full"
               >
@@ -246,6 +255,17 @@ export default function TransaccionesMercadoPago() {
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <ArrowPathIcon className="w-8 h-8 animate-spin text-blue-500" />
+          </div>
+        ) : errorMessage ? (
+          <div className="text-center py-12">
+            <XCircleIcon className="w-16 h-16 text-red-300 mx-auto mb-4" />
+            <p className="text-red-600">{errorMessage}</p>
+            <button
+              onClick={cargarTransaccionesAsync}
+              className="mt-4 btn btn-secondary"
+            >
+              Reintentar
+            </button>
           </div>
         ) : transacciones.length === 0 ? (
           <div className="text-center py-12">

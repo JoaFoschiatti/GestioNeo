@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import {
@@ -11,10 +11,10 @@ import {
   LockClosedIcon,
   LockOpenIcon
 } from '@heroicons/react/24/outline'
+import useAsync from '../../hooks/useAsync'
 
 export default function CierreCaja() {
   const [cajaActual, setCajaActual] = useState(null)
-  const [loading, setLoading] = useState(true)
   const [historico, setHistorico] = useState([])
   const [showAbrirModal, setShowAbrirModal] = useState(false)
   const [showCerrarModal, setShowCerrarModal] = useState(false)
@@ -23,51 +23,62 @@ export default function CierreCaja() {
   const [observaciones, setObservaciones] = useState('')
   const [resumen, setResumen] = useState(null)
 
-  useEffect(() => {
-    cargarEstado()
-    cargarHistorico()
+  const cargarEstado = useCallback(async () => {
+    const response = await api.get('/cierres/actual')
+    setCajaActual(response.data)
+    return response.data
   }, [])
 
-  const cargarEstado = async () => {
-    try {
-      const response = await api.get('/cierres/actual')
-      setCajaActual(response.data)
-    } catch (error) {
-      console.error('Error:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const cargarHistorico = useCallback(async () => {
+    const response = await api.get('/cierres?limit=10')
+    setHistorico(response.data)
+    return response.data
+  }, [])
 
-  const cargarHistorico = async () => {
-    try {
-      const response = await api.get('/cierres?limit=10')
-      setHistorico(response.data)
-    } catch (error) {
-      console.error('Error:', error)
-    }
-  }
+  const cargarDatos = useCallback(async () => {
+    const [estado, historial] = await Promise.all([cargarEstado(), cargarHistorico()])
+    return { estado, historial }
+  }, [cargarEstado, cargarHistorico])
+
+  const handleLoadError = useCallback((error) => {
+    console.error('Error:', error)
+  }, [])
+
+  const cargarDatosRequest = useCallback(async (_ctx) => (
+    cargarDatos()
+  ), [cargarDatos])
+
+  const { loading, execute: cargarDatosAsync } = useAsync(
+    cargarDatosRequest,
+    { immediate: false, onError: handleLoadError }
+  )
+
+  useEffect(() => {
+    cargarDatosAsync()
+      .catch(() => {})
+  }, [cargarDatosAsync])
 
   const abrirCaja = async (e) => {
     e.preventDefault()
     try {
-      await api.post('/cierres', { fondoInicial: parseFloat(fondoInicial) || 0 })
+      await api.post('/cierres', { fondoInicial: parseFloat(fondoInicial) || 0 }, { skipToast: true })
       toast.success('Caja abierta correctamente')
       setShowAbrirModal(false)
       setFondoInicial('')
-      cargarEstado()
-      cargarHistorico()
+      cargarDatosAsync()
     } catch (error) {
+      console.error('Error:', error)
       toast.error(error.response?.data?.error?.message || 'Error al abrir caja')
     }
   }
 
   const prepararCierre = async () => {
     try {
-      const response = await api.get('/cierres/resumen')
+      const response = await api.get('/cierres/resumen', { skipToast: true })
       setResumen(response.data)
       setShowCerrarModal(true)
     } catch (error) {
+      console.error('Error:', error)
       toast.error(error.response?.data?.error?.message || 'Error al obtener resumen')
     }
   }
@@ -80,15 +91,15 @@ export default function CierreCaja() {
       const response = await api.patch(`/cierres/${cajaActual.caja.id}/cerrar`, {
         efectivoFisico: parseFloat(efectivoFisico) || 0,
         observaciones
-      })
+      }, { skipToast: true })
       toast.success('Caja cerrada correctamente')
       setShowCerrarModal(false)
       setEfectivoFisico('')
       setObservaciones('')
       setResumen(null)
-      cargarEstado()
-      cargarHistorico()
+      cargarDatosAsync()
     } catch (error) {
+      console.error('Error:', error)
       toast.error(error.response?.data?.error?.message || 'Error al cerrar caja')
     }
   }
@@ -107,7 +118,7 @@ export default function CierreCaja() {
     })
   }
 
-  if (loading) {
+  if (loading && !cajaActual && historico.length === 0) {
     return (
       <div className="flex justify-center py-12">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
@@ -268,22 +279,23 @@ export default function CierreCaja() {
       </div>
 
       {/* Modal Abrir Caja */}
-      {showAbrirModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Abrir Caja</h3>
-            <form onSubmit={abrirCaja}>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Fondo Inicial (efectivo en caja)
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={fondoInicial}
+	      {showAbrirModal && (
+	        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+	          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+	            <h3 className="text-lg font-semibold text-gray-900 mb-4">Abrir Caja</h3>
+	            <form onSubmit={abrirCaja}>
+	              <div className="mb-4">
+	                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="caja-fondo-inicial">
+	                  Fondo Inicial (efectivo en caja)
+	                </label>
+	                <div className="relative">
+	                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+	                  <input
+	                    id="caja-fondo-inicial"
+	                    type="number"
+	                    step="0.01"
+	                    min="0"
+	                    value={fondoInicial}
                     onChange={(e) => setFondoInicial(e.target.value)}
                     className="input pl-8"
                     placeholder="0.00"
@@ -346,18 +358,19 @@ export default function CierreCaja() {
               </div>
             </div>
 
-            <form onSubmit={cerrarCaja}>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Efectivo Contado (en caja)
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={efectivoFisico}
+	            <form onSubmit={cerrarCaja}>
+	              <div className="mb-4">
+	                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="caja-efectivo-contado">
+	                  Efectivo Contado (en caja)
+	                </label>
+	                <div className="relative">
+	                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+	                  <input
+	                    id="caja-efectivo-contado"
+	                    type="number"
+	                    step="0.01"
+	                    min="0"
+	                    value={efectivoFisico}
                     onChange={(e) => setEfectivoFisico(e.target.value)}
                     className="input pl-8"
                     placeholder="0.00"
@@ -378,14 +391,15 @@ export default function CierreCaja() {
                 )}
               </div>
 
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Observaciones (opcional)
-                </label>
-                <textarea
-                  value={observaciones}
-                  onChange={(e) => setObservaciones(e.target.value)}
-                  className="input"
+	              <div className="mb-4">
+	                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="caja-observaciones">
+	                  Observaciones (opcional)
+	                </label>
+	                <textarea
+	                  id="caja-observaciones"
+	                  value={observaciones}
+	                  onChange={(e) => setObservaciones(e.target.value)}
+	                  className="input"
                   rows="2"
                   placeholder="Notas sobre el cierre..."
                 />

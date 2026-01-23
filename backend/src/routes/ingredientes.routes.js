@@ -2,15 +2,37 @@ const express = require('express');
 const router = express.Router();
 const ingredientesController = require('../controllers/ingredientes.controller');
 const { verificarToken, esAdmin } = require('../middlewares/auth.middleware');
+const { setTenantFromAuth } = require('../middlewares/tenant.middleware');
+const { validate } = require('../middlewares/validate.middleware');
+const { asyncHandler } = require('../utils/async-handler');
+const {
+  idParamSchema,
+  listarQuerySchema,
+  crearIngredienteBodySchema,
+  actualizarIngredienteBodySchema,
+  registrarMovimientoBodySchema,
+  ajustarStockBodySchema
+} = require('../schemas/ingredientes.schemas');
 
 router.use(verificarToken);
+router.use(setTenantFromAuth);
 
-router.get('/', ingredientesController.listar);
-router.get('/alertas', ingredientesController.alertasStock);
-router.get('/:id', ingredientesController.obtener);
-router.post('/', esAdmin, ingredientesController.crear);
-router.put('/:id', esAdmin, ingredientesController.actualizar);
-router.post('/:id/movimiento', esAdmin, ingredientesController.registrarMovimiento);
-router.post('/:id/ajuste', esAdmin, ingredientesController.ajustarStock);
+router.get('/', validate({ query: listarQuerySchema }), asyncHandler(ingredientesController.listar));
+router.get('/alertas', asyncHandler(ingredientesController.alertasStock));
+router.get('/:id', validate({ params: idParamSchema }), asyncHandler(ingredientesController.obtener));
+router.post('/', esAdmin, validate({ body: crearIngredienteBodySchema }), asyncHandler(ingredientesController.crear));
+router.put('/:id', esAdmin, validate({ params: idParamSchema, body: actualizarIngredienteBodySchema }), asyncHandler(ingredientesController.actualizar));
+router.post(
+  '/:id/movimiento',
+  esAdmin,
+  validate({ params: idParamSchema, body: registrarMovimientoBodySchema }),
+  asyncHandler(ingredientesController.registrarMovimiento)
+);
+router.post(
+  '/:id/ajuste',
+  esAdmin,
+  validate({ params: idParamSchema, body: ajustarStockBodySchema }),
+  asyncHandler(ingredientesController.ajustarStock)
+);
 
 module.exports = router;

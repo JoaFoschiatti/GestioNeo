@@ -1,142 +1,63 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { PlusIcon, MinusIcon, TrashIcon, PrinterIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import usePedidoConModificadores from '../../hooks/usePedidoConModificadores'
+import useAsync from '../../hooks/useAsync'
 
 export default function NuevoPedido() {
   const { mesaId } = useParams()
   const navigate = useNavigate()
-  const [loading, setLoading] = useState(true)
   const [mesa, setMesa] = useState(null)
   const [categorias, setCategorias] = useState([])
   const [categoriaActiva, setCategoriaActiva] = useState(null)
-  const [carrito, setCarrito] = useState([])
   const [tipo, setTipo] = useState(mesaId ? 'MESA' : 'DELIVERY')
   const [clienteData, setClienteData] = useState({ nombre: '', telefono: '', direccion: '' })
   const [observaciones, setObservaciones] = useState('')
   const [enviando, setEnviando] = useState(false)
+  const {
+    carrito,
+    showModModal,
+    productoSeleccionado,
+    modificadoresProducto,
+    modificadoresSeleccionados,
+    handleClickProducto,
+    toggleModificador,
+    confirmarProductoConModificadores,
+    agregarAlCarrito,
+    actualizarCantidad,
+    eliminarDelCarrito,
+    actualizarObservacionItem,
+    closeModModal
+  } = usePedidoConModificadores()
 
-  // Modal de modificadores
-  const [showModModal, setShowModModal] = useState(false)
-  const [productoSeleccionado, setProductoSeleccionado] = useState(null)
-  const [modificadoresProducto, setModificadoresProducto] = useState([])
-  const [modificadoresSeleccionados, setModificadoresSeleccionados] = useState([])
+  const cargarDatos = useCallback(async () => {
+    const catRes = await api.get('/categorias/publicas', { skipToast: true })
+    setCategorias(catRes.data)
+    if (catRes.data.length > 0) {
+      setCategoriaActiva(catRes.data[0].id)
+    }
 
-  useEffect(() => {
-    cargarDatos()
+    if (mesaId) {
+      const mesaRes = await api.get(`/mesas/${mesaId}`, { skipToast: true })
+      setMesa(mesaRes.data)
+    }
+    return { categorias: catRes.data }
   }, [mesaId])
 
-  const cargarDatos = async () => {
-    try {
-      const catRes = await api.get('/categorias/publicas')
-      setCategorias(catRes.data)
-      if (catRes.data.length > 0) {
-        setCategoriaActiva(catRes.data[0].id)
-      }
-
-      if (mesaId) {
-        const mesaRes = await api.get(`/mesas/${mesaId}`)
-        setMesa(mesaRes.data)
-      }
-    } catch (error) {
-      console.error('Error:', error)
-    } finally {
-      setLoading(false)
+  const handleLoadError = useCallback((error) => {
+    console.error('Error:', error)
+    if (error.response?.status !== 401) {
+      toast.error(error.response?.data?.error?.message || 'Error al cargar datos')
     }
-  }
+  }, [])
 
-  const handleClickProducto = async (producto) => {
-    try {
-      // Cargar modificadores del producto
-      const response = await api.get(`/modificadores/producto/${producto.id}`)
-      const mods = response.data.filter(m => m.activo)
+  const cargarDatosRequest = useCallback(async (_ctx) => (
+    cargarDatos()
+  ), [cargarDatos])
 
-      if (mods.length > 0) {
-        setProductoSeleccionado(producto)
-        setModificadoresProducto(mods)
-        setModificadoresSeleccionados([])
-        setShowModModal(true)
-      } else {
-        // Sin modificadores, agregar directamente
-        agregarAlCarrito(producto, [])
-      }
-    } catch (error) {
-      // Si falla, agregar sin modificadores
-      agregarAlCarrito(producto, [])
-    }
-  }
-
-  const toggleModificador = (mod) => {
-    setModificadoresSeleccionados(prev => {
-      const existe = prev.find(m => m.id === mod.id)
-      if (existe) {
-        return prev.filter(m => m.id !== mod.id)
-      }
-      return [...prev, mod]
-    })
-  }
-
-  const confirmarProductoConModificadores = () => {
-    if (productoSeleccionado) {
-      agregarAlCarrito(productoSeleccionado, modificadoresSeleccionados)
-      setShowModModal(false)
-      setProductoSeleccionado(null)
-      setModificadoresProducto([])
-      setModificadoresSeleccionados([])
-    }
-  }
-
-  const agregarAlCarrito = (producto, modificadores = []) => {
-    const precioMods = modificadores.reduce((sum, m) => sum + parseFloat(m.precio), 0)
-    const precioTotal = parseFloat(producto.precio) + precioMods
-
-    // Generar un ID único para el item (para permitir mismo producto con diferentes mods)
-    const itemId = `${producto.id}-${Date.now()}`
-
-    setCarrito(prev => [
-      ...prev,
-      {
-        itemId,
-        productoId: producto.id,
-        nombre: producto.nombre,
-        precioBase: producto.precio,
-        precio: precioTotal,
-        cantidad: 1,
-        observaciones: '',
-        modificadores: modificadores.map(m => ({
-          id: m.id,
-          nombre: m.nombre,
-          tipo: m.tipo,
-          precio: m.precio
-        }))
-      }
-    ])
-  }
-
-  const actualizarCantidad = (itemId, delta) => {
-    setCarrito(prev =>
-      prev.map(item => {
-        if (item.itemId === itemId) {
-          const nuevaCantidad = item.cantidad + delta
-          return nuevaCantidad > 0 ? { ...item, cantidad: nuevaCantidad } : item
-        }
-        return item
-      }).filter(item => item.cantidad > 0)
-    )
-  }
-
-  const eliminarDelCarrito = (itemId) => {
-    setCarrito(prev => prev.filter(item => item.itemId !== itemId))
-  }
-
-  const actualizarObservacionItem = (itemId, obs) => {
-    setCarrito(prev =>
-      prev.map(item =>
-        item.itemId === itemId ? { ...item, observaciones: obs } : item
-      )
-    )
-  }
+  const { loading } = useAsync(cargarDatosRequest, { onError: handleLoadError })
 
   const calcularTotal = () => {
     return carrito.reduce((sum, item) => sum + parseFloat(item.precio) * item.cantidad, 0)
@@ -161,29 +82,32 @@ export default function NuevoPedido() {
         items: carrito.map(item => ({
           productoId: item.productoId,
           cantidad: item.cantidad,
-          observaciones: item.observaciones || null,
+          observaciones: item.observaciones || undefined,
           modificadores: item.modificadores.map(m => m.id)
         })),
-        observaciones,
+        observaciones: observaciones || undefined,
         ...(tipo === 'DELIVERY' && {
-          clienteNombre: clienteData.nombre,
-          clienteTelefono: clienteData.telefono,
-          clienteDireccion: clienteData.direccion
+          clienteNombre: clienteData.nombre || undefined,
+          clienteTelefono: clienteData.telefono || undefined,
+          clienteDireccion: clienteData.direccion || undefined
         })
       }
 
-      const response = await api.post('/pedidos', pedidoData)
+      const response = await api.post('/pedidos', pedidoData, { skipToast: true })
       toast.success(`Pedido #${response.data.id} creado! Se imprimira al iniciar preparacion.`)
 
       navigate(tipo === 'MESA' ? '/mozo/mesas' : '/pedidos')
     } catch (error) {
       console.error('Error:', error)
+      if (error.response?.status !== 401) {
+        toast.error(error.response?.data?.error?.message || 'Error al crear pedido')
+      }
     } finally {
       setEnviando(false)
     }
   }
 
-  if (loading) {
+  if (loading && categorias.length === 0) {
     return (
       <div className="flex justify-center py-12">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
@@ -202,14 +126,18 @@ export default function NuevoPedido() {
             {tipo === 'MESA' ? `Nuevo Pedido - Mesa ${mesa?.numero}` : 'Nuevo Pedido'}
           </h1>
           {!mesaId && (
-            <select
-              className="input w-40"
-              value={tipo}
-              onChange={(e) => setTipo(e.target.value)}
-            >
+            <>
+              <label className="sr-only" htmlFor="pedido-tipo-mozo">Tipo de pedido</label>
+              <select
+                id="pedido-tipo-mozo"
+                className="input w-40"
+                value={tipo}
+                onChange={(e) => setTipo(e.target.value)}
+              >
               <option value="DELIVERY">Delivery</option>
               <option value="MOSTRADOR">Mostrador</option>
-            </select>
+              </select>
+            </>
           )}
         </div>
 
@@ -265,21 +193,27 @@ export default function NuevoPedido() {
         {/* Datos cliente (delivery) */}
         {tipo === 'DELIVERY' && (
           <div className="space-y-3 mb-4 pb-4 border-b">
+            <label className="sr-only" htmlFor="pedido-cliente-nombre">Nombre del cliente</label>
             <input
+              id="pedido-cliente-nombre"
               type="text"
               className="input"
               placeholder="Nombre del cliente *"
               value={clienteData.nombre}
               onChange={(e) => setClienteData({ ...clienteData, nombre: e.target.value })}
             />
+            <label className="sr-only" htmlFor="pedido-cliente-telefono">Telefono</label>
             <input
+              id="pedido-cliente-telefono"
               type="text"
               className="input"
               placeholder="Telefono"
               value={clienteData.telefono}
               onChange={(e) => setClienteData({ ...clienteData, telefono: e.target.value })}
             />
+            <label className="sr-only" htmlFor="pedido-cliente-direccion">Direccion de entrega</label>
             <input
+              id="pedido-cliente-direccion"
               type="text"
               className="input"
               placeholder="Direccion de entrega"
@@ -320,6 +254,8 @@ export default function NuevoPedido() {
                   </div>
                   <button
                     onClick={() => eliminarDelCarrito(item.itemId)}
+                    type="button"
+                    aria-label={`Eliminar ${item.nombre} del carrito`}
                     className="text-red-500 hover:text-red-700"
                   >
                     <TrashIcon className="w-5 h-5" />
@@ -329,6 +265,8 @@ export default function NuevoPedido() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => actualizarCantidad(item.itemId, -1)}
+                      type="button"
+                      aria-label={`Reducir cantidad de ${item.nombre}`}
                       className="p-1 bg-gray-200 rounded hover:bg-gray-300"
                     >
                       <MinusIcon className="w-4 h-4" />
@@ -336,6 +274,8 @@ export default function NuevoPedido() {
                     <span className="w-8 text-center font-medium">{item.cantidad}</span>
                     <button
                       onClick={() => actualizarCantidad(item.itemId, 1)}
+                      type="button"
+                      aria-label={`Aumentar cantidad de ${item.nombre}`}
                       className="p-1 bg-gray-200 rounded hover:bg-gray-300"
                     >
                       <PlusIcon className="w-4 h-4" />
@@ -359,7 +299,9 @@ export default function NuevoPedido() {
 
         {/* Observaciones generales */}
         <div className="mt-4 pt-4 border-t">
+          <label htmlFor="pedido-observaciones" className="sr-only">Observaciones del pedido</label>
           <textarea
+            id="pedido-observaciones"
             className="input text-sm"
             placeholder="Observaciones del pedido"
             rows="2"
@@ -399,7 +341,9 @@ export default function NuevoPedido() {
                 </p>
               </div>
               <button
-                onClick={() => setShowModModal(false)}
+                onClick={closeModModal}
+                type="button"
+                aria-label="Cerrar modificadores"
                 className="text-gray-400 hover:text-gray-600"
               >
                 <XMarkIcon className="w-6 h-6" />
@@ -442,7 +386,7 @@ export default function NuevoPedido() {
               <button
                 onClick={() => {
                   agregarAlCarrito(productoSeleccionado, [])
-                  setShowModModal(false)
+                  closeModModal()
                 }}
                 className="btn btn-secondary flex-1"
               >

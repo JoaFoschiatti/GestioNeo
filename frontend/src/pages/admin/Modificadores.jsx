@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import {
@@ -8,10 +8,10 @@ import {
   MinusCircleIcon,
   PlusCircleIcon
 } from '@heroicons/react/24/outline'
+import useAsync from '../../hooks/useAsync'
 
 export default function Modificadores() {
   const [modificadores, setModificadores] = useState([])
-  const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editando, setEditando] = useState(null)
   const [formData, setFormData] = useState({
@@ -20,20 +20,24 @@ export default function Modificadores() {
     tipo: 'ADICION'
   })
 
-  useEffect(() => {
-    cargarModificadores()
+  const cargarModificadores = useCallback(async () => {
+    const response = await api.get('/modificadores')
+    setModificadores(response.data)
+    return response.data
   }, [])
 
-  const cargarModificadores = async () => {
-    try {
-      const response = await api.get('/modificadores')
-      setModificadores(response.data)
-    } catch (error) {
-      console.error('Error:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const handleLoadError = useCallback((error) => {
+    console.error('Error:', error)
+  }, [])
+
+  const cargarModificadoresRequest = useCallback(async (_ctx) => (
+    cargarModificadores()
+  ), [cargarModificadores])
+
+  const { loading, execute: cargarModificadoresAsync } = useAsync(
+    cargarModificadoresRequest,
+    { onError: handleLoadError }
+  )
 
   const abrirModal = (mod = null) => {
     if (mod) {
@@ -65,9 +69,9 @@ export default function Modificadores() {
         toast.success('Modificador creado')
       }
       setShowModal(false)
-      cargarModificadores()
+      cargarModificadoresAsync()
     } catch (error) {
-      toast.error(error.response?.data?.error?.message || 'Error al guardar')
+      console.error('Error:', error)
     }
   }
 
@@ -76,9 +80,9 @@ export default function Modificadores() {
     try {
       await api.delete(`/modificadores/${id}`)
       toast.success('Modificador eliminado')
-      cargarModificadores()
+      cargarModificadoresAsync()
     } catch (error) {
-      toast.error(error.response?.data?.error?.message || 'Error al eliminar')
+      console.error('Error:', error)
     }
   }
 
@@ -86,9 +90,9 @@ export default function Modificadores() {
     try {
       await api.put(`/modificadores/${mod.id}`, { activo: !mod.activo })
       toast.success(mod.activo ? 'Modificador desactivado' : 'Modificador activado')
-      cargarModificadores()
+      cargarModificadoresAsync()
     } catch (error) {
-      toast.error('Error al actualizar')
+      console.error('Error:', error)
     }
   }
 
@@ -99,7 +103,7 @@ export default function Modificadores() {
   const exclusiones = modificadores.filter(m => m.tipo === 'EXCLUSION')
   const adiciones = modificadores.filter(m => m.tipo === 'ADICION')
 
-  if (loading) {
+  if (loading && modificadores.length === 0) {
     return (
       <div className="flex justify-center py-12">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
@@ -154,18 +158,20 @@ export default function Modificadores() {
                     >
                       {mod.activo ? 'Activo' : 'Inactivo'}
                     </button>
-                    <button
-                      onClick={() => abrirModal(mod)}
-                      className="p-1 text-gray-400 hover:text-gray-600"
-                    >
-                      <PencilIcon className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => eliminarModificador(mod.id)}
-                      className="p-1 text-red-400 hover:text-red-600"
-                    >
-                      <TrashIcon className="w-4 h-4" />
-                    </button>
+	                    <button
+	                      aria-label={`Editar modificador: ${mod.nombre}`}
+	                      onClick={() => abrirModal(mod)}
+	                      className="p-1 text-gray-400 hover:text-gray-600"
+	                    >
+	                      <PencilIcon className="w-4 h-4" />
+	                    </button>
+	                    <button
+	                      aria-label={`Eliminar modificador: ${mod.nombre}`}
+	                      onClick={() => eliminarModificador(mod.id)}
+	                      className="p-1 text-red-400 hover:text-red-600"
+	                    >
+	                      <TrashIcon className="w-4 h-4" />
+	                    </button>
                   </div>
                 </div>
               ))}
@@ -209,18 +215,20 @@ export default function Modificadores() {
                     >
                       {mod.activo ? 'Activo' : 'Inactivo'}
                     </button>
-                    <button
-                      onClick={() => abrirModal(mod)}
-                      className="p-1 text-gray-400 hover:text-gray-600"
-                    >
-                      <PencilIcon className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => eliminarModificador(mod.id)}
-                      className="p-1 text-red-400 hover:text-red-600"
-                    >
-                      <TrashIcon className="w-4 h-4" />
-                    </button>
+	                    <button
+	                      aria-label={`Editar modificador: ${mod.nombre}`}
+	                      onClick={() => abrirModal(mod)}
+	                      className="p-1 text-gray-400 hover:text-gray-600"
+	                    >
+	                      <PencilIcon className="w-4 h-4" />
+	                    </button>
+	                    <button
+	                      aria-label={`Eliminar modificador: ${mod.nombre}`}
+	                      onClick={() => eliminarModificador(mod.id)}
+	                      className="p-1 text-red-400 hover:text-red-600"
+	                    >
+	                      <TrashIcon className="w-4 h-4" />
+	                    </button>
                   </div>
                 </div>
               ))}
@@ -237,52 +245,55 @@ export default function Modificadores() {
               {editando ? 'Editar Modificador' : 'Nuevo Modificador'}
             </h3>
 
-            <form onSubmit={guardarModificador} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tipo
-                </label>
-                <select
-                  value={formData.tipo}
-                  onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
-                  className="input"
-                  required
-                >
+	            <form onSubmit={guardarModificador} className="space-y-4">
+	              <div>
+	                <label htmlFor="modificador-tipo" className="block text-sm font-medium text-gray-700 mb-1">
+	                  Tipo
+	                </label>
+	                <select
+	                  id="modificador-tipo"
+	                  value={formData.tipo}
+	                  onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
+	                  className="input"
+	                  required
+	                >
                   <option value="EXCLUSION">Exclusion (Sin...)</option>
                   <option value="ADICION">Adicion (Extra...)</option>
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nombre
-                </label>
-                <input
-                  type="text"
-                  value={formData.nombre}
-                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                  className="input"
-                  placeholder={formData.tipo === 'EXCLUSION' ? 'ej: cebolla' : 'ej: queso'}
-                  required
-                />
+	              <div>
+	                <label htmlFor="modificador-nombre" className="block text-sm font-medium text-gray-700 mb-1">
+	                  Nombre
+	                </label>
+	                <input
+	                  id="modificador-nombre"
+	                  type="text"
+	                  value={formData.nombre}
+	                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+	                  className="input"
+	                  placeholder={formData.tipo === 'EXCLUSION' ? 'ej: cebolla' : 'ej: queso'}
+	                  required
+	                />
                 <p className="text-xs text-gray-500 mt-1">
                   Se mostrara como: {formData.tipo === 'EXCLUSION' ? 'Sin' : 'Extra'} {formData.nombre || '...'}
                 </p>
               </div>
 
-              {formData.tipo === 'ADICION' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Precio adicional
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={formData.precio}
-                      onChange={(e) => setFormData({ ...formData, precio: e.target.value })}
+	              {formData.tipo === 'ADICION' && (
+	                <div>
+	                  <label htmlFor="modificador-precio" className="block text-sm font-medium text-gray-700 mb-1">
+	                    Precio adicional
+	                  </label>
+	                  <div className="relative">
+	                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+	                    <input
+	                      id="modificador-precio"
+	                      type="number"
+	                      step="0.01"
+	                      min="0"
+	                      value={formData.precio}
+	                      onChange={(e) => setFormData({ ...formData, precio: e.target.value })}
                       className="input pl-8"
                       placeholder="0.00"
                     />

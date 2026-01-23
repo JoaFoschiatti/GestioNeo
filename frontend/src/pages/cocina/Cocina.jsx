@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { CheckIcon, ClockIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/outline'
-import { createEventSource } from '../../services/eventos'
+import usePolling from '../../hooks/usePolling'
+import useEventSource from '../../hooks/useEventSource'
+import useAsync from '../../hooks/useAsync'
 
 // Función para reproducir sonido de notificación usando Web Audio API
 const playNotificationSound = () => {
@@ -40,7 +42,7 @@ const playNotificationSound = () => {
 
 export default function Cocina() {
   const [pedidos, setPedidos] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(null)
   const [soundEnabled, setSoundEnabled] = useState(() => {
     return localStorage.getItem('cocina_sound') !== 'false'
   })
@@ -57,53 +59,60 @@ export default function Cocina() {
   }
 
   const cargarPedidos = useCallback(async () => {
-    try {
-      const response = await api.get('/pedidos/cocina')
-      const nuevosPedidos = response.data
+    const response = await api.get('/pedidos/cocina', { skipToast: true })
+    const nuevosPedidos = response.data
 
-      // Detectar nuevos pedidos PENDIENTES
-      if (soundEnabled && pedidosRef.current.length > 0) {
-        const idsAnteriores = new Set(pedidosRef.current.map(p => p.id))
-        const hayNuevoPendiente = nuevosPedidos.some(
-          p => p.estado === 'PENDIENTE' && !idsAnteriores.has(p.id)
-        )
-        if (hayNuevoPendiente) {
-          playNotificationSound()
-        }
+    // Detectar nuevos pedidos PENDIENTES
+    if (soundEnabled && pedidosRef.current.length > 0) {
+      const idsAnteriores = new Set(pedidosRef.current.map(p => p.id))
+      const hayNuevoPendiente = nuevosPedidos.some(
+        p => p.estado === 'PENDIENTE' && !idsAnteriores.has(p.id)
+      )
+      if (hayNuevoPendiente) {
+        playNotificationSound()
       }
-
-      pedidosRef.current = nuevosPedidos
-      setPedidos(nuevosPedidos)
-    } catch (error) {
-      console.error('Error:', error)
-    } finally {
-      setLoading(false)
     }
+
+    pedidosRef.current = nuevosPedidos
+    setPedidos(nuevosPedidos)
+    setLoadError(null)
+    return nuevosPedidos
   }, [soundEnabled])
 
-  useEffect(() => {
+  const handleLoadError = useCallback((error) => {
+    console.error('Error:', error)
+    setLoadError('No pudimos cargar los pedidos.')
+  }, [])
+
+  const cargarPedidosRequest = useCallback(async (_ctx) => (
     cargarPedidos()
-    // Actualizar cada 10 segundos
-    const interval = setInterval(cargarPedidos, 10000)
-    const source = createEventSource()
+  ), [cargarPedidos])
 
-    if (source) {
-      source.addEventListener('pedido.updated', cargarPedidos)
-    }
+  const { loading, execute: cargarPedidosAsync } = useAsync(
+    cargarPedidosRequest,
+    { onError: handleLoadError }
+  )
 
-    return () => {
-      clearInterval(interval)
-      if (source) source.close()
+  usePolling(cargarPedidosAsync, 10000, { immediate: false })
+
+  useEventSource({
+    events: {
+      'pedido.updated': cargarPedidosAsync
     }
-  }, [cargarPedidos])
+  })
 
   const cambiarEstado = async (id, nuevoEstado) => {
     try {
-      await api.patch(`/pedidos/${id}/estado`, { estado: nuevoEstado })
+      await api.patch(
+        `/pedidos/${id}/estado`,
+        { estado: nuevoEstado },
+        { skipToast: true }
+      )
       toast.success(nuevoEstado === 'EN_PREPARACION' ? 'Iniciando preparación' : 'Pedido listo!')
-      cargarPedidos()
+      cargarPedidosAsync().catch(() => {})
     } catch (error) {
       console.error('Error:', error)
+      toast.error('No pudimos actualizar el pedido.')
     }
   }
 
@@ -113,10 +122,30 @@ export default function Cocina() {
     return `${Math.floor(minutos / 60)}h ${minutos % 60}m`
   }
 
-  if (loading) {
+  if (loading && pedidos.length === 0) {
     return (
       <div className="flex justify-center py-12">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+      </div>
+    )
+  }
+
+  if (loadError && pedidos.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <ClockIcon className="w-10 h-10 text-red-500 mb-3" />
+        <h2 className="text-lg font-semibold text-gray-900">No pudimos cargar los pedidos</h2>
+        <p className="text-sm text-gray-600 mb-4">{loadError}</p>
+        <button
+          type="button"
+          onClick={() => {
+            setLoadError(null)
+            cargarPedidosAsync().catch(() => {})
+          }}
+          className="btn btn-primary"
+        >
+          Reintentar
+        </button>
       </div>
     )
   }
@@ -126,6 +155,22 @@ export default function Cocina() {
 
   return (
     <div>
+      {loadError && pedidos.length > 0 && (
+        <div className="mb-4 bg-red-50 text-red-700 px-4 py-3 rounded-lg flex items-center gap-3">
+          <ClockIcon className="w-5 h-5" />
+          <span className="flex-1 text-sm">{loadError}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setLoadError(null)
+              cargarPedidosAsync().catch(() => {})
+            }}
+            className="text-sm font-medium hover:underline"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Cocina</h1>
         <div className="flex items-center gap-4 text-sm">
@@ -145,6 +190,7 @@ export default function Cocina() {
                 : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
             }`}
             title={soundEnabled ? 'Sonido activado' : 'Sonido desactivado'}
+            aria-label={soundEnabled ? 'Desactivar sonido' : 'Activar sonido'}
           >
             {soundEnabled ? (
               <SpeakerWaveIcon className="w-5 h-5" />

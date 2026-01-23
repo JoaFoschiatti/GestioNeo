@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import api from '../services/api'
 import {
@@ -13,20 +13,28 @@ export default function VerificarEmail() {
   const [error, setError] = useState(null)
   const [tenantSlug, setTenantSlug] = useState(null)
 
-  useEffect(() => {
-    verificarEmail()
-  }, [token])
+  const verificarEmail = useCallback(async () => {
+    if (!token) {
+      setError('Token invalido')
+      setStatus('error')
+      return
+    }
 
-  const verificarEmail = async () => {
+    setStatus('verifying')
+    setError(null)
     try {
-      const response = await api.post(`/registro/verificar/${token}`)
+      const response = await api.post(`/registro/verificar/${token}`, null, { skipToast: true })
       setTenantSlug(response.data.tenant?.slug)
       setStatus('success')
     } catch (err) {
       setError(err.response?.data?.error?.message || 'Error al verificar el email')
       setStatus('error')
     }
-  }
+  }, [token])
+
+  useEffect(() => {
+    verificarEmail()
+  }, [verificarEmail])
 
   if (status === 'verifying') {
     return (
@@ -61,9 +69,16 @@ export default function VerificarEmail() {
               {error}
             </p>
             <div className="space-y-3">
+              <button
+                type="button"
+                onClick={verificarEmail}
+                className="btn btn-primary w-full py-3"
+              >
+                Reintentar
+              </button>
               <Link
                 to="/registro"
-                className="btn btn-primary w-full py-3 block"
+                className="btn btn-secondary w-full py-3 block"
               >
                 Registrarse nuevamente
               </Link>

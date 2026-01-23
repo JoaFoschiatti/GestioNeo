@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import api from '../services/api'
 
 const AuthContext = createContext(null)
@@ -23,8 +23,8 @@ export function AuthProvider({ children }) {
     setLoading(false)
   }, [])
 
-  const login = async (email, password, slug = undefined) => {
-    const response = await api.post('/auth/login', { email, password, slug })
+  const login = useCallback(async (email, password, slug = undefined, options = {}) => {
+    const response = await api.post('/auth/login', { email, password, slug }, options)
     const { token, usuario, tenant } = response.data
 
     localStorage.setItem('token', token)
@@ -37,26 +37,26 @@ export function AuthProvider({ children }) {
 
     setUsuario(usuario)
     return usuario
-  }
+  }, [])
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem('token')
     localStorage.removeItem('usuario')
     localStorage.removeItem('tenant')
     delete api.defaults.headers.common['Authorization']
     setUsuario(null)
     setTenant(null)
-  }
+  }, [])
 
-  const esAdmin = usuario?.rol === 'ADMIN'
-  const esMozo = usuario?.rol === 'MOZO' || esAdmin
-  const esCocinero = usuario?.rol === 'COCINERO' || esAdmin
-  const esCajero = usuario?.rol === 'CAJERO' || esAdmin
-  const esDelivery = usuario?.rol === 'DELIVERY' || esAdmin
-  const esSuperAdmin = usuario?.rol === 'SUPER_ADMIN'
+  const value = useMemo(() => {
+    const esAdmin = usuario?.rol === 'ADMIN'
+    const esMozo = usuario?.rol === 'MOZO' || esAdmin
+    const esCocinero = usuario?.rol === 'COCINERO' || esAdmin
+    const esCajero = usuario?.rol === 'CAJERO' || esAdmin
+    const esDelivery = usuario?.rol === 'DELIVERY' || esAdmin
+    const esSuperAdmin = usuario?.rol === 'SUPER_ADMIN'
 
-  return (
-    <AuthContext.Provider value={{
+    return {
       usuario,
       tenant,
       login,
@@ -68,7 +68,11 @@ export function AuthProvider({ children }) {
       esCajero,
       esDelivery,
       esSuperAdmin
-    }}>
+    }
+  }, [usuario, tenant, login, logout, loading])
+
+  return (
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   )

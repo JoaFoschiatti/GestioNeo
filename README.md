@@ -101,8 +101,9 @@ npm run dev
 # Backend (.env)
 PORT=3001
 NODE_ENV=development
-DATABASE_URL="postgresql://usuario:password@localhost:5432/gestioneo"
-DIRECT_URL="postgresql://usuario:password@localhost:5432/gestioneo"
+# Nota: usar 127.0.0.1 evita problemas de IPv6 (::1) en algunas instalaciones.
+DATABASE_URL="postgresql://usuario:password@127.0.0.1:5432/gestioneo?schema=public"
+DIRECT_URL="postgresql://usuario:password@127.0.0.1:5432/gestioneo?schema=public"
 JWT_SECRET="tu-secreto-jwt-muy-seguro"
 JWT_EXPIRES_IN="24h"
 MERCADOPAGO_ACCESS_TOKEN="TEST-xxxx"

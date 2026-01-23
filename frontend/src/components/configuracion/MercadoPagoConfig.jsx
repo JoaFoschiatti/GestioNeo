@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import api from '../../services/api'
+import useAsync from '../../hooks/useAsync'
 import {
   CreditCardIcon,
   CheckCircleIcon,
@@ -10,21 +12,43 @@ import {
   ChevronUpIcon
 } from '@heroicons/react/24/outline'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
-
 export default function MercadoPagoConfig({ onStatusChange }) {
   const [status, setStatus] = useState(null) // null, 'loading', 'connected', 'disconnected', 'error'
   const [configInfo, setConfigInfo] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [connecting, setConnecting] = useState(false)
   const [showManual, setShowManual] = useState(false)
   const [manualToken, setManualToken] = useState('')
   const [savingManual, setSavingManual] = useState(false)
   const [error, setError] = useState(null)
   const [disconnecting, setDisconnecting] = useState(false)
 
-  useEffect(() => {
-    checkStatus()
+  const checkStatus = useCallback(async () => {
+    const response = await api.get('/mercadopago/status', { skipToast: true })
+    const data = response.data
+    setConfigInfo(data.config)
+    setStatus(data.connected ? 'connected' : 'disconnected')
 
+    if (onStatusChange) {
+      onStatusChange(data.connected)
+    }
+    return data
+  }, [onStatusChange])
+
+  const handleLoadError = useCallback((err) => {
+    console.error('Error checking MP status:', err)
+    setStatus('error')
+  }, [])
+
+  const checkStatusRequest = useCallback(async (_ctx) => (
+    checkStatus()
+  ), [checkStatus])
+
+  const { loading: statusLoading, execute: checkStatusAsync } = useAsync(
+    checkStatusRequest,
+    { onError: handleLoadError }
+  )
+
+  useEffect(() => {
     // Check URL params for OAuth callback result
     const params = new URLSearchParams(window.location.search)
     const mpResult = params.get('mp')
@@ -38,52 +62,16 @@ export default function MercadoPagoConfig({ onStatusChange }) {
     }
   }, [])
 
-  const checkStatus = async () => {
-    try {
-      setLoading(true)
-      const token = localStorage.getItem('token')
-      const response = await fetch(`${API_URL}/mercadopago/status`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-
-      if (!response.ok) {
-        throw new Error('Error al obtener estado')
-      }
-
-      const data = await response.json()
-      setConfigInfo(data.config)
-      setStatus(data.connected ? 'connected' : 'disconnected')
-
-      if (onStatusChange) {
-        onStatusChange(data.connected)
-      }
-    } catch (err) {
-      console.error('Error checking MP status:', err)
-      setStatus('error')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleConnectOAuth = async () => {
     try {
-      setLoading(true)
-      const token = localStorage.getItem('token')
-      const response = await fetch(`${API_URL}/mercadopago/oauth/authorize`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error?.message || 'Error al iniciar conexion')
-      }
-
-      const data = await response.json()
+      setConnecting(true)
+      const response = await api.get('/mercadopago/oauth/authorize', { skipToast: true })
+      const data = response.data
       // Redirect to MercadoPago OAuth
       window.location.href = data.authUrl
     } catch (err) {
-      setError(err.message)
-      setLoading(false)
+      setError(err.response?.data?.error?.message || err.message)
+      setConnecting(false)
     }
   }
 
@@ -97,21 +85,13 @@ export default function MercadoPagoConfig({ onStatusChange }) {
       setSavingManual(true)
       setError(null)
 
-      const token = localStorage.getItem('token')
-      const response = await fetch(`${API_URL}/mercadopago/config/manual`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ accessToken: manualToken })
-      })
+      const response = await api.post(
+        '/mercadopago/config/manual',
+        { accessToken: manualToken },
+        { skipToast: true }
+      )
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error?.message || 'Error al guardar configuracion')
-      }
+      const data = response.data
 
       setStatus('connected')
       setConfigInfo({ email: data.email, isOAuth: false, isActive: true })
@@ -122,7 +102,7 @@ export default function MercadoPagoConfig({ onStatusChange }) {
         onStatusChange(true)
       }
     } catch (err) {
-      setError(err.message)
+      setError(err.response?.data?.error?.message || err.message)
     } finally {
       setSavingManual(false)
     }
@@ -135,15 +115,7 @@ export default function MercadoPagoConfig({ onStatusChange }) {
 
     try {
       setDisconnecting(true)
-      const token = localStorage.getItem('token')
-      const response = await fetch(`${API_URL}/mercadopago/oauth/disconnect`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-
-      if (!response.ok) {
-        throw new Error('Error al desconectar')
-      }
+      await api.delete('/mercadopago/oauth/disconnect', { skipToast: true })
 
       setStatus('disconnected')
       setConfigInfo(null)
@@ -152,13 +124,13 @@ export default function MercadoPagoConfig({ onStatusChange }) {
         onStatusChange(false)
       }
     } catch (err) {
-      setError(err.message)
+      setError(err.response?.data?.error?.message || err.message)
     } finally {
       setDisconnecting(false)
     }
   }
 
-  if (loading && !status) {
+  if (statusLoading && !status) {
     return (
       <div className="bg-white rounded-xl shadow-sm border p-6">
         <div className="flex items-center gap-3">
@@ -189,7 +161,12 @@ export default function MercadoPagoConfig({ onStatusChange }) {
           <div className="mb-4 bg-red-50 text-red-700 p-3 rounded-lg flex items-center gap-2">
             <ExclamationTriangleIcon className="w-5 h-5 flex-shrink-0" />
             <span>{error}</span>
-            <button onClick={() => setError(null)} className="ml-auto">
+            <button
+              onClick={() => setError(null)}
+              type="button"
+              aria-label="Cerrar mensaje de error"
+              className="ml-auto"
+            >
               <XMarkIcon className="w-5 h-5" />
             </button>
           </div>
@@ -217,6 +194,7 @@ export default function MercadoPagoConfig({ onStatusChange }) {
 
             <button
               onClick={handleDisconnect}
+              type="button"
               disabled={disconnecting}
               className="text-red-600 hover:text-red-700 text-sm font-medium flex items-center gap-1"
             >
@@ -251,10 +229,11 @@ export default function MercadoPagoConfig({ onStatusChange }) {
             {/* OAuth Button */}
             <button
               onClick={handleConnectOAuth}
-              disabled={loading}
+              type="button"
+              disabled={connecting || statusLoading}
               className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
             >
-              {loading ? (
+              {connecting ? (
                 <ArrowPathIcon className="w-5 h-5 animate-spin" />
               ) : (
                 <LinkIcon className="w-5 h-5" />
@@ -265,6 +244,7 @@ export default function MercadoPagoConfig({ onStatusChange }) {
             {/* Manual config toggle */}
             <button
               onClick={() => setShowManual(!showManual)}
+              type="button"
               className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 mx-auto"
             >
               {showManual ? (
@@ -292,10 +272,11 @@ export default function MercadoPagoConfig({ onStatusChange }) {
                 </p>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="mp-access-token">
                     Access Token
                   </label>
                   <input
+                    id="mp-access-token"
                     type="password"
                     value={manualToken}
                     onChange={(e) => setManualToken(e.target.value)}
@@ -306,6 +287,7 @@ export default function MercadoPagoConfig({ onStatusChange }) {
 
                 <button
                   onClick={handleSaveManual}
+                  type="button"
                   disabled={savingManual || !manualToken.trim()}
                   className="w-full bg-gray-800 hover:bg-gray-900 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -327,7 +309,8 @@ export default function MercadoPagoConfig({ onStatusChange }) {
             <ExclamationTriangleIcon className="w-12 h-12 text-red-400 mx-auto mb-2" />
             <p className="text-red-600">Error al cargar estado</p>
             <button
-              onClick={checkStatus}
+              onClick={checkStatusAsync}
+              type="button"
               className="mt-2 text-blue-600 hover:underline text-sm"
             >
               Reintentar

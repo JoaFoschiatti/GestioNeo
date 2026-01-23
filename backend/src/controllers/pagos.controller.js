@@ -1,130 +1,65 @@
-const { PrismaClient } = require('@prisma/client');
 const crypto = require('crypto');
 const eventBus = require('../services/event-bus');
-const prisma = new PrismaClient();
+const { getPrisma } = require('../utils/get-prisma');
 const emailService = require('../services/email.service');
 const { getPayment, saveTransaction } = require('../services/mercadopago.service');
+const pagosService = require('../services/pagos.service');
+const { logger } = require('../utils/logger');
 
 // Registrar pago
 const registrarPago = async (req, res) => {
-  try {
-    const { pedidoId, monto, metodo, referencia, comprobante } = req.body;
+  const prisma = getPrisma(req);
+  const { pedidoId, monto, metodo, referencia, comprobante } = req.body;
 
-    const pedido = await prisma.pedido.findUnique({
-      where: { id: pedidoId },
-      include: { pagos: true }
+  const { pago, pedido, totalPagado, pendiente } = await pagosService.registrarPago(prisma, {
+    pedidoId,
+    monto,
+    metodo,
+    referencia,
+    comprobante
+  });
+
+  eventBus.publish('pago.updated', {
+    tenantId: req.tenantId,
+    pedidoId,
+    totalPagado,
+    pendiente,
+    estadoPedido: pedido.estado
+  });
+
+  if (pedido.estado === 'COBRADO') {
+    eventBus.publish('pedido.updated', {
+      tenantId: req.tenantId,
+      id: pedido.id,
+      estado: pedido.estado,
+      tipo: pedido.tipo,
+      mesaId: pedido.mesaId || null,
+      updatedAt: pedido.updatedAt || new Date().toISOString()
     });
-
-    if (!pedido) {
-      return res.status(404).json({ error: { message: 'Pedido no encontrado' } });
-    }
-
-    if (pedido.estado === 'CANCELADO') {
-      return res.status(400).json({ error: { message: 'No se puede pagar un pedido cancelado' } });
-    }
-
-    // Calcular total pagado
-    const totalPagado = pedido.pagos.reduce((sum, p) => sum + parseFloat(p.monto), 0);
-    const pendiente = parseFloat(pedido.total) - totalPagado;
-
-    if (parseFloat(monto) > pendiente + 0.01) { // pequeño margen para decimales
-      return res.status(400).json({
-        error: { message: `El monto excede el pendiente ($${pendiente.toFixed(2)})` }
-      });
-    }
-
-    const pago = await prisma.pago.create({
-      data: { pedidoId, monto, metodo, referencia, comprobante }
-    });
-
-    // Si el total pagado cubre el pedido, marcarlo como cobrado
-    const nuevoTotalPagado = totalPagado + parseFloat(monto);
-    if (nuevoTotalPagado >= parseFloat(pedido.total) - 0.01) {
-      await prisma.pedido.update({
-        where: { id: pedidoId },
-        data: { estado: 'COBRADO' }
-      });
-
-      // Liberar mesa si aplica
-      if (pedido.mesaId) {
-        await prisma.mesa.update({
-          where: { id: pedido.mesaId },
-          data: { estado: 'LIBRE' }
-        });
-      }
-    }
-
-    const pedidoActualizado = await prisma.pedido.findUnique({
-      where: { id: pedidoId },
-      include: { pagos: true, mesa: true }
-    });
-
-    eventBus.publish('pago.updated', {
-      pedidoId,
-      totalPagado: nuevoTotalPagado,
-      pendiente: Math.max(0, parseFloat(pedido.total) - nuevoTotalPagado),
-      estadoPedido: pedidoActualizado.estado
-    });
-
-    if (pedidoActualizado.estado === 'COBRADO') {
-      eventBus.publish('pedido.updated', {
-        id: pedidoActualizado.id,
-        estado: pedidoActualizado.estado,
-        tipo: pedidoActualizado.tipo,
-        mesaId: pedidoActualizado.mesaId || null,
-        updatedAt: pedidoActualizado.updatedAt || new Date().toISOString()
-      });
-    }
-
-    res.status(201).json({
-      pago,
-      pedido: pedidoActualizado,
-      totalPagado: nuevoTotalPagado,
-      pendiente: Math.max(0, parseFloat(pedido.total) - nuevoTotalPagado)
-    });
-  } catch (error) {
-    console.error('Error al registrar pago:', error);
-    res.status(500).json({ error: { message: 'Error al registrar pago' } });
   }
+
+  res.status(201).json({
+    pago,
+    pedido,
+    totalPagado,
+    pendiente
+  });
 };
 
 // Crear preferencia de MercadoPago (para delivery)
 const crearPreferenciaMercadoPago = async (req, res) => {
-  try {
-    const { pedidoId } = req.body;
+  const prisma = getPrisma(req);
+  const { pedidoId } = req.body;
 
-    const pedido = await prisma.pedido.findUnique({
-      where: { id: pedidoId },
-      include: { items: { include: { producto: true } } }
-    });
-
-    if (!pedido) {
-      return res.status(404).json({ error: { message: 'Pedido no encontrado' } });
-    }
-
-    // TODO: Integrar SDK de MercadoPago real
-    // Por ahora retornamos un mock para desarrollo
-    const preferencia = {
-      id: `PREF_${pedidoId}_${Date.now()}`,
-      init_point: `https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=MOCK_${pedidoId}`,
-      sandbox_init_point: `https://sandbox.mercadopago.com.ar/checkout/v1/redirect?pref_id=MOCK_${pedidoId}`
-    };
-
-    res.json({
-      preferencia,
-      message: 'Para integración real, configurar MERCADOPAGO_ACCESS_TOKEN en .env'
-    });
-  } catch (error) {
-    console.error('Error al crear preferencia:', error);
-    res.status(500).json({ error: { message: 'Error al crear preferencia de pago' } });
-  }
+  const result = await pagosService.crearPreferenciaMercadoPagoMock(prisma, pedidoId);
+  res.json(result);
 };
 
 // Verificar firma del webhook de MercadoPago
 const verifyWebhookSignature = (req) => {
   const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
   if (!secret) {
-    console.warn('MERCADOPAGO_WEBHOOK_SECRET no configurado - webhook sin verificar');
+    logger.warn('MERCADOPAGO_WEBHOOK_SECRET no configurado - webhook sin verificar');
     return true; // En sandbox sin secret configurado, permitir
   }
 
@@ -169,10 +104,28 @@ const verifyWebhookSignature = (req) => {
   }
 };
 
+const getPaymentFromGlobalToken = async (paymentId) => {
+  const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
+  if (!accessToken) {
+    return null;
+  }
+
+  try {
+    const { MercadoPagoConfig, Payment } = require('mercadopago');
+    const client = new MercadoPagoConfig({ accessToken });
+    const paymentClient = new Payment(client);
+    return await paymentClient.get({ id: paymentId });
+  } catch (error) {
+    logger.error('Error al consultar pago en MercadoPago:', error);
+    return null;
+  }
+};
+
 // Webhook de MercadoPago (multi-tenant)
 const webhookMercadoPago = async (req, res) => {
   try {
-    console.log('Webhook MercadoPago recibido:', {
+    const prisma = getPrisma(req);
+    logger.info('Webhook MercadoPago recibido:', {
       type: req.body.type,
       action: req.body.action,
       dataId: req.query['data.id']
@@ -180,7 +133,7 @@ const webhookMercadoPago = async (req, res) => {
 
     // Verificar firma (en producción es crítico)
     if (process.env.NODE_ENV === 'production' && !verifyWebhookSignature(req)) {
-      console.error('Webhook MercadoPago: firma inválida');
+      logger.error('Webhook MercadoPago: firma inválida');
       return res.sendStatus(401);
     }
 
@@ -191,31 +144,39 @@ const webhookMercadoPago = async (req, res) => {
       const paymentId = data?.id || req.query['data.id'];
 
       if (!paymentId) {
-        console.log('Webhook sin payment ID');
+        logger.info('Webhook sin payment ID');
         return res.sendStatus(200);
       }
 
-      // Primero buscar pago existente para obtener tenantId
-      let pagoExistente = await prisma.pago.findFirst({
-        where: { mpPaymentId: paymentId.toString() }
-      });
+      const paymentIdStr = paymentId.toString();
+      const webhookIdempotencyKey = `mp-payment-${paymentIdStr}`;
 
-      // Si no existe, buscar por preference ID en el query
-      if (!pagoExistente && req.body.data?.id) {
-        // Intentar buscar por mpPreferenceId si viene en la notificación
-        pagoExistente = await prisma.pago.findFirst({
-          where: {
-            OR: [
-              { mpPaymentId: paymentId.toString() },
-              { idempotencyKey: { contains: paymentId.toString() } }
-            ]
-          }
-        });
-      }
+      // Buscar pago existente por mpPaymentId o idempotencyKey del webhook
+      let pagoExistente = await prisma.pago.findFirst({
+        where: {
+          OR: [
+            { mpPaymentId: paymentIdStr },
+            { idempotencyKey: webhookIdempotencyKey }
+          ]
+        },
+        orderBy: { createdAt: 'desc' }
+      });
 
       // Obtener tenantId desde el pago existente o desde external_reference
       let tenantId = pagoExistente?.tenantId;
       let pedidoId = pagoExistente?.pedidoId;
+
+      // Idempotencia: si ya está aprobado y el pedido también, no reprocesar (evita emails/eventos duplicados)
+      if (pagoExistente?.estado === 'APROBADO' && pedidoId) {
+        const pedidoActual = await prisma.pedido.findUnique({
+          where: { id: pedidoId },
+          select: { estadoPago: true }
+        });
+        if (pedidoActual?.estadoPago === 'APROBADO') {
+          logger.info('Webhook: pago ya procesado (idempotente)');
+          return res.sendStatus(200);
+        }
+      }
 
       // Consultar el pago en MercadoPago usando credenciales del tenant
       let paymentInfo;
@@ -223,42 +184,25 @@ const webhookMercadoPago = async (req, res) => {
       if (tenantId) {
         // Usar credenciales del tenant
         try {
-          paymentInfo = await getPayment(tenantId, paymentId);
+          paymentInfo = await getPayment(tenantId, paymentIdStr);
         } catch (mpError) {
-          console.error('Error al consultar pago con credenciales del tenant:', mpError);
+          logger.error('Error al consultar pago con credenciales del tenant:', mpError);
           // Fallback: usar credenciales globales si existen
-          if (process.env.MERCADOPAGO_ACCESS_TOKEN) {
-            const { MercadoPagoConfig, Payment } = require('mercadopago');
-            const client = new MercadoPagoConfig({
-              accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN
-            });
-            const paymentClient = new Payment(client);
-            paymentInfo = await paymentClient.get({ id: paymentId });
-          } else {
+          paymentInfo = await getPaymentFromGlobalToken(paymentIdStr);
+          if (!paymentInfo) {
             return res.sendStatus(200);
           }
         }
       } else {
         // No tenemos tenantId, usar credenciales globales como fallback
-        if (process.env.MERCADOPAGO_ACCESS_TOKEN) {
-          const { MercadoPagoConfig, Payment } = require('mercadopago');
-          const client = new MercadoPagoConfig({
-            accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN
-          });
-          const paymentClient = new Payment(client);
-          try {
-            paymentInfo = await paymentClient.get({ id: paymentId });
-          } catch (mpError) {
-            console.error('Error al consultar pago en MercadoPago:', mpError);
-            return res.sendStatus(200);
-          }
-        } else {
-          console.error('No hay credenciales para consultar el pago');
+        paymentInfo = await getPaymentFromGlobalToken(paymentIdStr);
+        if (!paymentInfo) {
+          logger.error('No hay credenciales para consultar el pago');
           return res.sendStatus(200);
         }
       }
 
-      console.log('Payment info de MercadoPago:', {
+      logger.info('Payment info de MercadoPago:', {
         id: paymentInfo.id,
         status: paymentInfo.status,
         external_reference: paymentInfo.external_reference
@@ -267,30 +211,77 @@ const webhookMercadoPago = async (req, res) => {
       // Parsear external_reference para obtener tenantId y pedidoId
       // Formato: "{tenantId}-{pedidoId}"
       if (paymentInfo.external_reference) {
-        const parts = paymentInfo.external_reference.split('-');
+        const parts = paymentInfo.external_reference.toString().split('-');
         if (parts.length >= 2) {
-          tenantId = parseInt(parts[0]);
-          pedidoId = parseInt(parts[1]);
+          const parsedTenantId = parseInt(parts[0], 10);
+          const parsedPedidoId = parseInt(parts[1], 10);
+          if (!Number.isNaN(parsedTenantId)) tenantId = parsedTenantId;
+          if (!Number.isNaN(parsedPedidoId)) pedidoId = parsedPedidoId;
         } else {
           // Formato antiguo: solo pedidoId
-          pedidoId = parseInt(paymentInfo.external_reference);
+          const parsedPedidoId = parseInt(paymentInfo.external_reference, 10);
+          if (!Number.isNaN(parsedPedidoId)) pedidoId = parsedPedidoId;
         }
       }
 
       if (!pedidoId) {
-        console.log('Webhook: no se pudo determinar pedidoId');
+        logger.info('Webhook: no se pudo determinar pedidoId');
         return res.sendStatus(200);
       }
 
-      // Buscar pago existente por idempotencyKey para evitar duplicados
-      const idempotencyKey = `mp-payment-${paymentId}`;
-      pagoExistente = await prisma.pago.findFirst({
-        where: { idempotencyKey }
-      });
+      // Obtener el tenantId si aún no lo tenemos (external_reference antiguo)
+      if (!tenantId) {
+        const pedido = await prisma.pedido.findUnique({
+          where: { id: pedidoId },
+          select: { tenantId: true }
+        });
+        tenantId = pedido?.tenantId;
+      }
 
-      if (pagoExistente && pagoExistente.estado === 'APROBADO') {
-        console.log('Webhook: pago ya procesado (idempotente)');
+      if (!tenantId) {
+        logger.info('Webhook: no se pudo determinar tenantId');
         return res.sendStatus(200);
+      }
+
+      // Si no encontramos pago por mpPaymentId/idempotencyKey, intentar matchear el pago creado al generar la preferencia
+      if (!pagoExistente) {
+        const preferenceId = paymentInfo.preference_id ? paymentInfo.preference_id.toString() : null;
+
+        if (preferenceId) {
+          pagoExistente = await prisma.pago.findFirst({
+            where: {
+              tenantId,
+              pedidoId,
+              metodo: 'MERCADOPAGO',
+              mpPreferenceId: preferenceId
+            },
+            orderBy: { createdAt: 'desc' }
+          });
+        }
+
+        if (!pagoExistente) {
+          pagoExistente = await prisma.pago.findFirst({
+            where: {
+              tenantId,
+              pedidoId,
+              metodo: 'MERCADOPAGO',
+              mpPaymentId: null
+            },
+            orderBy: { createdAt: 'desc' }
+          });
+        }
+      }
+
+      // Idempotencia: si ya está aprobado y el pedido también, no reprocesar
+      if (pagoExistente?.estado === 'APROBADO') {
+        const pedidoActual = await prisma.pedido.findUnique({
+          where: { id: pedidoId },
+          select: { estadoPago: true }
+        });
+        if (pedidoActual?.estadoPago === 'APROBADO') {
+          logger.info('Webhook: pago ya procesado (idempotente)');
+          return res.sendStatus(200);
+        }
       }
 
       // Mapear estado de MercadoPago a nuestro enum
@@ -309,15 +300,6 @@ const webhookMercadoPago = async (req, res) => {
           estadoPago = 'PENDIENTE';
       }
 
-      // Obtener el pedido para tener el tenantId si aún no lo tenemos
-      if (!tenantId) {
-        const pedido = await prisma.pedido.findUnique({
-          where: { id: pedidoId },
-          select: { tenantId: true }
-        });
-        tenantId = pedido?.tenantId;
-      }
-
       // Actualizar o crear registro de pago
       let pagoId;
       if (pagoExistente) {
@@ -325,8 +307,11 @@ const webhookMercadoPago = async (req, res) => {
           where: { id: pagoExistente.id },
           data: {
             estado: estadoPago,
-            mpPaymentId: paymentId.toString(),
-            referencia: `MP-${paymentId}`
+            mpPaymentId: paymentIdStr,
+            referencia: `MP-${paymentIdStr}`,
+            ...(paymentInfo.preference_id
+              ? { mpPreferenceId: paymentInfo.preference_id.toString() }
+              : {})
           }
         });
         pagoId = pagoActualizado.id;
@@ -338,9 +323,12 @@ const webhookMercadoPago = async (req, res) => {
             monto: parseFloat(paymentInfo.transaction_amount),
             metodo: 'MERCADOPAGO',
             estado: estadoPago,
-            mpPaymentId: paymentId.toString(),
-            referencia: `MP-${paymentId}`,
-            idempotencyKey
+            mpPaymentId: paymentIdStr,
+            referencia: `MP-${paymentIdStr}`,
+            ...(paymentInfo.preference_id
+              ? { mpPreferenceId: paymentInfo.preference_id.toString() }
+              : {}),
+            idempotencyKey: webhookIdempotencyKey
           }
         });
         pagoId = nuevoPago.id;
@@ -351,7 +339,7 @@ const webhookMercadoPago = async (req, res) => {
         try {
           await saveTransaction(tenantId, paymentInfo, pagoId);
         } catch (txError) {
-          console.error('Error al guardar transacción MP:', txError);
+          logger.error('Error al guardar transacción MP:', txError);
           // No fallar el webhook por esto
         }
       }
@@ -388,9 +376,9 @@ const webhookMercadoPago = async (req, res) => {
         if (pedido.clienteEmail) {
           try {
             await emailService.sendOrderConfirmation(pedido, pedido.tenant);
-            console.log('Email de confirmación enviado a:', pedido.clienteEmail);
+            logger.info('Email de confirmación enviado a:', pedido.clienteEmail);
           } catch (emailError) {
-            console.error('Error al enviar email:', emailError);
+            logger.error('Error al enviar email:', emailError);
             // No fallar el webhook por error de email
           }
         }
@@ -399,7 +387,7 @@ const webhookMercadoPago = async (req, res) => {
 
     res.sendStatus(200);
   } catch (error) {
-    console.error('Error en webhook MercadoPago:', error);
+    logger.error('Error en webhook MercadoPago:', error);
     // Siempre responder 200 para evitar reintentos infinitos
     res.sendStatus(200);
   }
@@ -407,31 +395,11 @@ const webhookMercadoPago = async (req, res) => {
 
 // Listar pagos de un pedido
 const listarPagosPedido = async (req, res) => {
-  try {
-    const { pedidoId } = req.params;
+  const prisma = getPrisma(req);
+  const { pedidoId } = req.params;
 
-    const pagos = await prisma.pago.findMany({
-      where: { pedidoId: parseInt(pedidoId) },
-      orderBy: { createdAt: 'desc' }
-    });
-
-    const pedido = await prisma.pedido.findUnique({
-      where: { id: parseInt(pedidoId) },
-      select: { total: true }
-    });
-
-    const totalPagado = pagos.reduce((sum, p) => sum + parseFloat(p.monto), 0);
-
-    res.json({
-      pagos,
-      totalPedido: pedido?.total || 0,
-      totalPagado,
-      pendiente: Math.max(0, parseFloat(pedido?.total || 0) - totalPagado)
-    });
-  } catch (error) {
-    console.error('Error al listar pagos:', error);
-    res.status(500).json({ error: { message: 'Error al obtener pagos' } });
-  }
+  const result = await pagosService.listarPagosPedido(prisma, pedidoId);
+  res.json(result);
 };
 
 module.exports = {

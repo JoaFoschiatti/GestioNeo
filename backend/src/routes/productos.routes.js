@@ -4,6 +4,19 @@ const multer = require('multer');
 const path = require('path');
 const productosController = require('../controllers/productos.controller');
 const { verificarToken, esAdmin } = require('../middlewares/auth.middleware');
+const { setTenantFromAuth } = require('../middlewares/tenant.middleware');
+const { validate } = require('../middlewares/validate.middleware');
+const { asyncHandler } = require('../utils/async-handler');
+const {
+  idParamSchema,
+  listarQuerySchema,
+  crearProductoBodySchema,
+  actualizarProductoBodySchema,
+  cambiarDisponibilidadBodySchema,
+  crearVarianteBodySchema,
+  actualizarVarianteBodySchema,
+  agruparVariantesBodySchema
+} = require('../schemas/productos.schemas');
 
 // Configuración de multer para subida de imágenes
 const storage = multer.diskStorage({
@@ -26,17 +39,65 @@ const upload = multer({
     if (extname && mimetype) {
       return cb(null, true);
     }
-    cb(new Error('Solo se permiten imágenes (jpeg, jpg, png, webp)'));
+    const error = new Error('Solo se permiten imágenes (jpeg, jpg, png, webp)');
+    error.status = 400;
+    cb(error);
   }
 });
 
 router.use(verificarToken);
+router.use(setTenantFromAuth);
 
-router.get('/', productosController.listar);
-router.get('/:id', productosController.obtener);
-router.post('/', esAdmin, upload.single('imagen'), productosController.crear);
-router.put('/:id', esAdmin, upload.single('imagen'), productosController.actualizar);
-router.patch('/:id/disponibilidad', esAdmin, productosController.cambiarDisponibilidad);
-router.delete('/:id', esAdmin, productosController.eliminar);
+// Rutas para productos
+router.get('/', validate({ query: listarQuerySchema }), asyncHandler(productosController.listar));
+router.get('/con-variantes', validate({ query: listarQuerySchema }), asyncHandler(productosController.listarConVariantes));
+router.get('/:id', validate({ params: idParamSchema }), asyncHandler(productosController.obtener));
+router.post(
+  '/',
+  esAdmin,
+  upload.single('imagen'),
+  validate({ body: crearProductoBodySchema }),
+  asyncHandler(productosController.crear)
+);
+router.put(
+  '/:id',
+  esAdmin,
+  upload.single('imagen'),
+  validate({ params: idParamSchema, body: actualizarProductoBodySchema }),
+  asyncHandler(productosController.actualizar)
+);
+router.patch(
+  '/:id/disponibilidad',
+  esAdmin,
+  validate({ params: idParamSchema, body: cambiarDisponibilidadBodySchema }),
+  asyncHandler(productosController.cambiarDisponibilidad)
+);
+router.delete('/:id', esAdmin, validate({ params: idParamSchema }), asyncHandler(productosController.eliminar));
+
+// Rutas para variantes de productos
+router.post(
+  '/:id/variantes',
+  esAdmin,
+  validate({ params: idParamSchema, body: crearVarianteBodySchema }),
+  asyncHandler(productosController.crearVariante)
+);
+router.put(
+  '/:id/variante',
+  esAdmin,
+  validate({ params: idParamSchema, body: actualizarVarianteBodySchema }),
+  asyncHandler(productosController.actualizarVariante)
+);
+router.delete(
+  '/:id/desagrupar',
+  esAdmin,
+  validate({ params: idParamSchema }),
+  asyncHandler(productosController.desagruparVariante)
+);
+router.post(
+  '/agrupar-variantes',
+  esAdmin,
+  validate({ body: agruparVariantesBodySchema }),
+  asyncHandler(productosController.agruparComoVariantes)
+);
 
 module.exports = router;

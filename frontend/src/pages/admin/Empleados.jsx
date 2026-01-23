@@ -1,47 +1,50 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline'
+import useAsync from '../../hooks/useAsync'
 
 export default function Empleados() {
   const [empleados, setEmpleados] = useState([])
-  const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editando, setEditando] = useState(null)
   const [form, setForm] = useState({
     nombre: '', apellido: '', dni: '', telefono: '', direccion: '', rol: 'MOZO', tarifaHora: ''
   })
 
-  useEffect(() => {
-    cargarEmpleados()
+  const cargarEmpleados = useCallback(async () => {
+    const response = await api.get('/empleados', { skipToast: true })
+    setEmpleados(response.data)
+    return response.data
   }, [])
 
-  const cargarEmpleados = async () => {
-    try {
-      const response = await api.get('/empleados')
-      setEmpleados(response.data)
-    } catch (error) {
-      console.error('Error:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const handleLoadError = useCallback((error) => {
+    console.error('Error:', error)
+    toast.error(error.response?.data?.error?.message || 'Error al cargar empleados')
+  }, [])
+
+  const cargarEmpleadosRequest = useCallback(async (_ctx) => (
+    cargarEmpleados()
+  ), [cargarEmpleados])
+
+  const { loading, execute: cargarEmpleadosAsync } = useAsync(cargarEmpleadosRequest, { onError: handleLoadError })
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
       if (editando) {
-        await api.put(`/empleados/${editando.id}`, form)
+        await api.put(`/empleados/${editando.id}`, form, { skipToast: true })
         toast.success('Empleado actualizado')
       } else {
-        await api.post('/empleados', form)
+        await api.post('/empleados', form, { skipToast: true })
         toast.success('Empleado creado')
       }
       setShowModal(false)
       resetForm()
-      cargarEmpleados()
+      cargarEmpleadosAsync()
     } catch (error) {
       console.error('Error:', error)
+      toast.error(error.response?.data?.error?.message || 'Error al guardar empleado')
     }
   }
 
@@ -62,11 +65,12 @@ export default function Empleados() {
   const handleDelete = async (id) => {
     if (!confirm('¿Desactivar este empleado?')) return
     try {
-      await api.delete(`/empleados/${id}`)
+      await api.delete(`/empleados/${id}`, { skipToast: true })
       toast.success('Empleado desactivado')
-      cargarEmpleados()
+      cargarEmpleadosAsync()
     } catch (error) {
       console.error('Error:', error)
+      toast.error(error.response?.data?.error?.message || 'Error al desactivar empleado')
     }
   }
 
@@ -75,7 +79,7 @@ export default function Empleados() {
     setEditando(null)
   }
 
-  if (loading) {
+  if (loading && empleados.length === 0) {
     return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div></div>
   }
 
@@ -130,10 +134,20 @@ export default function Empleados() {
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right space-x-2">
-                  <button onClick={() => handleEdit(empleado)} className="text-primary-600 hover:text-primary-800">
+                  <button
+                    onClick={() => handleEdit(empleado)}
+                    type="button"
+                    aria-label={`Editar empleado: ${empleado.nombre} ${empleado.apellido}`}
+                    className="text-primary-600 hover:text-primary-800"
+                  >
                     <PencilIcon className="w-5 h-5" />
                   </button>
-                  <button onClick={() => handleDelete(empleado.id)} className="text-red-600 hover:text-red-800">
+                  <button
+                    onClick={() => handleDelete(empleado.id)}
+                    type="button"
+                    aria-label={`Desactivar empleado: ${empleado.nombre} ${empleado.apellido}`}
+                    className="text-red-600 hover:text-red-800"
+                  >
                     <TrashIcon className="w-5 h-5" />
                   </button>
                 </td>
@@ -153,8 +167,9 @@ export default function Empleados() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="label">Nombre</label>
+                  <label className="label" htmlFor="empleado-nombre">Nombre</label>
                   <input
+                    id="empleado-nombre"
                     type="text"
                     className="input"
                     value={form.nombre}
@@ -163,8 +178,9 @@ export default function Empleados() {
                   />
                 </div>
                 <div>
-                  <label className="label">Apellido</label>
+                  <label className="label" htmlFor="empleado-apellido">Apellido</label>
                   <input
+                    id="empleado-apellido"
                     type="text"
                     className="input"
                     value={form.apellido}
@@ -174,8 +190,9 @@ export default function Empleados() {
                 </div>
               </div>
               <div>
-                <label className="label">DNI</label>
+                <label className="label" htmlFor="empleado-dni">DNI</label>
                 <input
+                  id="empleado-dni"
                   type="text"
                   className="input"
                   value={form.dni}
@@ -184,8 +201,9 @@ export default function Empleados() {
                 />
               </div>
               <div>
-                <label className="label">Teléfono</label>
+                <label className="label" htmlFor="empleado-telefono">Teléfono</label>
                 <input
+                  id="empleado-telefono"
                   type="text"
                   className="input"
                   value={form.telefono}
@@ -194,8 +212,9 @@ export default function Empleados() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="label">Rol</label>
+                  <label className="label" htmlFor="empleado-rol">Rol</label>
                   <select
+                    id="empleado-rol"
                     className="input"
                     value={form.rol}
                     onChange={(e) => setForm({ ...form, rol: e.target.value })}
@@ -206,8 +225,9 @@ export default function Empleados() {
                   </select>
                 </div>
                 <div>
-                  <label className="label">Tarifa por Hora ($)</label>
+                  <label className="label" htmlFor="empleado-tarifa">Tarifa por Hora ($)</label>
                   <input
+                    id="empleado-tarifa"
                     type="number"
                     className="input"
                     value={form.tarifaHora}
