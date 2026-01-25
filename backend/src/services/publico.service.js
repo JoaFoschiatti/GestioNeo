@@ -1,3 +1,22 @@
+/**
+ * Servicio para el menú público (accesible sin autenticación).
+ *
+ * Este servicio maneja las operaciones del menú QR que los clientes
+ * escanean para ver productos y hacer pedidos desde sus dispositivos.
+ *
+ * IMPORTANTE: Este servicio NO requiere autenticación JWT.
+ * El tenant se resuelve por el slug en la URL (/menu/:slug).
+ *
+ * Funcionalidades:
+ * - Obtener configuración pública del restaurante
+ * - Listar menú con categorías y productos disponibles
+ * - Crear pedidos desde el menú (delivery o retiro)
+ * - Integración con MercadoPago para pagos online
+ * - Verificar estado de pago de pedidos
+ *
+ * @module publico.service
+ */
+
 const { createHttpError } = require('../utils/http-error');
 const {
   isMercadoPagoConfigured,
@@ -6,6 +25,10 @@ const {
   searchPaymentByReference
 } = require('./mercadopago.service');
 
+/**
+ * Convierte array de configuraciones a objeto map.
+ * @private
+ */
 const buildConfigMap = (configs) => {
   const configMap = {};
   configs.forEach(c => {
@@ -14,6 +37,27 @@ const buildConfigMap = (configs) => {
   return configMap;
 };
 
+/**
+ * Obtiene la configuración pública del restaurante.
+ *
+ * Retorna solo datos seguros para mostrar públicamente (sin tokens ni credenciales).
+ * Verifica si MercadoPago está realmente configurado antes de habilitarlo.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma con scoping
+ * @param {number} tenantId - ID del tenant
+ * @param {Object} tenant - Objeto tenant con datos básicos
+ *
+ * @returns {Promise<Object>} Configuración pública
+ * @returns {Object} returns.tenant - Datos del restaurante (nombre, logo, colores)
+ * @returns {Object} returns.config - Configuración operativa
+ * @returns {boolean} returns.config.tienda_abierta - Si está abierta
+ * @returns {string} returns.config.horario_apertura - Hora de apertura
+ * @returns {string} returns.config.horario_cierre - Hora de cierre
+ * @returns {number} returns.config.costo_delivery - Costo de envío
+ * @returns {boolean} returns.config.delivery_habilitado - Si hay delivery
+ * @returns {boolean} returns.config.mercadopago_enabled - Si MP está habilitado
+ * @returns {boolean} returns.config.efectivo_enabled - Si acepta efectivo
+ */
 const getPublicConfig = async (prisma, tenantId, tenant) => {
   const configs = await prisma.configuracion.findMany();
   const configMap = buildConfigMap(configs);
@@ -51,6 +95,16 @@ const getPublicConfig = async (prisma, tenantId, tenant) => {
   };
 };
 
+/**
+ * Obtiene el menú público con categorías y productos disponibles.
+ *
+ * Solo retorna categorías activas con productos disponibles.
+ * Incluye variantes de productos ordenadas.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
+ *
+ * @returns {Promise<Array>} Categorías con productos
+ */
 const getPublicMenu = async (prisma) => {
   return prisma.categoria.findMany({
     where: { activa: true },
@@ -84,6 +138,23 @@ const getPublicMenu = async (prisma) => {
   });
 };
 
+/**
+ * Construye los datos para crear una preferencia de MercadoPago.
+ *
+ * Genera URLs de retorno, configura los items del pago y
+ * establece la referencia externa para el webhook.
+ *
+ * @private
+ * @param {Object} params - Parámetros
+ * @param {number} params.tenantId - ID del tenant
+ * @param {number} params.pedidoId - ID del pedido
+ * @param {string} params.tenantSlug - Slug del restaurante
+ * @param {string} params.tenantNombre - Nombre para el descriptor de pago
+ * @param {Array} params.items - Items del pedido
+ * @param {number} params.costoEnvio - Costo de envío
+ *
+ * @returns {Object} Datos para MercadoPago createPreference
+ */
 const buildPreferenceData = ({ tenantId, pedidoId, tenantSlug, tenantNombre, items, costoEnvio }) => {
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
   const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
@@ -126,6 +197,43 @@ const buildPreferenceData = ({ tenantId, pedidoId, tenantSlug, tenantNombre, ite
   return preferenceData;
 };
 
+/**
+ * Crea un pedido desde el menú público.
+ *
+ * A diferencia de crearPedido del servicio de pedidos, este:
+ * - NO requiere usuarioId (es anónimo)
+ * - Incluye datos del cliente (nombre, teléfono, dirección)
+ * - Valida configuración de tienda (abierta, delivery habilitado)
+ * - Puede crear preferencia de MercadoPago automáticamente
+ * - Calcula costo de envío si es delivery
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
+ * @param {Object} params - Parámetros
+ * @param {number} params.tenantId - ID del tenant
+ * @param {string} params.tenantSlug - Slug del restaurante
+ * @param {Object} params.tenant - Objeto tenant
+ * @param {Object} params.body - Datos del pedido
+ * @param {Array<Object>} params.body.items - Items del pedido
+ * @param {string} params.body.clienteNombre - Nombre del cliente
+ * @param {string} params.body.clienteTelefono - Teléfono
+ * @param {string} [params.body.clienteDireccion] - Dirección (requerido para delivery)
+ * @param {string} [params.body.clienteEmail] - Email para notificaciones
+ * @param {('DELIVERY'|'RETIRO')} params.body.tipoEntrega - Tipo de entrega
+ * @param {('EFECTIVO'|'MERCADOPAGO')} params.body.metodoPago - Método de pago
+ * @param {number} [params.body.montoAbonado] - Monto con el que paga (efectivo)
+ * @param {string} [params.body.observaciones] - Observaciones del pedido
+ *
+ * @returns {Promise<Object>} Resultado de la creación
+ * @returns {Object} returns.pedido - Pedido creado
+ * @returns {number} returns.costoEnvio - Costo de envío aplicado
+ * @returns {number} returns.total - Total del pedido
+ * @returns {string|null} returns.initPoint - URL de MercadoPago (si aplica)
+ * @returns {boolean} returns.shouldSendEmail - Si debe enviarse email
+ * @returns {Array} returns.events - Eventos SSE a emitir
+ *
+ * @throws {HttpError} 400 - Validaciones: items vacíos, datos faltantes, tienda cerrada, etc.
+ * @throws {HttpError} 500 - Error al conectar con MercadoPago
+ */
 const createPublicOrder = async (prisma, { tenantId, tenantSlug, tenant, body }) => {
   const {
     items,
@@ -282,7 +390,7 @@ const createPublicOrder = async (prisma, { tenantId, tenantSlug, tenant, body })
 
       initPoint = mpResponse.init_point;
     } catch (mpError) {
-      console.error('Error al crear preferencia MP, eliminando pedido:', mpError);
+      logger.error('Error al crear preferencia MP, eliminando pedido', { error: mpError, pedidoId: pedido.id });
       await prisma.pedidoItem.deleteMany({ where: { pedidoId: pedido.id } });
       await prisma.pedido.delete({ where: { id: pedido.id } });
 
@@ -331,9 +439,33 @@ const createPublicOrder = async (prisma, { tenantId, tenantSlug, tenant, body })
   };
 };
 
+/**
+ * Inicia el pago con MercadoPago para un pedido existente.
+ *
+ * Útil cuando el cliente creó el pedido con efectivo pero quiere
+ * cambiar a MercadoPago, o cuando necesita reintentar el pago.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
+ * @param {Object} params - Parámetros
+ * @param {number} params.tenantId - ID del tenant
+ * @param {string} params.tenantSlug - Slug del restaurante
+ * @param {Object} params.tenant - Objeto tenant
+ * @param {number} params.pedidoId - ID del pedido
+ *
+ * @returns {Promise<Object>} Datos de la preferencia creada
+ * @returns {string} returns.preferenceId - ID de la preferencia MP
+ * @returns {string} returns.initPoint - URL de pago producción
+ * @returns {string} returns.sandboxInitPoint - URL de pago sandbox
+ *
+ * @throws {HttpError} 404 - Pedido no encontrado
+ * @throws {HttpError} 400 - Pedido ya pagado o MercadoPago no configurado
+ */
 const startMercadoPagoPaymentForOrder = async (prisma, { tenantId, tenantSlug, tenant, pedidoId }) => {
   const pedido = await prisma.pedido.findFirst({
-    where: { id: pedidoId },
+    where: {
+      id: pedidoId,
+      tenantId: tenantId
+    },
     include: {
       items: { include: { producto: true } }
     }
@@ -400,9 +532,30 @@ const startMercadoPagoPaymentForOrder = async (prisma, { tenantId, tenantSlug, t
   };
 };
 
+/**
+ * Obtiene el estado de un pedido público con verificación de pago.
+ *
+ * Si el pedido tiene un pago pendiente de MercadoPago, consulta
+ * la API de MP para verificar si ya fue aprobado (útil cuando
+ * el webhook no llegó o el cliente volvió antes de la confirmación).
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
+ * @param {Object} params - Parámetros
+ * @param {number} params.tenantId - ID del tenant
+ * @param {number} params.pedidoId - ID del pedido
+ *
+ * @returns {Promise<Object>} Estado del pedido
+ * @returns {Object} returns.pedido - Pedido con items y pagos
+ * @returns {Array} returns.events - Eventos SSE a emitir si hubo cambio
+ *
+ * @throws {HttpError} 404 - Pedido no encontrado
+ */
 const getPublicOrderStatus = async (prisma, { tenantId, pedidoId }) => {
   let pedido = await prisma.pedido.findFirst({
-    where: { id: pedidoId },
+    where: {
+      id: pedidoId,
+      tenantId: tenantId
+    },
     include: {
       items: { include: { producto: true } },
       pagos: true

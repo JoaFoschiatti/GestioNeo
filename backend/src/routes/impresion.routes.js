@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const impresionController = require('../controllers/impresion.controller');
 const { verificarToken } = require('../middlewares/auth.middleware');
@@ -26,11 +27,21 @@ const requireBridgeToken = (req, res, next) => {
   const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
   const token = headerToken || bearerToken;
 
-  if (!token || token !== expected) {
+  if (!token) {
     return res.status(401).json({ error: { message: 'Token de bridge invalido' } });
   }
 
-  return next();
+  try {
+    const valid = crypto.timingSafeEqual(
+      Buffer.from(expected),
+      Buffer.from(token)
+    );
+    return valid
+      ? next()
+      : res.status(401).json({ error: { message: 'Token de bridge invalido' } });
+  } catch {
+    return res.status(401).json({ error: { message: 'Token de bridge invalido' } });
+  }
 };
 
 // Bridge endpoints (sin JWT, token dedicado)
