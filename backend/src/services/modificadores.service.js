@@ -1,19 +1,94 @@
 const { createHttpError } = require('../utils/http-error');
 const { decimalToNumber } = require('../utils/decimal');
+const { createCrudService } = require('./crud-factory.service');
 
-const listar = async (prisma, query) => {
-  const { activo, tipo } = query;
+// Crear servicio CRUD base usando el factory
+const baseCrud = createCrudService('modificador', {
+  uniqueFields: { nombre: 'nombre' },
+  defaultOrderBy: [{ tipo: 'asc' }, { nombre: 'asc' }],
+  softDelete: false, // Hard delete
+  entityName: 'modificador',
+  gender: 'm',
 
-  const where = {};
-  if (activo !== undefined) where.activo = activo;
-  if (tipo) where.tipo = tipo;
+  // Hook: ajustar precio antes de crear
+  beforeCreate: async (prisma, data) => {
+    // Validar tipo
+    const TIPOS_VALIDOS = ['ADICION', 'EXCLUSION'];
+    if (!data.tipo || !TIPOS_VALIDOS.includes(data.tipo)) {
+      throw createHttpError.badRequest('Tipo de modificador inválido. Debe ser ADICION o EXCLUSION');
+    }
 
-  return prisma.modificador.findMany({
-    where,
-    orderBy: [{ tipo: 'asc' }, { nombre: 'asc' }]
-  });
-};
+    // Validar y sanitizar nombre
+    const nombre = (data.nombre || '').trim();
+    if (!nombre || nombre.length < 2 || nombre.length > 100) {
+      throw createHttpError.badRequest('El nombre debe tener entre 2 y 100 caracteres');
+    }
 
+    // Validar precio
+    const precio = parseFloat(data.precio ?? 0);
+    if (isNaN(precio) || precio < 0 || precio > 99999) {
+      throw createHttpError.badRequest('Precio inválido. Debe estar entre 0 y 99999');
+    }
+
+    // Si es EXCLUSION, precio siempre 0
+    const precioFinal = data.tipo === 'EXCLUSION' ? 0 : precio;
+
+    return {
+      nombre: nombre,
+      precio: precioFinal,
+      tipo: data.tipo,
+      tenantId: data.tenantId // Este viene filtrado por el factory si hay whitelist
+    };
+  },
+
+  // Hook: ajustar precio antes de actualizar
+  beforeUpdate: async (prisma, id, data, existe) => {
+    const updateData = {};
+
+    // Validar y sanitizar nombre si se proporciona
+    if (data.nombre !== undefined) {
+      const nombre = (data.nombre || '').trim();
+      if (!nombre || nombre.length < 2 || nombre.length > 100) {
+        throw createHttpError.badRequest('El nombre debe tener entre 2 y 100 caracteres');
+      }
+      updateData.nombre = nombre;
+    }
+
+    // Validar tipo si se proporciona
+    if (data.tipo !== undefined) {
+      const TIPOS_VALIDOS = ['ADICION', 'EXCLUSION'];
+      if (!TIPOS_VALIDOS.includes(data.tipo)) {
+        throw createHttpError.badRequest('Tipo de modificador inválido. Debe ser ADICION o EXCLUSION');
+      }
+      updateData.tipo = data.tipo;
+    }
+
+    if (data.activo !== undefined) {
+      updateData.activo = data.activo;
+    }
+
+    // Lógica de precio según tipo
+    if (data.precio !== undefined || data.tipo !== undefined) {
+      const tipoFinal = data.tipo || existe.tipo;
+
+      // Validar precio si se proporciona
+      if (data.precio !== undefined) {
+        const precio = parseFloat(data.precio);
+        if (isNaN(precio) || precio < 0 || precio > 99999) {
+          throw createHttpError.badRequest('Precio inválido. Debe estar entre 0 y 99999');
+        }
+      }
+
+      updateData.precio = tipoFinal === 'EXCLUSION'
+        ? 0
+        : (data.precio !== undefined ? data.precio : decimalToNumber(existe.precio));
+    }
+
+    return updateData;
+  }
+});
+
+// Sobrescribir obtener para incluir productos asociados
 const obtener = async (prisma, id) => {
   const modificador = await prisma.modificador.findUnique({
     where: { id },
@@ -31,71 +106,6 @@ const obtener = async (prisma, id) => {
   }
 
   return modificador;
-};
-
-const crear = async (prisma, data) => {
-  const existente = await prisma.modificador.findFirst({ where: { nombre: data.nombre } });
-  if (existente) {
-    throw createHttpError.badRequest('Ya existe un modificador con ese nombre');
-  }
-
-  const precioFinal = data.tipo === 'EXCLUSION' ? 0 : (data.precio ?? 0);
-
-  return prisma.modificador.create({
-    data: {
-      nombre: data.nombre,
-      precio: precioFinal,
-      tipo: data.tipo
-    }
-  });
-};
-
-const actualizar = async (prisma, id, data) => {
-  const existe = await prisma.modificador.findUnique({ where: { id } });
-  if (!existe) {
-    throw createHttpError.notFound('Modificador no encontrado');
-  }
-
-  if (data.nombre && data.nombre !== existe.nombre) {
-    const nombreExiste = await prisma.modificador.findFirst({ where: { nombre: data.nombre } });
-    if (nombreExiste) {
-      throw createHttpError.badRequest('Ya existe un modificador con ese nombre');
-    }
-  }
-
-  const updateData = {};
-  if (data.nombre !== undefined) updateData.nombre = data.nombre;
-  if (data.tipo !== undefined) updateData.tipo = data.tipo;
-  if (data.activo !== undefined) updateData.activo = data.activo;
-
-  if (data.precio !== undefined || data.tipo !== undefined) {
-    const tipoFinal = data.tipo || existe.tipo;
-    updateData.precio = tipoFinal === 'EXCLUSION'
-      ? 0
-      : (data.precio !== undefined ? data.precio : decimalToNumber(existe.precio));
-  }
-
-  return prisma.modificador.update({
-    where: { id },
-    data: updateData
-  });
-};
-
-const eliminar = async (prisma, id) => {
-  const modificador = await prisma.modificador.findUnique({
-    where: { id },
-    select: { id: true }
-  });
-
-  if (!modificador) {
-    throw createHttpError.notFound('Modificador no encontrado');
-  }
-
-  await prisma.modificador.delete({
-    where: { id }
-  });
-
-  return { message: 'Modificador eliminado' };
 };
 
 const modificadoresDeProducto = async (prisma, productoId) => {
@@ -169,11 +179,8 @@ const asignarAProducto = async (prisma, productoId, modificadorIds) => {
 };
 
 module.exports = {
-  listar,
-  obtener,
-  crear,
-  actualizar,
-  eliminar,
+  ...baseCrud,
+  obtener, // Sobrescribir con versión custom
   modificadoresDeProducto,
   asignarAProducto
 };

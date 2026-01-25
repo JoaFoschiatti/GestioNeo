@@ -158,7 +158,7 @@ describe('Reservas Endpoints', () => {
 
     await request(app)
       .patch(`/api/reservas/${creada.body.id}/estado`)
-      .set('Authorization', authHeader(tokenMozo))
+      .set('Authorization', authHeader(tokenAdmin))
       .send({ estado: 'NO_LLEGO' })
       .expect(200);
 
@@ -189,7 +189,7 @@ describe('Reservas Endpoints', () => {
 
     await request(app)
       .patch(`/api/reservas/${creada.body.id}/estado`)
-      .set('Authorization', authHeader(tokenMozo))
+      .set('Authorization', authHeader(tokenAdmin))
       .send({ estado: 'CLIENTE_PRESENTE' })
       .expect(200);
 
@@ -213,7 +213,7 @@ describe('Reservas Endpoints', () => {
 
     await request(app)
       .patch(`/api/reservas/${creada2.body.id}/estado`)
-      .set('Authorization', authHeader(tokenMozo))
+      .set('Authorization', authHeader(tokenAdmin))
       .send({ estado: 'CANCELADA' })
       .expect(200);
 

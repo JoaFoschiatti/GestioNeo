@@ -3,6 +3,7 @@ const { createHttpError } = require('../utils/http-error');
 const registrarPago = async (prisma, payload) => {
   const { pedidoId, monto, metodo, referencia, comprobante } = payload;
 
+  // Usar nivel de aislamiento serializable para prevenir race conditions en pagos concurrentes
   const result = await prisma.$transaction(async (tx) => {
     const pedido = await tx.pedido.findUnique({
       where: { id: pedidoId },
@@ -55,6 +56,8 @@ const registrarPago = async (prisma, payload) => {
       totalPagado: nuevoTotalPagado,
       pendiente: Math.max(0, parseFloat(pedidoActualizado?.total || 0) - nuevoTotalPagado)
     };
+  }, {
+    isolationLevel: 'Serializable'
   });
 
   return result;

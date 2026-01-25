@@ -22,7 +22,7 @@ router.get('/cocina', verificarRol('ADMIN', 'COCINERO'), asyncHandler(pedidosCon
 router.get('/delivery', verificarRol('ADMIN', 'DELIVERY'), asyncHandler(pedidosController.pedidosDelivery));
 router.get('/:id', validate({ params: idParamSchema }), asyncHandler(pedidosController.obtener));
 router.post('/', verificarRol('ADMIN', 'CAJERO', 'MOZO'), validate({ body: crearPedidoBodySchema }), asyncHandler(pedidosController.crear));
-router.patch('/:id/estado', validate({ params: idParamSchema, body: cambiarEstadoBodySchema }), asyncHandler(pedidosController.cambiarEstado));
+router.patch('/:id/estado', verificarRol('ADMIN', 'COCINERO', 'MOZO'), validate({ params: idParamSchema, body: cambiarEstadoBodySchema }), asyncHandler(pedidosController.cambiarEstado));
 router.post('/:id/items', esMozo, validate({ params: idParamSchema, body: agregarItemsBodySchema }), asyncHandler(pedidosController.agregarItems));
 router.post('/:id/cancelar', esAdminOCajero, validate({ params: idParamSchema, body: cancelarBodySchema }), asyncHandler(pedidosController.cancelar));
 

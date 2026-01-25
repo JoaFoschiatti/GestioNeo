@@ -32,8 +32,8 @@ router.post('/', esAdmin, validate({ body: crearReservaBodySchema }), asyncHandl
 // PUT /api/reservas/:id - Actualizar reserva (solo admin)
 router.put('/:id', esAdmin, validate({ params: idParamSchema, body: actualizarReservaBodySchema }), asyncHandler(reservasController.actualizar));
 
-// PATCH /api/reservas/:id/estado - Cambiar estado de reserva
-router.patch('/:id/estado', validate({ params: idParamSchema, body: cambiarEstadoBodySchema }), asyncHandler(reservasController.cambiarEstado));
+// PATCH /api/reservas/:id/estado - Cambiar estado de reserva (solo admin)
+router.patch('/:id/estado', esAdmin, validate({ params: idParamSchema, body: cambiarEstadoBodySchema }), asyncHandler(reservasController.cambiarEstado));
 
 // DELETE /api/reservas/:id - Eliminar reserva (solo admin)
 router.delete('/:id', esAdmin, validate({ params: idParamSchema }), asyncHandler(reservasController.eliminar));

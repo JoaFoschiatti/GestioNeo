@@ -220,31 +220,36 @@ async function searchPaymentByReference(tenantId, externalReference) {
  * @returns {Promise<object>} - Transacción creada
  */
 async function saveTransaction(tenantId, paymentInfo, pagoId = null) {
-  return prisma.transaccionMercadoPago.upsert({
-    where: { mpPaymentId: paymentInfo.id.toString() },
-    update: {
-      status: paymentInfo.status,
-      statusDetail: paymentInfo.status_detail,
-      pagoId
-    },
-    create: {
-      tenantId,
-      pagoId,
-      mpPaymentId: paymentInfo.id.toString(),
-      mpPreferenceId: paymentInfo.preference_id || null,
-      status: paymentInfo.status,
-      statusDetail: paymentInfo.status_detail,
-      amount: paymentInfo.transaction_amount,
-      currency: paymentInfo.currency_id || 'ARS',
-      payerEmail: paymentInfo.payer?.email || null,
-      paymentMethod: paymentInfo.payment_method_id || null,
-      paymentTypeId: paymentInfo.payment_type_id || null,
-      installments: paymentInfo.installments || null,
-      fee: paymentInfo.fee_details?.reduce((sum, f) => sum + f.amount, 0) || null,
-      netAmount: paymentInfo.transaction_details?.net_received_amount || null,
-      externalReference: paymentInfo.external_reference || null,
-      rawData: paymentInfo
-    }
+  // Usar transacción con nivel de aislamiento serializable para evitar race conditions
+  return prisma.$transaction(async (tx) => {
+    return tx.transaccionMercadoPago.upsert({
+      where: { mpPaymentId: paymentInfo.id.toString() },
+      update: {
+        status: paymentInfo.status,
+        statusDetail: paymentInfo.status_detail,
+        pagoId
+      },
+      create: {
+        tenantId,
+        pagoId,
+        mpPaymentId: paymentInfo.id.toString(),
+        mpPreferenceId: paymentInfo.preference_id || null,
+        status: paymentInfo.status,
+        statusDetail: paymentInfo.status_detail,
+        amount: paymentInfo.transaction_amount,
+        currency: paymentInfo.currency_id || 'ARS',
+        payerEmail: paymentInfo.payer?.email || null,
+        paymentMethod: paymentInfo.payment_method_id || null,
+        paymentTypeId: paymentInfo.payment_type_id || null,
+        installments: paymentInfo.installments || null,
+        fee: paymentInfo.fee_details?.reduce((sum, f) => sum + f.amount, 0) || null,
+        netAmount: paymentInfo.transaction_details?.net_received_amount || null,
+        externalReference: paymentInfo.external_reference || null,
+        rawData: paymentInfo
+      }
+    });
+  }, {
+    isolationLevel: 'Serializable'
   });
 }
 

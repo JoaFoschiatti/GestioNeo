@@ -1,6 +1,45 @@
+/**
+ * Servicio de gestión de pedidos.
+ *
+ * Este servicio maneja toda la lógica de negocio relacionada con pedidos:
+ * - Creación de pedidos con items y modificadores
+ * - Cambio de estados (PENDIENTE → EN_PREPARACION → LISTO → ENTREGADO → COBRADO)
+ * - Descuento automático de stock de ingredientes
+ * - Liberación de mesas al cobrar
+ * - Cancelación con reversión de stock
+ *
+ * @module pedidos.service
+ */
+
 const { createHttpError } = require('../utils/http-error');
 const printService = require('./print.service');
 
+/**
+ * Construye los items de un pedido con precios calculados.
+ *
+ * Esta función auxiliar:
+ * 1. Valida que todos los productos existan y estén disponibles
+ * 2. Valida que todos los modificadores existan y estén activos
+ * 3. Calcula el precio unitario (producto + modificadores)
+ * 4. Calcula el subtotal de cada item
+ *
+ * @private
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
+ * @param {Array<Object>} items - Items del pedido
+ * @param {number} items[].productoId - ID del producto
+ * @param {number} items[].cantidad - Cantidad
+ * @param {Array<number>} [items[].modificadores] - IDs de modificadores
+ * @param {string} [items[].observaciones] - Observaciones del item
+ *
+ * @returns {Promise<Object>} Resultado con items procesados
+ * @returns {number} returns.subtotal - Subtotal calculado
+ * @returns {Array} returns.itemsConPrecio - Items con precios calculados
+ * @returns {Array} returns.pedidoItemModificadores - Modificadores por item
+ *
+ * @throws {HttpError} 400 - Si no hay items
+ * @throws {HttpError} 400 - Si un producto no existe o no está disponible
+ * @throws {HttpError} 400 - Si un modificador no existe o no está activo
+ */
 const buildPedidoItems = async (prisma, items) => {
   if (!items || items.length === 0) {
     throw createHttpError.badRequest('El pedido debe tener al menos un item');
@@ -71,6 +110,49 @@ const buildPedidoItems = async (prisma, items) => {
   return { subtotal, itemsConPrecio, pedidoItemModificadores };
 };
 
+/**
+ * Crea un nuevo pedido con sus items y modificadores.
+ *
+ * Este servicio maneja la creación completa de un pedido incluyendo:
+ * - Validación de productos y disponibilidad
+ * - Cálculo de precios con modificadores
+ * - Actualización del estado de la mesa a OCUPADA (si aplica)
+ * - Creación de items con sus modificadores en una transacción
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma con scoping de tenant
+ * @param {Object} payload - Datos del pedido
+ * @param {('MESA'|'DELIVERY'|'MOSTRADOR')} payload.tipo - Tipo de pedido
+ * @param {number} [payload.mesaId] - ID de mesa (requerido si tipo='MESA')
+ * @param {number} [payload.usuarioId] - ID del usuario que crea el pedido
+ * @param {Array<Object>} payload.items - Items del pedido
+ * @param {number} payload.items[].productoId - ID del producto
+ * @param {number} payload.items[].cantidad - Cantidad (mínimo 1)
+ * @param {Array<number>} [payload.items[].modificadores] - IDs de modificadores
+ * @param {string} [payload.items[].observaciones] - Observaciones del item
+ * @param {string} [payload.clienteNombre] - Nombre del cliente (delivery)
+ * @param {string} [payload.clienteTelefono] - Teléfono del cliente
+ * @param {string} [payload.clienteDireccion] - Dirección de entrega
+ * @param {string} [payload.observaciones] - Observaciones generales
+ *
+ * @returns {Promise<Object>} Resultado de la creación
+ * @returns {Object} returns.pedido - Pedido creado con relaciones incluidas
+ * @returns {Object|null} returns.mesaUpdated - Info de mesa actualizada o null
+ *
+ * @throws {HttpError} 400 - Mesa requerida para pedidos de tipo MESA
+ * @throws {HttpError} 404 - Mesa no encontrada
+ * @throws {HttpError} 400 - Producto no disponible
+ *
+ * @example
+ * const result = await crearPedido(prisma, {
+ *   tipo: 'MESA',
+ *   mesaId: 1,
+ *   usuarioId: 5,
+ *   items: [
+ *     { productoId: 10, cantidad: 2, modificadores: [1, 3] },
+ *     { productoId: 15, cantidad: 1, observaciones: 'Sin cebolla' }
+ *   ]
+ * });
+ */
 const crearPedido = async (prisma, payload) => {
   const {
     tipo,
@@ -123,16 +205,17 @@ const crearPedido = async (prisma, payload) => {
       }
     });
 
-    const createdItems = [];
-    for (const itemData of itemsConPrecio) {
-      const created = await tx.pedidoItem.create({
-        data: {
-          pedidoId: pedido.id,
-          ...itemData
-        }
-      });
-      createdItems.push(created);
-    }
+    // Create all items in parallel to avoid N+1 query problem
+    const createdItems = await Promise.all(
+      itemsConPrecio.map(itemData =>
+        tx.pedidoItem.create({
+          data: {
+            pedidoId: pedido.id,
+            ...itemData
+          }
+        })
+      )
+    );
 
     const modificadoresToCreate = [];
     for (let idx = 0; idx < createdItems.length; idx += 1) {
@@ -173,6 +256,50 @@ const crearPedido = async (prisma, payload) => {
   return { pedido: pedidoCompleto, mesaUpdated };
 };
 
+/**
+ * Cambia el estado de un pedido y ejecuta acciones asociadas.
+ *
+ * Flujo de estados válidos:
+ * ```
+ * PENDIENTE → EN_PREPARACION → LISTO → ENTREGADO → COBRADO
+ *     ↓              ↓           ↓         ↓
+ * CANCELADO    CANCELADO    CANCELADO  CANCELADO
+ * ```
+ *
+ * Acciones automáticas por estado:
+ * - **EN_PREPARACION**: Descuenta stock de ingredientes, crea movimientos,
+ *   marca productos como agotados si el stock llega a 0
+ * - **COBRADO**: Libera la mesa (cambia a LIBRE)
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
+ * @param {Object} payload - Datos para el cambio de estado
+ * @param {number} payload.pedidoId - ID del pedido
+ * @param {('PENDIENTE'|'EN_PREPARACION'|'LISTO'|'ENTREGADO'|'COBRADO'|'CANCELADO')} payload.estado - Nuevo estado
+ *
+ * @returns {Promise<Object>} Resultado del cambio de estado
+ * @returns {Object} returns.pedidoAntes - Estado previo del pedido (para comparación)
+ * @returns {Object} returns.pedidoActualizado - Pedido con el nuevo estado
+ * @returns {boolean} returns.shouldPrint - Si debe imprimirse comanda (true cuando pasa a EN_PREPARACION)
+ * @returns {Array<Object>} returns.mesaUpdates - Mesas que cambiaron estado [{mesaId, estado}]
+ * @returns {Array<Object>} returns.productosAgotados - Productos marcados como no disponibles
+ *
+ * @throws {HttpError} 404 - Pedido no encontrado
+ *
+ * @example
+ * // Enviar pedido a cocina
+ * const result = await cambiarEstadoPedido(prisma, {
+ *   pedidoId: 123,
+ *   estado: 'EN_PREPARACION'
+ * });
+ *
+ * if (result.shouldPrint) {
+ *   await imprimirComanda(result.pedidoActualizado);
+ * }
+ *
+ * if (result.productosAgotados.length > 0) {
+ *   notificarProductosAgotados(result.productosAgotados);
+ * }
+ */
 const cambiarEstadoPedido = async (prisma, payload) => {
   const { pedidoId, estado } = payload;
 
@@ -191,27 +318,59 @@ const cambiarEstadoPedido = async (prisma, payload) => {
     const productosAgotados = [];
 
     if (shouldPrint) {
+      // Optimize N+1 query: Collect all stock movements first
+      const stockMovements = [];
+      const ingredienteUpdates = new Map(); // ingredienteId -> total cantidad a descontar
+
       for (const item of pedido.items) {
         for (const prodIng of item.producto.ingredientes) {
           const cantidadDescontar = parseFloat(prodIng.cantidad) * item.cantidad;
+          const ingredienteId = prodIng.ingredienteId;
 
-          await tx.ingrediente.update({
-            where: { id: prodIng.ingredienteId },
-            data: { stockActual: { decrement: cantidadDescontar } }
-          });
+          // Accumulate total cantidad for this ingrediente
+          const currentTotal = ingredienteUpdates.get(ingredienteId) || 0;
+          ingredienteUpdates.set(ingredienteId, currentTotal + cantidadDescontar);
 
-          await tx.movimientoStock.create({
-            data: {
-              ingredienteId: prodIng.ingredienteId,
-              tipo: 'SALIDA',
-              cantidad: cantidadDescontar,
-              motivo: `Pedido #${pedido.id}`,
-              pedidoId: pedido.id
-            }
+          stockMovements.push({
+            ingredienteId,
+            tipo: 'SALIDA',
+            cantidad: cantidadDescontar,
+            motivo: `Pedido #${pedido.id}`,
+            pedidoId: pedido.id
           });
         }
       }
 
+      // Validar stock disponible ANTES de descontar
+      for (const [ingredienteId, cantidadTotal] of ingredienteUpdates.entries()) {
+        const ingrediente = await tx.ingrediente.findUnique({
+          where: { id: ingredienteId },
+          select: { id: true, nombre: true, stockActual: true }
+        });
+
+        const stockActual = parseFloat(ingrediente?.stockActual || 0);
+
+        if (stockActual < cantidadTotal) {
+          throw createHttpError.badRequest(
+            `Stock insuficiente de ${ingrediente.nombre} para completar el pedido. Disponible: ${stockActual}, Necesario: ${cantidadTotal}`
+          );
+        }
+      }
+
+      // Execute all updates and creates in parallel
+      await Promise.all([
+        // Update all ingredientes in parallel
+        ...Array.from(ingredienteUpdates.entries()).map(([ingredienteId, cantidadTotal]) =>
+          tx.ingrediente.update({
+            where: { id: ingredienteId },
+            data: { stockActual: { decrement: cantidadTotal } }
+          })
+        ),
+        // Create all stock movements in batch
+        stockMovements.length > 0 ? tx.movimientoStock.createMany({ data: stockMovements }) : Promise.resolve()
+      ]);
+
+      // Check for depleted stock
       const ingredientesAgotados = await tx.ingrediente.findMany({
         where: { stockActual: { lte: 0 } },
         select: { id: true }
@@ -269,6 +428,26 @@ const cambiarEstadoPedido = async (prisma, payload) => {
   return result;
 };
 
+/**
+ * Agrega items adicionales a un pedido existente.
+ *
+ * Permite agregar más productos a un pedido que aún no ha sido cobrado o cancelado.
+ * Actualiza automáticamente el subtotal y total del pedido.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
+ * @param {Object} payload - Datos de los items a agregar
+ * @param {number} payload.pedidoId - ID del pedido
+ * @param {Array<Object>} payload.items - Nuevos items
+ * @param {number} payload.items[].productoId - ID del producto
+ * @param {number} payload.items[].cantidad - Cantidad
+ * @param {string} [payload.items[].observaciones] - Observaciones
+ *
+ * @returns {Promise<Object>} Pedido actualizado con todos los items
+ *
+ * @throws {HttpError} 404 - Pedido no encontrado
+ * @throws {HttpError} 400 - No se pueden agregar items a pedido COBRADO o CANCELADO
+ * @throws {HttpError} 400 - Producto no disponible
+ */
 const agregarItemsPedido = async (prisma, payload) => {
   const { pedidoId, items } = payload;
 
@@ -332,6 +511,25 @@ const agregarItemsPedido = async (prisma, payload) => {
   return result;
 };
 
+/**
+ * Cancela un pedido y revierte el stock si es necesario.
+ *
+ * Si el pedido ya había pasado a EN_PREPARACION (stock descontado),
+ * esta función revierte los movimientos de stock creando entradas.
+ * También libera la mesa si el pedido era de tipo MESA.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
+ * @param {Object} payload - Datos de cancelación
+ * @param {number} payload.pedidoId - ID del pedido a cancelar
+ * @param {string} [payload.motivo] - Motivo de la cancelación
+ *
+ * @returns {Promise<Object>} Resultado de la cancelación
+ * @returns {Object} returns.pedidoCancelado - Pedido con estado CANCELADO
+ * @returns {Object|null} returns.mesaUpdated - Info de mesa liberada o null
+ *
+ * @throws {HttpError} 404 - Pedido no encontrado
+ * @throws {HttpError} 400 - No se puede cancelar un pedido ya cobrado
+ */
 const cancelarPedido = async (prisma, payload) => {
   const { pedidoId, motivo } = payload;
 
@@ -350,23 +548,29 @@ const cancelarPedido = async (prisma, payload) => {
     }
 
     if (pedido.estado !== 'PENDIENTE') {
-      for (const mov of pedido.movimientos) {
-        if (mov.tipo !== 'SALIDA') continue;
+      // Optimize N+1 query: Revert stock movements in parallel
+      const salidaMovements = pedido.movimientos.filter(mov => mov.tipo === 'SALIDA');
 
-        await tx.ingrediente.update({
-          where: { id: mov.ingredienteId },
-          data: { stockActual: { increment: parseFloat(mov.cantidad) } }
-        });
-
-        await tx.movimientoStock.create({
-          data: {
-            ingredienteId: mov.ingredienteId,
-            tipo: 'ENTRADA',
-            cantidad: mov.cantidad,
-            motivo: `Cancelación pedido #${pedido.id}`,
-            pedidoId: pedido.id
-          }
-        });
+      if (salidaMovements.length > 0) {
+        await Promise.all([
+          // Restore stock for all ingredientes in parallel
+          ...salidaMovements.map(mov =>
+            tx.ingrediente.update({
+              where: { id: mov.ingredienteId },
+              data: { stockActual: { increment: parseFloat(mov.cantidad) } }
+            })
+          ),
+          // Create reversal movements in batch
+          tx.movimientoStock.createMany({
+            data: salidaMovements.map(mov => ({
+              ingredienteId: mov.ingredienteId,
+              tipo: 'ENTRADA',
+              cantidad: mov.cantidad,
+              motivo: `Cancelación pedido #${pedido.id}`,
+              pedidoId: pedido.id
+            }))
+          })
+        ]);
       }
     }
 
@@ -398,6 +602,18 @@ const cancelarPedido = async (prisma, payload) => {
 };
 
 module.exports = {
+  /**
+   * Lista pedidos con filtros opcionales.
+   *
+   * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
+   * @param {Object} query - Filtros de búsqueda
+   * @param {string} [query.estado] - Filtrar por estado
+   * @param {string} [query.tipo] - Filtrar por tipo (MESA, DELIVERY, MOSTRADOR)
+   * @param {number} [query.mesaId] - Filtrar por mesa
+   * @param {string} [query.fecha] - Filtrar por fecha (formato YYYY-MM-DD)
+   *
+   * @returns {Promise<Array>} Lista de pedidos con items, mesa, usuario y pagos
+   */
   listar: async (prisma, query) => {
     const { estado, tipo, fecha, mesaId } = query;
 
@@ -435,6 +651,17 @@ module.exports = {
       return { ...rest, impresion };
     });
   },
+
+  /**
+   * Obtiene un pedido por ID con todas sus relaciones.
+   *
+   * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
+   * @param {number} id - ID del pedido
+   *
+   * @returns {Promise<Object>} Pedido con mesa, usuario, items, pagos e impresión
+   *
+   * @throws {HttpError} 404 - Pedido no encontrado
+   */
   obtener: async (prisma, id) => {
     const pedido = await prisma.pedido.findUnique({
       where: { id },

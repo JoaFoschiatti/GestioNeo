@@ -59,8 +59,10 @@ const crearPreferenciaMercadoPago = async (req, res) => {
 const verifyWebhookSignature = (req) => {
   const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
   if (!secret) {
-    logger.warn('MERCADOPAGO_WEBHOOK_SECRET no configurado - webhook sin verificar');
-    return true; // En sandbox sin secret configurado, permitir
+    logger.error('MERCADOPAGO_WEBHOOK_SECRET no configurado - webhook rechazado');
+    // SECURITY: Never allow webhooks without signature verification
+    // In development, signature can be skipped, but secret must still be set
+    return false;
   }
 
   const xSignature = req.headers['x-signature'];
@@ -131,9 +133,11 @@ const webhookMercadoPago = async (req, res) => {
       dataId: req.query['data.id']
     });
 
-    // Verificar firma (en producción es crítico)
-    if (process.env.NODE_ENV === 'production' && !verifyWebhookSignature(req)) {
-      logger.error('Webhook MercadoPago: firma inválida');
+    // Verificar firma (SIEMPRE - crítico para seguridad)
+    // En desarrollo se puede deshabilitar con SKIP_WEBHOOK_VERIFICATION=true
+    const shouldVerify = process.env.SKIP_WEBHOOK_VERIFICATION !== 'true';
+    if (shouldVerify && !verifyWebhookSignature(req)) {
+      logger.error('Webhook MercadoPago: firma inválida o WEBHOOK_SECRET no configurado');
       return res.sendStatus(401);
     }
 
@@ -209,33 +213,53 @@ const webhookMercadoPago = async (req, res) => {
       });
 
       // Parsear external_reference para obtener tenantId y pedidoId
-      // Formato: "{tenantId}-{pedidoId}"
+      // Formato esperado: "{tenantId}-{pedidoId}"
       if (paymentInfo.external_reference) {
-        const parts = paymentInfo.external_reference.toString().split('-');
-        if (parts.length >= 2) {
-          const parsedTenantId = parseInt(parts[0], 10);
-          const parsedPedidoId = parseInt(parts[1], 10);
-          if (!Number.isNaN(parsedTenantId)) tenantId = parsedTenantId;
-          if (!Number.isNaN(parsedPedidoId)) pedidoId = parsedPedidoId;
+        // Validar formato estricto con regex
+        const EXTERNAL_REF_PATTERN = /^(\d+)-(\d+)$/;
+        const match = paymentInfo.external_reference.toString().match(EXTERNAL_REF_PATTERN);
+
+        if (match) {
+          const parsedTenantId = parseInt(match[1], 10);
+          const parsedPedidoId = parseInt(match[2], 10);
+
+          // Validar que el pedido pertenece al tenant ANTES de procesar
+          const pedido = await prisma.pedido.findFirst({
+            where: {
+              id: parsedPedidoId,
+              tenantId: parsedTenantId
+            },
+            select: { id: true, tenantId: true }
+          });
+
+          if (!pedido) {
+            logger.warn('Webhook: Pedido no encontrado o tenant incorrecto', {
+              tenantId: parsedTenantId,
+              pedidoId: parsedPedidoId
+            });
+            return res.sendStatus(200); // Evitar revelar información
+          }
+
+          tenantId = parsedTenantId;
+          pedidoId = parsedPedidoId;
         } else {
-          // Formato antiguo: solo pedidoId
+          // Formato antiguo: solo pedidoId (backward compatibility)
           const parsedPedidoId = parseInt(paymentInfo.external_reference, 10);
-          if (!Number.isNaN(parsedPedidoId)) pedidoId = parsedPedidoId;
+          if (!Number.isNaN(parsedPedidoId)) {
+            pedidoId = parsedPedidoId;
+            // Obtener el tenantId del pedido
+            const pedido = await prisma.pedido.findUnique({
+              where: { id: parsedPedidoId },
+              select: { tenantId: true }
+            });
+            tenantId = pedido?.tenantId;
+          }
         }
       }
 
       if (!pedidoId) {
         logger.info('Webhook: no se pudo determinar pedidoId');
         return res.sendStatus(200);
-      }
-
-      // Obtener el tenantId si aún no lo tenemos (external_reference antiguo)
-      if (!tenantId) {
-        const pedido = await prisma.pedido.findUnique({
-          where: { id: pedidoId },
-          select: { tenantId: true }
-        });
-        tenantId = pedido?.tenantId;
       }
 
       if (!tenantId) {

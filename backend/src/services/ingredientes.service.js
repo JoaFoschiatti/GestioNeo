@@ -1,6 +1,8 @@
 const { createHttpError } = require('../utils/http-error');
 const { decimalToNumber } = require('../utils/decimal');
+const { createCrudService } = require('./crud-factory.service');
 
+// Helper function: verificar productos disponibles cuando hay stock
 const verificarProductosDisponibles = async (prisma, ingredienteId) => {
   const productosNoDisponibles = await prisma.producto.findMany({
     where: {
@@ -46,16 +48,35 @@ const verificarProductosDisponibles = async (prisma, ingredienteId) => {
   return { productosHabilitados, events };
 };
 
+// Crear servicio CRUD base usando el factory
+const baseCrud = createCrudService('ingrediente', {
+  uniqueFields: { nombre: 'nombre' },
+  defaultOrderBy: { nombre: 'asc' },
+  softDelete: true,
+  softDeleteField: 'activo',
+  entityName: 'ingrediente',
+  gender: 'm',
+
+  // Hook: crear movimiento de stock inicial
+  afterCreate: async (prisma, ingrediente) => {
+    if (decimalToNumber(ingrediente.stockActual) > 0) {
+      await prisma.movimientoStock.create({
+        data: {
+          ingredienteId: ingrediente.id,
+          tipo: 'ENTRADA',
+          cantidad: ingrediente.stockActual,
+          motivo: 'Stock inicial'
+        }
+      });
+    }
+  }
+});
+
+// Sobrescribir listar para soportar filtro stockBajo
 const listar = async (prisma, query) => {
   const { activo, stockBajo } = query;
 
-  const where = {};
-  if (activo !== undefined) where.activo = activo;
-
-  let ingredientes = await prisma.ingrediente.findMany({
-    where,
-    orderBy: { nombre: 'asc' }
-  });
+  let ingredientes = await baseCrud.listar(prisma, { activo });
 
   if (stockBajo) {
     ingredientes = ingredientes.filter(
@@ -66,6 +87,7 @@ const listar = async (prisma, query) => {
   return ingredientes;
 };
 
+// Sobrescribir obtener con includes detallados
 const obtener = async (prisma, id) => {
   const ingrediente = await prisma.ingrediente.findUnique({
     where: { id },
@@ -87,89 +109,48 @@ const obtener = async (prisma, id) => {
   return ingrediente;
 };
 
-const crear = async (prisma, data) => {
-  const existente = await prisma.ingrediente.findFirst({ where: { nombre: data.nombre } });
-  if (existente) {
-    throw createHttpError.badRequest('Ya existe un ingrediente con ese nombre');
-  }
-
-  return prisma.$transaction(async (tx) => {
-    const ingrediente = await tx.ingrediente.create({
-      data
-    });
-
-    if (decimalToNumber(ingrediente.stockActual) > 0) {
-      await tx.movimientoStock.create({
-        data: {
-          ingredienteId: ingrediente.id,
-          tipo: 'ENTRADA',
-          cantidad: ingrediente.stockActual,
-          motivo: 'Stock inicial'
-        }
-      });
-    }
-
-    return ingrediente;
-  });
-};
-
-const actualizar = async (prisma, id, data) => {
-  const existe = await prisma.ingrediente.findUnique({ where: { id } });
-  if (!existe) {
-    throw createHttpError.notFound('Ingrediente no encontrado');
-  }
-
-  if (data.nombre && data.nombre !== existe.nombre) {
-    const nombreExiste = await prisma.ingrediente.findFirst({ where: { nombre: data.nombre } });
-    if (nombreExiste) {
-      throw createHttpError.badRequest('Ya existe un ingrediente con ese nombre');
-    }
-  }
-
-  return prisma.ingrediente.update({
-    where: { id },
-    data
-  });
-};
-
 const registrarMovimiento = async (prisma, id, data) => {
-  const ingrediente = await prisma.ingrediente.findUnique({ where: { id } });
-  if (!ingrediente) {
-    throw createHttpError.notFound('Ingrediente no encontrado');
-  }
+  // Leer y actualizar dentro de la transacción para evitar race condition
+  const result = await prisma.$transaction(async (tx) => {
+    const ingrediente = await tx.ingrediente.findUnique({ where: { id } });
+    if (!ingrediente) {
+      throw createHttpError.notFound('Ingrediente no encontrado');
+    }
 
-  const stockActual = decimalToNumber(ingrediente.stockActual);
-  const cantidad = decimalToNumber(data.cantidad);
+    const stockActual = decimalToNumber(ingrediente.stockActual);
+    const cantidad = decimalToNumber(data.cantidad);
 
-  const nuevoStock = data.tipo === 'ENTRADA'
-    ? stockActual + cantidad
-    : stockActual - cantidad;
+    const nuevoStock = data.tipo === 'ENTRADA'
+      ? stockActual + cantidad
+      : stockActual - cantidad;
 
-  if (nuevoStock < 0) {
-    throw createHttpError.badRequest('Stock insuficiente');
-  }
+    if (nuevoStock < 0) {
+      throw createHttpError.badRequest('Stock insuficiente');
+    }
 
-  await prisma.$transaction([
-    prisma.ingrediente.update({
+    await tx.ingrediente.update({
       where: { id },
       data: { stockActual: nuevoStock }
-    }),
-    prisma.movimientoStock.create({
+    });
+
+    await tx.movimientoStock.create({
       data: {
         ingredienteId: id,
         tipo: data.tipo,
         cantidad: data.cantidad,
         motivo: data.motivo || null
       }
-    })
-  ]);
+    });
+
+    return { nuevoStock, tipo: data.tipo };
+  });
 
   const ingredienteActualizado = await prisma.ingrediente.findUnique({
     where: { id }
   });
 
   let events = [];
-  if (data.tipo === 'ENTRADA' && nuevoStock > 0) {
+  if (result.tipo === 'ENTRADA' && result.nuevoStock > 0) {
     ({ events } = await verificarProductosDisponibles(prisma, id));
   }
 
@@ -177,38 +158,42 @@ const registrarMovimiento = async (prisma, id, data) => {
 };
 
 const ajustarStock = async (prisma, id, data) => {
-  const ingrediente = await prisma.ingrediente.findUnique({ where: { id } });
-  if (!ingrediente) {
-    throw createHttpError.notFound('Ingrediente no encontrado');
-  }
+  // Leer y actualizar dentro de la transacción para evitar race condition
+  const result = await prisma.$transaction(async (tx) => {
+    const ingrediente = await tx.ingrediente.findUnique({ where: { id } });
+    if (!ingrediente) {
+      throw createHttpError.notFound('Ingrediente no encontrado');
+    }
 
-  const stockActual = decimalToNumber(ingrediente.stockActual);
-  const stockReal = decimalToNumber(data.stockReal);
-  const diferencia = stockReal - stockActual;
+    const stockActual = decimalToNumber(ingrediente.stockActual);
+    const stockReal = decimalToNumber(data.stockReal);
+    const diferencia = stockReal - stockActual;
 
-  const motivo = data.motivo || `Ajuste de inventario (${diferencia >= 0 ? '+' : ''}${diferencia})`;
+    const motivo = data.motivo || `Ajuste de inventario (${diferencia >= 0 ? '+' : ''}${diferencia})`;
 
-  await prisma.$transaction([
-    prisma.ingrediente.update({
+    await tx.ingrediente.update({
       where: { id },
       data: { stockActual: stockReal }
-    }),
-    prisma.movimientoStock.create({
+    });
+
+    await tx.movimientoStock.create({
       data: {
         ingredienteId: id,
         tipo: 'AJUSTE',
         cantidad: Math.abs(diferencia),
         motivo
       }
-    })
-  ]);
+    });
+
+    return { diferencia, stockReal };
+  });
 
   const ingredienteActualizado = await prisma.ingrediente.findUnique({
     where: { id }
   });
 
   let events = [];
-  if (diferencia > 0 && stockReal > 0) {
+  if (result.diferencia > 0 && result.stockReal > 0) {
     ({ events } = await verificarProductosDisponibles(prisma, id));
   }
 
@@ -226,11 +211,12 @@ const alertasStock = async (prisma) => {
 };
 
 module.exports = {
-  listar,
-  obtener,
-  crear,
-  actualizar,
+  ...baseCrud,
+  listar, // Sobrescrito para filtro stockBajo
+  obtener, // Sobrescrito para includes detallados
+  // Funciones de negocio (sin cambios)
   registrarMovimiento,
   ajustarStock,
-  alertasStock
+  alertasStock,
+  verificarProductosDisponibles
 };
