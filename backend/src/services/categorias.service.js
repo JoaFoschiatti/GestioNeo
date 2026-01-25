@@ -1,18 +1,34 @@
 const { createHttpError } = require('../utils/http-error');
+const { createCrudService } = require('./crud-factory.service');
 
-const listar = async (prisma, query) => {
-  const { activa } = query;
+// Crear servicio CRUD base usando el factory
+const baseCrud = createCrudService('categoria', {
+  uniqueFields: { nombre: 'nombre' },
+  defaultOrderBy: { orden: 'asc' },
+  defaultInclude: {
+    _count: { select: { productos: true } }
+  },
+  softDelete: false, // Hard delete
+  entityName: 'categoría',
+  gender: 'f',
 
-  const where = {};
-  if (activa !== undefined) where.activa = activa;
+  // Validación: no eliminar si tiene productos asociados
+  customValidations: {
+    eliminar: async (prisma, id) => {
+      const productos = await prisma.producto.count({
+        where: { categoriaId: id }
+      });
 
-  return prisma.categoria.findMany({
-    where,
-    orderBy: { orden: 'asc' },
-    include: { _count: { select: { productos: true } } }
-  });
-};
+      if (productos > 0) {
+        throw createHttpError.badRequest(
+          'No se puede eliminar: la categoría tiene productos asociados'
+        );
+      }
+    }
+  }
+});
 
+// Función específica: listar categorías públicas con productos disponibles
 const listarPublicas = async (prisma) => {
   return prisma.categoria.findMany({
     where: { activa: true },
@@ -26,57 +42,8 @@ const listarPublicas = async (prisma) => {
   });
 };
 
-const crear = async (prisma, data) => {
-  const existente = await prisma.categoria.findFirst({ where: { nombre: data.nombre } });
-  if (existente) {
-    throw createHttpError.badRequest('Ya existe una categoría con ese nombre');
-  }
-
-  return prisma.categoria.create({
-    data
-  });
-};
-
-const actualizar = async (prisma, id, data) => {
-  const existe = await prisma.categoria.findUnique({ where: { id } });
-  if (!existe) {
-    throw createHttpError.notFound('Categoría no encontrada');
-  }
-
-  if (data.nombre && data.nombre !== existe.nombre) {
-    const nombreExiste = await prisma.categoria.findFirst({ where: { nombre: data.nombre } });
-    if (nombreExiste) {
-      throw createHttpError.badRequest('Ya existe una categoría con ese nombre');
-    }
-  }
-
-  return prisma.categoria.update({
-    where: { id },
-    data
-  });
-};
-
-const eliminar = async (prisma, id) => {
-  const categoria = await prisma.categoria.findUnique({ where: { id } });
-  if (!categoria) {
-    throw createHttpError.notFound('Categoría no encontrada');
-  }
-
-  const productos = await prisma.producto.count({ where: { categoriaId: id } });
-  if (productos > 0) {
-    throw createHttpError.badRequest('No se puede eliminar: la categoría tiene productos asociados');
-  }
-
-  await prisma.categoria.delete({ where: { id } });
-
-  return { message: 'Categoría eliminada correctamente' };
-};
-
 module.exports = {
-  listar,
-  listarPublicas,
-  crear,
-  actualizar,
-  eliminar
+  ...baseCrud,
+  listarPublicas
 };
 

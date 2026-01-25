@@ -1,32 +1,69 @@
 const { createHttpError } = require('../utils/http-error');
+const { createCrudService } = require('./crud-factory.service');
 
-const listar = async (prisma, query) => {
-  const { empleadoId, pagado } = query;
+// Crear servicio CRUD base usando el factory
+const baseCrud = createCrudService('liquidacion', {
+  defaultOrderBy: { createdAt: 'desc' },
+  defaultInclude: {
+    empleado: { select: { nombre: true, apellido: true, dni: true } }
+  },
+  softDelete: false,
+  entityName: 'liquidación',
+  gender: 'f',
 
-  const where = {};
-  if (empleadoId) where.empleadoId = empleadoId;
-  if (pagado !== undefined) where.pagado = pagado;
+  // Protección mass assignment
+  allowedFilterFields: ['empleadoId', 'pagado'],
+  allowedCreateFields: ['empleadoId', 'periodoDesde', 'periodoHasta', 'horasTotales', 'descuentos', 'adicionales', 'observaciones'],
+  // No allowedUpdateFields - liquidaciones no se actualizan directamente
 
-  return prisma.liquidacion.findMany({
-    where,
-    include: { empleado: { select: { nombre: true, apellido: true, dni: true } } },
-    orderBy: { createdAt: 'desc' }
-  });
-};
+  // Hook: calcular totales antes de crear
+  beforeCreate: async (prisma, data) => {
+    if (!data.horasTotales || data.horasTotales <= 0) {
+      throw createHttpError.badRequest('Las horas trabajadas son requeridas');
+    }
 
-const obtener = async (prisma, id) => {
-  const liquidacion = await prisma.liquidacion.findUnique({
-    where: { id },
-    include: { empleado: true }
-  });
+    const empleado = await prisma.empleado.findUnique({
+      where: { id: data.empleadoId }
+    });
 
-  if (!liquidacion) {
-    throw createHttpError.notFound('Liquidación no encontrada');
+    if (!empleado) {
+      throw createHttpError.notFound('Empleado no encontrado');
+    }
+
+    const horas = parseFloat(data.horasTotales);
+    const tarifaHora = parseFloat(empleado.tarifaHora);
+    const descuentos = data.descuentos || 0;
+    const adicionales = data.adicionales || 0;
+    const subtotal = horas * tarifaHora;
+    const totalPagar = subtotal - descuentos + adicionales;
+
+    return {
+      empleadoId: data.empleadoId,
+      periodoDesde: new Date(data.periodoDesde),
+      periodoHasta: new Date(data.periodoHasta),
+      horasTotales: horas,
+      tarifaHora: empleado.tarifaHora,
+      subtotal,
+      descuentos,
+      adicionales,
+      totalPagar,
+      observaciones: data.observaciones || null
+    };
+  },
+
+  // Validación: no eliminar liquidaciones pagadas
+  customValidations: {
+    eliminar: async (prisma, id, item) => {
+      if (item.pagado) {
+        throw createHttpError.badRequest(
+          'No se puede eliminar una liquidación pagada'
+        );
+      }
+    }
   }
+});
 
-  return liquidacion;
-};
-
+// Función de negocio: calcular horas desde fichajes
 const calcular = async (prisma, empleadoId, fechaDesde, fechaHasta) => {
   const empleado = await prisma.empleado.findUnique({ where: { id: empleadoId } });
   if (!empleado) {
@@ -70,41 +107,7 @@ const calcular = async (prisma, empleadoId, fechaDesde, fechaHasta) => {
   };
 };
 
-const crear = async (prisma, data) => {
-  if (!data.horasTotales || data.horasTotales <= 0) {
-    throw createHttpError.badRequest('Las horas trabajadas son requeridas');
-  }
-
-  const empleado = await prisma.empleado.findUnique({ where: { id: data.empleadoId } });
-  if (!empleado) {
-    throw createHttpError.notFound('Empleado no encontrado');
-  }
-
-  const horas = parseFloat(data.horasTotales);
-  const tarifaHora = parseFloat(empleado.tarifaHora);
-  const descuentos = data.descuentos || 0;
-  const adicionales = data.adicionales || 0;
-
-  const subtotal = horas * tarifaHora;
-  const totalPagar = subtotal - descuentos + adicionales;
-
-  return prisma.liquidacion.create({
-    data: {
-      empleadoId: data.empleadoId,
-      periodoDesde: new Date(data.periodoDesde),
-      periodoHasta: new Date(data.periodoHasta),
-      horasTotales: horas,
-      tarifaHora: empleado.tarifaHora,
-      subtotal,
-      descuentos,
-      adicionales,
-      totalPagar,
-      observaciones: data.observaciones || null
-    },
-    include: { empleado: { select: { nombre: true, apellido: true } } }
-  });
-};
-
+// Función de negocio: marcar liquidación como pagada
 const marcarPagada = async (prisma, id) => {
   const liquidacionExiste = await prisma.liquidacion.findUnique({
     where: { id },
@@ -125,27 +128,10 @@ const marcarPagada = async (prisma, id) => {
   });
 };
 
-const eliminar = async (prisma, id) => {
-  const liquidacion = await prisma.liquidacion.findUnique({ where: { id } });
-  if (!liquidacion) {
-    throw createHttpError.notFound('Liquidación no encontrada');
-  }
-
-  if (liquidacion.pagado) {
-    throw createHttpError.badRequest('No se puede eliminar una liquidación pagada');
-  }
-
-  await prisma.liquidacion.delete({ where: { id } });
-
-  return { message: 'Liquidación eliminada correctamente' };
-};
-
 module.exports = {
-  listar,
-  obtener,
+  ...baseCrud,
+  // Funciones de negocio (sin cambios)
   calcular,
-  crear,
-  marcarPagada,
-  eliminar
+  marcarPagada
 };
 
