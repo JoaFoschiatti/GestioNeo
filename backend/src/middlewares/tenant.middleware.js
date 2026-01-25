@@ -1,17 +1,50 @@
 /**
- * Tenant Resolution Middleware
+ * Middleware de resolución de tenant para multi-tenancy.
  *
- * This middleware resolves tenant context for requests:
- * - For authenticated routes: extracts tenantId from JWT
- * - For public routes: resolves tenant from URL slug
+ * GestioNeo soporta múltiples restaurantes (tenants) en la misma instancia.
+ * Cada tenant tiene sus propios datos completamente aislados.
+ *
+ * Este middleware resuelve el contexto del tenant de dos formas:
+ *
+ * 1. **Por JWT (rutas autenticadas)**: El tenantId viene en el token del usuario.
+ *    Usar con: `setTenantFromAuth` después de `verificarToken`
+ *
+ * 2. **Por slug (rutas públicas)**: El slug viene en la URL `/menu/:slug`
+ *    Usar con: `resolveTenantFromSlug`
+ *
+ * Una vez resuelto, el middleware:
+ * - Agrega `req.tenantId` con el ID del tenant
+ * - Agrega `req.tenant` con el objeto tenant completo
+ * - Agrega `req.prisma` con un cliente Prisma que filtra automáticamente por tenant
+ *
+ * El cliente Prisma extendido usa Prisma Client Extensions para interceptar
+ * TODAS las queries y agregar automáticamente `WHERE tenantId = X`.
+ *
+ * @module tenant.middleware
  */
 
 const { prisma, getTenantPrisma, getTenantBySlug } = require('../db/prisma');
 const { createHttpError } = require('../utils/http-error');
 
 /**
- * Middleware to resolve tenant from URL slug (for public routes)
- * Expected route: /api/publico/:slug/...
+ * Resuelve el tenant desde el slug en la URL.
+ *
+ * Para rutas públicas como `/api/publico/:slug/menu`
+ *
+ * Verifica que el tenant exista y esté activo antes de continuar.
+ * Agrega al request: tenantId, tenantSlug, tenant, prisma (con scoping)
+ *
+ * @param {import('express').Request} req - Request con params.slug
+ * @param {import('express').Response} res - Response de Express
+ * @param {import('express').NextFunction} next - Siguiente middleware
+ *
+ * @example
+ * // En routes/publico.routes.js
+ * router.get('/:slug/menu', resolveTenantFromSlug, controller.getMenu);
+ *
+ * // En el controller, usar req.prisma
+ * const productos = await req.prisma.producto.findMany();
+ * // Solo retorna productos del tenant resuelto
  */
 const resolveTenantFromSlug = async (req, res, next) => {
   try {
@@ -53,8 +86,28 @@ const resolveTenantFromSlug = async (req, res, next) => {
 };
 
 /**
- * Middleware to set tenant context from authenticated user
- * Must be used AFTER auth middleware (verificarToken)
+ * Establece el contexto de tenant desde el usuario autenticado.
+ *
+ * IMPORTANTE: Debe usarse DESPUÉS de `verificarToken`.
+ *
+ * Para usuarios normales: extrae tenantId del JWT y crea cliente Prisma con scoping.
+ * Para SUPER_ADMIN: usa Prisma sin scoping (acceso a todos los tenants).
+ *
+ * @param {import('express').Request} req - Request con req.usuario (de verificarToken)
+ * @param {import('express').Response} res - Response de Express
+ * @param {import('express').NextFunction} next - Siguiente middleware
+ *
+ * @example
+ * // En routes/productos.routes.js
+ * router.get('/',
+ *   verificarToken,      // Primero: valida JWT, agrega req.usuario
+ *   setTenantFromAuth,   // Segundo: agrega req.prisma con scoping
+ *   controller.listar
+ * );
+ *
+ * // En el controller
+ * const prisma = req.prisma; // Ya tiene filtro de tenant
+ * const productos = await prisma.producto.findMany();
  */
 const setTenantFromAuth = async (req, res, next) => {
   try {
@@ -102,7 +155,18 @@ const setTenantFromAuth = async (req, res, next) => {
 };
 
 /**
- * Middleware to require SUPER_ADMIN role
+ * Requiere rol SUPER_ADMIN y proporciona acceso sin scoping de tenant.
+ *
+ * Para rutas de administración global como gestión de tenants.
+ * Usa Prisma sin extensiones (acceso a todos los datos).
+ *
+ * @param {import('express').Request} req - Request con req.usuario
+ * @param {import('express').Response} res - Response de Express
+ * @param {import('express').NextFunction} next - Siguiente middleware
+ *
+ * @example
+ * // En routes/tenants.routes.js
+ * router.get('/', verificarToken, requireSuperAdmin, controller.listar);
  */
 const requireSuperAdmin = (req, res, next) => {
   if (!req.usuario || req.usuario.rol !== 'SUPER_ADMIN') {
@@ -117,8 +181,20 @@ const requireSuperAdmin = (req, res, next) => {
 };
 
 /**
- * Optional tenant context for routes that may or may not need tenant
- * (e.g., login endpoint where we resolve tenant from request body)
+ * Resuelve tenant opcionalmente desde slug en body, query o params.
+ *
+ * Para rutas donde el tenant puede o no estar presente (ej: login).
+ * Si no hay slug o el tenant no existe, continúa sin contexto de tenant.
+ *
+ * @param {import('express').Request} req - Request de Express
+ * @param {import('express').Response} res - Response de Express
+ * @param {import('express').NextFunction} next - Siguiente middleware
+ *
+ * @example
+ * // En routes/auth.routes.js
+ * router.post('/login', optionalTenantFromSlug, controller.login);
+ *
+ * // El body puede incluir slug: { email, password, slug: 'mi-restaurante' }
  */
 const optionalTenantFromSlug = async (req, res, next) => {
   try {
@@ -146,8 +222,23 @@ const optionalTenantFromSlug = async (req, res, next) => {
 };
 
 /**
- * Middleware to require tenant context from header (e.g., bridge)
- * Header: x-tenant-slug
+ * Resuelve tenant desde el header `x-tenant-slug`.
+ *
+ * Usado por el Print Bridge y otros servicios externos que necesitan
+ * identificar el tenant sin autenticación JWT.
+ *
+ * @param {import('express').Request} req - Request con header x-tenant-slug
+ * @param {import('express').Response} _res - Response (no usado)
+ * @param {import('express').NextFunction} next - Siguiente middleware
+ *
+ * @throws {HttpError} 400 - Si no hay header x-tenant-slug
+ * @throws {HttpError} 404 - Si el tenant no existe
+ * @throws {HttpError} 403 - Si el tenant no está activo
+ *
+ * @example
+ * // Request del Print Bridge
+ * // Headers: { 'x-tenant-slug': 'mi-restaurante' }
+ * router.get('/print-jobs', setTenantFromSlugHeader, controller.getPendingJobs);
  */
 const setTenantFromSlugHeader = async (req, _res, next) => {
   try {

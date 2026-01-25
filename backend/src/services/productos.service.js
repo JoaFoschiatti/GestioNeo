@@ -1,5 +1,26 @@
+/**
+ * Servicio de gestión de productos.
+ *
+ * Este servicio maneja toda la lógica de negocio relacionada con productos:
+ * - CRUD de productos
+ * - Gestión de ingredientes por producto
+ * - Sistema de variantes (ej: tamaños de pizza)
+ * - Agrupación de productos existentes como variantes
+ *
+ * @module productos.service
+ */
+
 const { createHttpError } = require('../utils/http-error');
 
+/**
+ * Construye el objeto include para consultas de productos.
+ *
+ * Incluye: categoría, ingredientes con detalles, variantes ordenadas,
+ * y producto base (si es variante).
+ *
+ * @private
+ * @returns {Object} Objeto include para Prisma
+ */
 const buildProductoInclude = () => ({
   categoria: { select: { id: true, nombre: true } },
   ingredientes: { include: { ingrediente: true } },
@@ -13,6 +34,16 @@ const buildProductoInclude = () => ({
   productoBase: { select: { id: true, nombre: true } }
 });
 
+/**
+ * Lista todos los productos con filtros opcionales.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
+ * @param {Object} query - Filtros de búsqueda
+ * @param {number} [query.categoriaId] - Filtrar por categoría
+ * @param {boolean} [query.disponible] - Filtrar por disponibilidad
+ *
+ * @returns {Promise<Array>} Lista de productos con categoría, ingredientes y variantes
+ */
 const listar = async (prisma, query) => {
   const { categoriaId, disponible } = query;
 
@@ -27,6 +58,19 @@ const listar = async (prisma, query) => {
   });
 };
 
+/**
+ * Lista productos base (excluyendo variantes).
+ *
+ * Útil para mostrar el catálogo agrupado donde las variantes
+ * aparecen anidadas dentro de su producto base.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
+ * @param {Object} query - Filtros de búsqueda
+ * @param {number} [query.categoriaId] - Filtrar por categoría
+ * @param {boolean} [query.disponible] - Filtrar por disponibilidad
+ *
+ * @returns {Promise<Array>} Lista de productos base con sus variantes anidadas
+ */
 const listarConVariantes = async (prisma, query) => {
   const { categoriaId, disponible } = query;
 
@@ -41,6 +85,16 @@ const listarConVariantes = async (prisma, query) => {
   });
 };
 
+/**
+ * Obtiene un producto por ID.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
+ * @param {number} id - ID del producto
+ *
+ * @returns {Promise<Object>} Producto con categoría e ingredientes
+ *
+ * @throws {HttpError} 404 - Producto no encontrado
+ */
 const obtener = async (prisma, id) => {
   const producto = await prisma.producto.findUnique({
     where: { id },
@@ -57,6 +111,27 @@ const obtener = async (prisma, id) => {
   return producto;
 };
 
+/**
+ * Crea un nuevo producto con ingredientes opcionales.
+ *
+ * El producto se crea dentro de una transacción para garantizar
+ * que si falla la creación de ingredientes, el producto no se guarde.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
+ * @param {Object} data - Datos del producto
+ * @param {string} data.nombre - Nombre del producto
+ * @param {string} [data.descripcion] - Descripción
+ * @param {number} data.precio - Precio en moneda local
+ * @param {number} data.categoriaId - ID de la categoría
+ * @param {boolean} [data.disponible=true] - Si está disponible
+ * @param {boolean} [data.destacado=false] - Si aparece en destacados
+ * @param {Array<Object>} [data.ingredientes] - Ingredientes del producto
+ * @param {number} data.ingredientes[].ingredienteId - ID del ingrediente
+ * @param {number} data.ingredientes[].cantidad - Cantidad por unidad
+ * @param {Express.Multer.File} [file] - Imagen del producto
+ *
+ * @returns {Promise<Object>} Producto creado con relaciones
+ */
 const crear = async (prisma, data, file) => {
   const imagen = file ? `/uploads/${file.filename}` : null;
   const { ingredientes, ...productoData } = data;
@@ -88,6 +163,21 @@ const crear = async (prisma, data, file) => {
   });
 };
 
+/**
+ * Actualiza un producto existente.
+ *
+ * Si se proporcionan ingredientes, reemplaza todos los existentes.
+ * Si se proporciona una imagen, actualiza la ruta de la imagen.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
+ * @param {number} id - ID del producto
+ * @param {Object} data - Datos a actualizar
+ * @param {Express.Multer.File} [file] - Nueva imagen
+ *
+ * @returns {Promise<Object>} Producto actualizado
+ *
+ * @throws {HttpError} 404 - Producto no encontrado
+ */
 const actualizar = async (prisma, id, data, file) => {
   const imagen = file ? `/uploads/${file.filename}` : undefined;
   const { ingredientes, ...productoData } = data;
@@ -131,6 +221,17 @@ const actualizar = async (prisma, id, data, file) => {
   });
 };
 
+/**
+ * Cambia la disponibilidad de un producto.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
+ * @param {number} id - ID del producto
+ * @param {boolean} disponible - Nueva disponibilidad
+ *
+ * @returns {Promise<Object>} Producto actualizado
+ *
+ * @throws {HttpError} 404 - Producto no encontrado
+ */
 const cambiarDisponibilidad = async (prisma, id, disponible) => {
   const productoExiste = await prisma.producto.findUnique({
     where: { id },
@@ -147,6 +248,19 @@ const cambiarDisponibilidad = async (prisma, id, disponible) => {
   });
 };
 
+/**
+ * Elimina (desactiva) un producto.
+ *
+ * En lugar de eliminar físicamente, marca el producto como no disponible
+ * para mantener integridad referencial con pedidos históricos.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
+ * @param {number} id - ID del producto
+ *
+ * @returns {Promise<Object>} Mensaje de confirmación
+ *
+ * @throws {HttpError} 404 - Producto no encontrado
+ */
 const eliminar = async (prisma, id) => {
   const productoExiste = await prisma.producto.findUnique({
     where: { id },
@@ -165,6 +279,30 @@ const eliminar = async (prisma, id) => {
   return { message: 'Producto desactivado correctamente' };
 };
 
+/**
+ * Crea una variante de un producto existente.
+ *
+ * Las variantes heredan la imagen, categoría y disponibilidad del producto base.
+ * También copian los ingredientes, pudiendo ajustar las cantidades con el
+ * multiplicador de insumos.
+ *
+ * Ejemplo: Pizza Grande como variante de Pizza, con multiplicador 1.5
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
+ * @param {number} productoBaseId - ID del producto base
+ * @param {Object} data - Datos de la variante
+ * @param {string} data.nombreVariante - Nombre de la variante (ej: "Grande")
+ * @param {number} data.precio - Precio de la variante
+ * @param {number} [data.multiplicadorInsumos=1.0] - Multiplicador para ingredientes
+ * @param {number} [data.ordenVariante=0] - Orden de visualización
+ * @param {boolean} [data.esVariantePredeterminada=false] - Si es la opción por defecto
+ * @param {string} [data.descripcion] - Descripción específica de la variante
+ *
+ * @returns {Promise<Object>} Variante creada
+ *
+ * @throws {HttpError} 404 - Producto base no encontrado
+ * @throws {HttpError} 400 - No se puede crear variante de otra variante
+ */
 const crearVariante = async (prisma, productoBaseId, data) => {
   const productoBase = await prisma.producto.findUnique({
     where: { id: productoBaseId },
@@ -235,6 +373,30 @@ const crearVariante = async (prisma, productoBaseId, data) => {
   });
 };
 
+/**
+ * Agrupa productos existentes como variantes de un producto base.
+ *
+ * Convierte productos independientes en variantes de otro producto.
+ * Útil para reorganizar el catálogo sin perder historial de pedidos.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
+ * @param {Object} payload - Datos de agrupación
+ * @param {number} payload.productoBaseId - ID del producto que será el base
+ * @param {Array<Object>} payload.variantes - Productos a convertir en variantes
+ * @param {number} payload.variantes[].productoId - ID del producto
+ * @param {string} payload.variantes[].nombreVariante - Nombre como variante
+ * @param {number} [payload.variantes[].multiplicadorInsumos] - Multiplicador
+ * @param {number} [payload.variantes[].ordenVariante] - Orden
+ * @param {boolean} [payload.variantes[].esVariantePredeterminada] - Si es default
+ *
+ * @returns {Promise<Object>} Producto base con variantes anidadas
+ *
+ * @throws {HttpError} 404 - Producto base no encontrado
+ * @throws {HttpError} 400 - Producto base no puede ser variante
+ * @throws {HttpError} 400 - Producto base no puede incluirse como variante
+ * @throws {HttpError} 400 - Productos ya son variantes
+ * @throws {HttpError} 400 - Solo una variante puede ser predeterminada
+ */
 const agruparComoVariantes = async (prisma, payload) => {
   const { productoBaseId, variantes } = payload;
 
@@ -315,6 +477,17 @@ const agruparComoVariantes = async (prisma, payload) => {
   });
 };
 
+/**
+ * Desagrupa una variante convirtiéndola en producto independiente.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
+ * @param {number} id - ID del producto variante
+ *
+ * @returns {Promise<Object>} Producto como independiente
+ *
+ * @throws {HttpError} 404 - Producto no encontrado
+ * @throws {HttpError} 400 - El producto no es una variante
+ */
 const desagruparVariante = async (prisma, id) => {
   const producto = await prisma.producto.findUnique({
     where: { id }
@@ -343,6 +516,22 @@ const desagruparVariante = async (prisma, id) => {
   });
 };
 
+/**
+ * Actualiza los datos de una variante.
+ *
+ * Si se marca como predeterminada, desmarca las demás variantes
+ * del mismo producto base.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
+ * @param {number} id - ID de la variante
+ * @param {Object} data - Datos a actualizar
+ * @param {boolean} [data.esVariantePredeterminada] - Si es la opción default
+ *
+ * @returns {Promise<Object>} Variante actualizada
+ *
+ * @throws {HttpError} 404 - Variante no encontrada
+ * @throws {HttpError} 400 - El producto no es una variante
+ */
 const actualizarVariante = async (prisma, id, data) => {
   const producto = await prisma.producto.findUnique({
     where: { id }

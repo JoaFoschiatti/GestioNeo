@@ -2,6 +2,7 @@ require('dotenv').config({ quiet: true });
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const cookieParser = require('cookie-parser');
 const path = require('path');
 
 // Importar rutas
@@ -30,23 +31,66 @@ const tenantRoutes = require('./routes/tenant.routes');
 
 const { errorMiddleware } = require('./middlewares/error.middleware');
 const { createHttpError } = require('./utils/http-error');
+const { logger } = require('./utils/logger');
 
 const app = express();
 
+// HTTPS redirect in production
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    // Check if request came through HTTPS (works with proxies like nginx, Railway, Vercel)
+    const forwardedProto = req.header('x-forwarded-proto');
+    if (forwardedProto && forwardedProto !== 'https') {
+      return res.redirect(301, `https://${req.header('host')}${req.url}`);
+    }
+    next();
+  });
+}
+
 // Middlewares de seguridad
 app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" }
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  hsts: {
+    maxAge: 31536000, // 1 year
+    includeSubDomains: true,
+    preload: true
+  }
 }));
 
-// CORS
+// CORS - Strict configuration for production
+const allowedOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map(url => url.trim())
+  : [];
+
+// In production, FRONTEND_URL must be explicitly set
+if (process.env.NODE_ENV === 'production' && allowedOrigins.length === 0) {
+  logger.error('FRONTEND_URL environment variable must be set in production');
+  process.exit(1);
+}
+
+// In development, allow localhost if FRONTEND_URL not set
+if (allowedOrigins.length === 0) {
+  allowedOrigins.push('http://localhost:5173');
+}
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, Postman, curl)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 
 // Parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 // Servir archivos estáticos (imágenes de productos)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));

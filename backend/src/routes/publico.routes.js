@@ -1,11 +1,26 @@
 const express = require('express');
 const router = express.Router();
+const rateLimit = require('express-rate-limit');
 const { resolveTenantFromSlug } = require('../middlewares/tenant.middleware');
 const emailService = require('../services/email.service');
 const eventBus = require('../services/event-bus');
 const { asyncHandler } = require('../utils/async-handler');
 const publicoService = require('../services/publico.service');
 const { logger } = require('../utils/logger');
+
+// Rate limiter para pedidos públicos (10 pedidos por hora por IP)
+// Deshabilitado en entorno de test para permitir E2E tests
+const publicOrderLimiter = process.env.NODE_ENV === 'test'
+  ? (req, res, next) => next() // Skip en test
+  : rateLimit({
+      windowMs: 60 * 60 * 1000, // 1 hora
+      max: 10,
+      message: {
+        error: { message: 'Demasiados pedidos creados. Intente nuevamente en 1 hora.' }
+      },
+      standardHeaders: true,
+      legacyHeaders: false
+    });
 
 /**
  * All public routes require slug parameter for tenant resolution
@@ -25,7 +40,7 @@ router.get('/:slug/menu', resolveTenantFromSlug, asyncHandler(async (req, res) =
 }));
 
 // POST /api/publico/:slug/pedido - Crear pedido público
-router.post('/:slug/pedido', resolveTenantFromSlug, asyncHandler(async (req, res) => {
+router.post('/:slug/pedido', publicOrderLimiter, resolveTenantFromSlug, asyncHandler(async (req, res) => {
   const result = await publicoService.createPublicOrder(req.prisma, {
     tenantId: req.tenantId,
     tenantSlug: req.tenantSlug,

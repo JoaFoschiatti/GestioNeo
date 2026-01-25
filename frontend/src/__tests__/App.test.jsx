@@ -45,15 +45,18 @@ describe('AuthProvider', () => {
       </BrowserRouter>
     )
 
-    expect(localStorage.getItem).toHaveBeenCalledWith('token')
+    // Token NO se guarda en localStorage (httpOnly cookie), solo usuario y tenant
+    expect(localStorage.getItem).not.toHaveBeenCalledWith('token')
     expect(localStorage.getItem).toHaveBeenCalledWith('usuario')
+    expect(localStorage.getItem).toHaveBeenCalledWith('tenant')
   })
 
-  it('should restore user from localStorage if token exists', () => {
+  it('should restore user from localStorage if it exists', () => {
     const mockUser = { id: 1, nombre: 'Test', email: 'test@test.com', rol: 'ADMIN' }
+    const mockTenant = { id: 10, slug: 'demo' }
     localStorage.getItem.mockImplementation((key) => {
-      if (key === 'token') return 'fake-token'
       if (key === 'usuario') return JSON.stringify(mockUser)
+      if (key === 'tenant') return JSON.stringify(mockTenant)
       return null
     })
 
@@ -65,7 +68,9 @@ describe('AuthProvider', () => {
       </BrowserRouter>
     )
 
-    expect(localStorage.getItem).toHaveBeenCalledWith('token')
+    // Token NO se guarda en localStorage (httpOnly cookie), solo usuario y tenant
+    expect(localStorage.getItem).not.toHaveBeenCalledWith('token')
     expect(localStorage.getItem).toHaveBeenCalledWith('usuario')
+    expect(localStorage.getItem).toHaveBeenCalledWith('tenant')
   })
 })

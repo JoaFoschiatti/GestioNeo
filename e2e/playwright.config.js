@@ -24,7 +24,10 @@ module.exports = defineConfig({
       command: 'cd ../backend && npm run dev',
       url: 'http://localhost:3001/api/health',
       reuseExistingServer: true,
-      timeout: 30000
+      timeout: 30000,
+      env: {
+        NODE_ENV: 'test' // Disable rate limiting for E2E tests
+      }
     },
     {
       command: 'cd ../frontend && npm run dev',

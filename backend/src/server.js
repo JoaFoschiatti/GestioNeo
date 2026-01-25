@@ -1,5 +1,6 @@
 const app = require('./app');
 const { prisma } = require('./db/prisma');
+const { logger } = require('./utils/logger');
 const { iniciarJobReservas, detenerJobReservas } = require('./jobs/reservas.job');
 
 const PORT = process.env.PORT || 3001;
@@ -9,8 +10,10 @@ let shuttingDown = false;
 
 const start = () => {
   server = app.listen(PORT, () => {
-    console.log(`🚀 GestioNeo API corriendo en http://localhost:${PORT}`);
-    console.log(`📊 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+    logger.info(`🚀 GestioNeo API corriendo en http://localhost:${PORT}`, {
+      port: PORT,
+      environment: process.env.NODE_ENV || 'development'
+    });
 
     iniciarJobReservas();
   });
@@ -20,12 +23,12 @@ const shutdown = async (signal) => {
   if (shuttingDown) return;
   shuttingDown = true;
 
-  console.log(`\n🛑 Recibido ${signal}. Cerrando...`);
+  logger.info(`Recibido ${signal}. Cerrando servidor...`, { signal });
 
   try {
     detenerJobReservas();
   } catch (e) {
-    console.error('Error deteniendo job de reservas:', e);
+    logger.error('Error deteniendo job de reservas', e);
   }
 
   await new Promise((resolve) => {
@@ -35,8 +38,9 @@ const shutdown = async (signal) => {
 
   try {
     await prisma.$disconnect();
+    logger.info('Prisma desconectado correctamente');
   } catch (e) {
-    console.error('Error desconectando Prisma:', e);
+    logger.error('Error desconectando Prisma', e);
   }
 
   process.exit(0);

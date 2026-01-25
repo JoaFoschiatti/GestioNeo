@@ -8,24 +8,24 @@ const { validate } = require('../middlewares/validate.middleware');
 const { asyncHandler } = require('../utils/async-handler');
 const { loginBodySchema, registrarBodySchema, cambiarPasswordBodySchema } = require('../schemas/auth.schemas');
 
-// Rate limiter para login (5 intentos por 15 minutos)
+// Rate limiter para login (5 intentos por 5 minutos)
 // En test usa límite alto (1000) para no bloquear pero genera headers
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
+  windowMs: 5 * 60 * 1000, // 5 minutos
   max: process.env.NODE_ENV === 'test' ? 1000 : 5, // Límite alto en test
   message: {
-    error: { message: 'Demasiados intentos de login. Intente nuevamente en 15 minutos.' }
+    error: { message: 'Demasiados intentos de login. Intente nuevamente en 5 minutos.' }
   },
   standardHeaders: true,
   legacyHeaders: false
 });
 
-// Rate limiter para cambio de contraseña (5 intentos por 15 minutos)
+// Rate limiter para cambio de contraseña (5 intentos por 5 minutos)
 const passwordChangeLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 5 * 60 * 1000,
   max: process.env.NODE_ENV === 'test' ? 1000 : 5,
   message: {
-    error: { message: 'Demasiados intentos de cambio de contraseña. Intente nuevamente en 15 minutos.' }
+    error: { message: 'Demasiados intentos de cambio de contraseña. Intente nuevamente en 5 minutos.' }
   },
   standardHeaders: true,
   legacyHeaders: false

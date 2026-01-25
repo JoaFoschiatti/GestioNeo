@@ -5,7 +5,8 @@ const api = axios.create({
   baseURL: '/api',
   headers: {
     'Content-Type': 'application/json'
-  }
+  },
+  withCredentials: true // Enable sending httpOnly cookies with requests
 })
 
 // Interceptor para manejar errores
@@ -17,8 +18,9 @@ api.interceptors.response.use(
 
     // Si es error 401 y no es la ruta de login, redirigir
     if (error.response?.status === 401 && !error.config.url.includes('/auth/login')) {
-      localStorage.removeItem('token')
+      // Clear localStorage user/tenant info
       localStorage.removeItem('usuario')
+      localStorage.removeItem('tenant')
       window.location.href = '/login'
       return Promise.reject(error)
     }

@@ -1,3 +1,39 @@
+// ============================================================
+// MENÚ PÚBLICO - Página del menú QR para clientes
+// ============================================================
+//
+// Esta página se accede desde: /menu/:slug (ej: /menu/mi-restaurante)
+// NO requiere autenticación - es pública para los clientes.
+// El tenant (restaurante) se resuelve por el slug en la URL.
+//
+// FLUJO PRINCIPAL:
+// 1. Cliente escanea código QR → Abre esta página
+// 2. Se carga la configuración del restaurante y el menú
+// 3. Cliente navega por categorías y agrega productos al carrito
+// 4. Cliente puede seleccionar modificadores (extras/exclusiones)
+// 5. Cliente completa datos personales y elige tipo de entrega
+// 6. Cliente elige método de pago:
+//    - EFECTIVO: Se crea el pedido directamente
+//    - MERCADOPAGO: Se crea preferencia y redirige a MP
+// 7. Después del pago, se muestra confirmación
+//
+// ESTADOS PRINCIPALES:
+// - config: Configuración del restaurante (nombre, horarios, métodos de pago)
+// - categorias: Categorías con sus productos disponibles
+// - carrito: Items seleccionados por el cliente
+// - clienteData: Datos del cliente (nombre, teléfono, dirección)
+// - tipoEntrega: 'DELIVERY' o 'RETIRO'
+// - metodoPago: 'EFECTIVO' o 'MERCADOPAGO'
+// - pedidoPendienteMP: Pedido esperando confirmación de MercadoPago
+//
+// COMPONENTES INTERNOS:
+// - Navegación de categorías (tabs horizontales)
+// - Grid de productos con variantes
+// - Carrito lateral (drawer)
+// - Modal de checkout con formulario
+// - Pantalla de espera de pago MP
+// ============================================================
+
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useParams, useNavigate } from 'react-router-dom'
 import useAsync from '../hooks/useAsync'
@@ -17,10 +53,14 @@ import {
   BanknotesIcon
 } from '@heroicons/react/24/outline'
 
+// ----------------------------------------------------------
+// CONFIGURACIÓN Y UTILIDADES
+// ----------------------------------------------------------
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
 const BACKEND_URL = API_URL.replace('/api', '')
 
-// Helper para obtener emoji de categoria
+// Mapeo de nombres de categoría a emojis para mejor UX visual
 const categoryIcons = {
   hamburguesas: '🍔',
   pizzas: '🍕',
@@ -44,6 +84,10 @@ const getCategoryEmoji = (nombre) => {
   return categoryIcons.default
 }
 
+/**
+ * Wrapper de fetch que maneja JSON y errores de forma consistente.
+ * No usa axios porque este módulo es público y no necesita JWT.
+ */
 const fetchJson = async (url, options = {}, fallbackMessage = 'Error inesperado') => {
   const res = await fetch(url, options)
   let data = null
@@ -62,46 +106,73 @@ const fetchJson = async (url, options = {}, fallbackMessage = 'Error inesperado'
 }
 
 export default function MenuPublico() {
-  const { slug } = useParams()
+  // ----------------------------------------------------------
+  // ROUTING Y NAVEGACIÓN
+  // ----------------------------------------------------------
+  const { slug } = useParams() // Slug del restaurante desde la URL
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const [config, setConfig] = useState(null)
-  const [categorias, setCategorias] = useState([])
-  const [loadError, setLoadError] = useState(null)
-  const [categoriaActiva, setCategoriaActiva] = useState('all')
+  const [searchParams] = useSearchParams() // Para leer ?pago=exito después de MP
+
+  // ----------------------------------------------------------
+  // ESTADO: Configuración y datos del menú
+  // ----------------------------------------------------------
+  const [config, setConfig] = useState(null) // Configuración del restaurante
+  const [categorias, setCategorias] = useState([]) // Categorías con productos
+  const [loadError, setLoadError] = useState(null) // Error al cargar datos iniciales
+
+  // ----------------------------------------------------------
+  // ESTADO: Navegación y UI del menú
+  // ----------------------------------------------------------
+  const [categoriaActiva, setCategoriaActiva] = useState('all') // Filtro de categoría
+  const [variantesSeleccionadas, setVariantesSeleccionadas] = useState({}) // Variante elegida por producto base
+
+  // ----------------------------------------------------------
+  // ESTADO: Carrito de compras
+  // Cada item tiene: { productoId, nombre, precio, cantidad, observaciones }
+  // ----------------------------------------------------------
   const [carrito, setCarrito] = useState([])
-  const [showCarrito, setShowCarrito] = useState(false)
-  const [showCheckout, setShowCheckout] = useState(false)
-  const [enviandoPedido, setEnviandoPedido] = useState(false)
-  const [pedidoExitoso, setPedidoExitoso] = useState(null)
-  const [pageError, setPageError] = useState(null)
-  const [checkoutError, setCheckoutError] = useState(null)
+  const [showCarrito, setShowCarrito] = useState(false) // Drawer del carrito abierto
 
-  // Estado para pedido pendiente de pago en nueva pestaña (desktop)
-  const [pedidoPendienteMP, setPedidoPendienteMP] = useState(null)
+  // ----------------------------------------------------------
+  // ESTADO: Checkout (formulario de pedido)
+  // ----------------------------------------------------------
+  const [showCheckout, setShowCheckout] = useState(false) // Modal de checkout abierto
+  const [enviandoPedido, setEnviandoPedido] = useState(false) // Procesando envío
+  const [pedidoExitoso, setPedidoExitoso] = useState(null) // Pedido creado exitosamente
+  const [pageError, setPageError] = useState(null) // Error general de página
+  const [checkoutError, setCheckoutError] = useState(null) // Error en el checkout
 
-  // Estados para verificación de pago MP
-  const [verificandoPago, setVerificandoPago] = useState(false)
-  const [tiempoEspera, setTiempoEspera] = useState(0)
+  // ----------------------------------------------------------
+  // ESTADO: MercadoPago
+  // Cuando el cliente paga con MP en desktop, el pedido queda "pendiente"
+  // hasta que MP confirme el pago. Mostramos una pantalla de espera
+  // que hace polling al backend para verificar el estado.
+  // ----------------------------------------------------------
+  const [pedidoPendienteMP, setPedidoPendienteMP] = useState(null) // Pedido esperando pago MP
+  const [verificandoPago, setVerificandoPago] = useState(false) // Polling activo
+  const [tiempoEspera, setTiempoEspera] = useState(0) // Contador de tiempo esperando
 
-  // Delivery vs Retiro
+  // ----------------------------------------------------------
+  // ESTADO: Tipo de entrega (DELIVERY o RETIRO)
+  // ----------------------------------------------------------
   const [tipoEntrega, setTipoEntrega] = useState('DELIVERY')
 
-  // Variantes seleccionadas por producto
-  const [variantesSeleccionadas, setVariantesSeleccionadas] = useState({})
-
-  // Cliente data
+  // ----------------------------------------------------------
+  // ESTADO: Datos del cliente
+  // ----------------------------------------------------------
   const [clienteData, setClienteData] = useState({
     nombre: '',
     telefono: '',
-    direccion: '',
-    email: '',
-    observaciones: ''
+    direccion: '', // Requerido solo si tipoEntrega = 'DELIVERY'
+    email: '', // Opcional, para recibir confirmación
+    observaciones: '' // Notas para el pedido
   })
 
-  // Pago
+  // ----------------------------------------------------------
+  // ESTADO: Método de pago
+  // ----------------------------------------------------------
   const [metodoPago, setMetodoPago] = useState('EFECTIVO')
-  const [montoAbonado, setMontoAbonado] = useState('')
+  const [montoAbonado, setMontoAbonado] = useState('') // Para calcular vuelto
 
   const cargarConfigYMenu = useCallback(async () => {
     setLoadError(null)

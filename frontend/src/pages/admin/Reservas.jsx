@@ -60,6 +60,17 @@ export default function Reservas() {
     { onError: handleLoadError }
   )
 
+  // Convierte fecha UTC a string para datetime-local (en hora local)
+  const toLocalDatetimeString = (isoDate) => {
+    const d = new Date(isoDate)
+    const year = d.getFullYear()
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    const hours = String(d.getHours()).padStart(2, '0')
+    const minutes = String(d.getMinutes()).padStart(2, '0')
+    return `${year}-${month}-${day}T${hours}:${minutes}`
+  }
+
   const abrirModal = (reserva = null) => {
     if (reserva) {
       setReservaEdit(reserva)
@@ -67,7 +78,7 @@ export default function Reservas() {
         mesaId: reserva.mesaId,
         clienteNombre: reserva.clienteNombre,
         clienteTelefono: reserva.clienteTelefono || '',
-        fechaHora: new Date(reserva.fechaHora).toISOString().slice(0, 16),
+        fechaHora: toLocalDatetimeString(reserva.fechaHora),
         cantidadPersonas: reserva.cantidadPersonas,
         observaciones: reserva.observaciones || ''
       })

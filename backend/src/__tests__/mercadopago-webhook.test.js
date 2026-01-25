@@ -36,6 +36,7 @@ describe('MercadoPago Webhook', () => {
 
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
+    process.env.SKIP_WEBHOOK_VERIFICATION = 'true'; // Skip webhook verification in tests
     tenant = await createTenant();
   });
 

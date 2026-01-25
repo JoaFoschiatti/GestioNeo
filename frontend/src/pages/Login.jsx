@@ -200,8 +200,9 @@ export default function Login() {
         {/* Info de prueba */}
         <div className="mt-6 glass-info-box text-sm text-white/60">
           <p className="font-medium text-white/80 mb-2">Usuarios de prueba:</p>
-          <p>Admin: admin@gestioneo.com / admin123</p>
-          <p>Mozo: mozo@gestioneo.com / mozo123</p>
+          <p>Restaurante: restaurante-demo</p>
+          <p>Admin: admin@demo.com / demo123</p>
+          <p>Mozo: mozo1@demo.com / demo123</p>
         </div>
       </div>
     </div>

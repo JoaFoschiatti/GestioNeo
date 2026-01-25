@@ -194,10 +194,30 @@ model Usuario {
   pedidos   Pedido[]
   cierres   CierreCaja[]
   emailVerificaciones EmailVerificacion[]
+  refreshTokens RefreshToken[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
   @@map("usuarios")
+}
+
+// Refresh Tokens (for secure token rotation)
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  usuarioId Int
+  tenantId  Int?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+
+  // Relaciones
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@index([token])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
 }
 
 // Empleados (para fichaje y liquidacion)
@@ -295,6 +315,7 @@ model Mesa {
 
   @@unique([tenantId, numero])
   @@index([tenantId])
+  @@index([tenantId, estado])
   @@map("mesas")
 }
 
@@ -319,6 +340,7 @@ model Reserva {
   @@index([tenantId])
   @@index([tenantId, fechaHora])
   @@index([tenantId, mesaId, fechaHora])
+  @@index([tenantId, estado])
   @@index([mesaId])
   @@map("reservas")
 }
@@ -382,6 +404,7 @@ model Producto {
   @@index([tenantId])
   @@index([tenantId, categoriaId])
   @@index([tenantId, productoBaseId])
+  @@index([tenantId, disponible])
   @@index([categoriaId])
   @@map("productos")
 }
@@ -491,6 +514,7 @@ model MovimientoStock {
 
   @@index([tenantId])
   @@index([tenantId, ingredienteId])
+  @@index([tenantId, createdAt])
   @@index([pedidoId])
   @@map("movimientos_stock")
 }
@@ -628,6 +652,7 @@ model Pago {
 
   @@index([tenantId])
   @@index([tenantId, pedidoId])
+  @@index([tenantId, estado])
   @@index([pedidoId])
   @@index([mpPaymentId])
   @@map("pagos")

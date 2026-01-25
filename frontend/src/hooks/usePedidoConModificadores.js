@@ -1,6 +1,82 @@
 import { useCallback, useState } from 'react'
 import api from '../services/api'
 
+/**
+ * Hook para manejar la lógica del carrito con modificadores.
+ *
+ * Los modificadores son extras o exclusiones de un producto:
+ * - Exclusiones (tipo: 'EXCLUSION'): "Sin cebolla", "Sin mayonesa"
+ * - Adiciones (tipo: 'ADICION'): "+Queso extra", "+Bacon"
+ *
+ * Cada modificador puede tener un precio adicional (puede ser 0).
+ *
+ * Este hook maneja:
+ * - Agregar productos al carrito
+ * - Mostrar modal de modificadores cuando el producto los tiene
+ * - Calcular precio total con modificadores
+ * - Actualizar cantidades y eliminar items
+ *
+ * @param {Object} [options] - Opciones de configuración
+ * @param {Function} [options.onItemAdded] - Callback cuando se agrega un item
+ *
+ * @returns {Object} Estado y funciones del carrito
+ * @returns {Array} returns.carrito - Items en el carrito
+ * @returns {boolean} returns.showModModal - Si mostrar modal de modificadores
+ * @returns {Object|null} returns.productoSeleccionado - Producto actual para modificadores
+ * @returns {Array} returns.modificadoresProducto - Modificadores disponibles
+ * @returns {Array} returns.modificadoresSeleccionados - Modificadores seleccionados
+ * @returns {Function} returns.handleClickProducto - Handler al hacer click en producto
+ * @returns {Function} returns.toggleModificador - Seleccionar/deseleccionar modificador
+ * @returns {Function} returns.confirmarProductoConModificadores - Confirmar y agregar al carrito
+ * @returns {Function} returns.agregarAlCarrito - Agregar producto directamente
+ * @returns {Function} returns.actualizarCantidad - Cambiar cantidad de un item
+ * @returns {Function} returns.eliminarDelCarrito - Eliminar item del carrito
+ * @returns {Function} returns.actualizarObservacionItem - Agregar observación a un item
+ * @returns {Function} returns.resetCarrito - Vaciar el carrito
+ * @returns {Function} returns.closeModModal - Cerrar modal de modificadores
+ *
+ * @example
+ * const {
+ *   carrito,
+ *   handleClickProducto,
+ *   showModModal,
+ *   modificadoresProducto,
+ *   modificadoresSeleccionados,
+ *   toggleModificador,
+ *   confirmarProductoConModificadores,
+ *   closeModModal,
+ *   actualizarCantidad,
+ *   resetCarrito
+ * } = usePedidoConModificadores({
+ *   onItemAdded: (producto) => toast.success(`${producto.nombre} agregado`)
+ * });
+ *
+ * // Al hacer click en un producto
+ * <div onClick={() => handleClickProducto(producto)}>
+ *   {producto.nombre}
+ * </div>
+ *
+ * // Si tiene modificadores, se abre el modal automáticamente
+ * // Si no tiene, se agrega directo al carrito
+ *
+ * // Estructura de item en carrito:
+ * // {
+ * //   itemId: 'producto-1-1234567890',  // ID único del item
+ * //   productoId: 1,
+ * //   nombre: 'Hamburguesa',
+ * //   precioBase: 1500,
+ * //   precio: 1700,  // 1500 + 200 de queso extra
+ * //   cantidad: 2,
+ * //   observaciones: '',
+ * //   modificadores: [
+ * //     { id: 1, nombre: 'Sin cebolla', tipo: 'EXCLUSION', precio: 0 },
+ * //     { id: 5, nombre: '+Queso extra', tipo: 'ADICION', precio: 200 }
+ * //   ]
+ * // }
+ *
+ * // Calcular total del carrito
+ * const total = carrito.reduce((sum, item) => sum + item.precio * item.cantidad, 0);
+ */
 export default function usePedidoConModificadores(options = {}) {
   const { onItemAdded } = options
 

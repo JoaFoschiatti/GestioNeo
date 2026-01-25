@@ -1,6 +1,7 @@
 const { Prisma } = require('@prisma/client');
 const multer = require('multer');
 const { HttpError, createHttpError } = require('../utils/http-error');
+const { logger } = require('../utils/logger');
 
 const isPrismaKnownError = (error) => error instanceof Prisma.PrismaClientKnownRequestError;
 const isPrismaValidationError = (error) => error instanceof Prisma.PrismaClientValidationError;
@@ -70,8 +71,13 @@ const errorMiddleware = (error, _req, res, _next) => {
   };
 
   if (status >= 500) {
-    // eslint-disable-next-line no-console
-    console.error(normalizedError);
+    // Log server errors for debugging
+    logger.error('Server error', {
+      status,
+      message: normalizedError.message,
+      stack: normalizedError.stack,
+      error: normalizedError
+    });
   }
 
   res.status(status).json(payload);

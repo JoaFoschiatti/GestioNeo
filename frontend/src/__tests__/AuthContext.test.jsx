@@ -32,11 +32,12 @@ describe('AuthContext', () => {
     localStorage.removeItem.mockReset()
   })
 
-  it('guarda token, usuario y tenant al hacer login', async () => {
+  it('guarda usuario y tenant al hacer login (token en httpOnly cookie)', async () => {
     const mockUser = { id: 1, email: 'test@example.com', rol: 'ADMIN' }
     const mockTenant = { id: 10, slug: 'demo' }
+    // Backend ya no retorna token en body - se setea como httpOnly cookie automáticamente
     api.post.mockResolvedValue({
-      data: { token: 'token-123', usuario: mockUser, tenant: mockTenant }
+      data: { usuario: mockUser, tenant: mockTenant }
     })
 
     render(
@@ -48,20 +49,23 @@ describe('AuthContext', () => {
     await userEvent.click(screen.getByText('login'))
 
     await waitFor(() => {
-      expect(api.defaults.headers.common.Authorization).toBe('Bearer token-123')
+      expect(screen.getByTestId('user')).toHaveTextContent('test@example.com')
     })
 
-    expect(localStorage.setItem).toHaveBeenCalledWith('token', 'token-123')
+    // Token NO se guarda en localStorage (es httpOnly cookie)
+    expect(localStorage.setItem).not.toHaveBeenCalledWith('token', expect.anything())
+    // Solo se guardan usuario y tenant para acceso rápido
     expect(localStorage.setItem).toHaveBeenCalledWith('usuario', JSON.stringify(mockUser))
     expect(localStorage.setItem).toHaveBeenCalledWith('tenant', JSON.stringify(mockTenant))
-    expect(screen.getByTestId('user')).toHaveTextContent('test@example.com')
+    // Authorization header NO se setea (cookies se envían automáticamente)
+    expect(api.defaults.headers.common.Authorization).toBeUndefined()
     expect(screen.getByTestId('tenant')).toHaveTextContent('demo')
   })
 
   it('limpia estado y storage al hacer logout', async () => {
     const mockUser = { id: 1, email: 'test@example.com', rol: 'ADMIN' }
     api.post.mockResolvedValue({
-      data: { token: 'token-123', usuario: mockUser, tenant: null }
+      data: { usuario: mockUser, tenant: null }
     })
 
     render(
@@ -75,12 +79,21 @@ describe('AuthContext', () => {
       expect(screen.getByTestId('user')).toHaveTextContent('test@example.com')
     })
 
+    // Logout ahora llama al backend para limpiar la cookie
+    api.post.mockResolvedValue({ data: {} })
+
     await userEvent.click(screen.getByText('logout'))
 
-    expect(localStorage.removeItem).toHaveBeenCalledWith('token')
+    await waitFor(() => {
+      expect(screen.getByTestId('user')).toHaveTextContent('')
+    })
+
+    // Debe llamar al endpoint de logout
+    expect(api.post).toHaveBeenCalledWith('/auth/logout')
+    // Token NO se guardaba en localStorage (httpOnly cookie)
+    expect(localStorage.removeItem).not.toHaveBeenCalledWith('token')
+    // Solo se limpian usuario y tenant
     expect(localStorage.removeItem).toHaveBeenCalledWith('usuario')
     expect(localStorage.removeItem).toHaveBeenCalledWith('tenant')
-    expect(api.defaults.headers.common.Authorization).toBeUndefined()
-    expect(screen.getByTestId('user')).toHaveTextContent('')
   })
 })

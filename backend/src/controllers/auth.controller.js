@@ -130,9 +130,16 @@ const login = async (req, res) => {
     { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
   );
 
-  // Build response
+  // Set JWT as httpOnly cookie for security (prevents XSS attacks)
+  res.cookie('token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  });
+
+  // Build response (without token in body for security)
   const response = {
-    token,
     usuario: {
       id: usuario.id,
       email: usuario.email,
@@ -212,9 +219,22 @@ const cambiarPassword = async (req, res) => {
   res.json({ message: 'Contraseña actualizada correctamente' });
 };
 
+/**
+ * Logout - Clear authentication cookie
+ */
+const logout = async (req, res) => {
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict'
+  });
+  res.json({ message: 'Sesión cerrada correctamente' });
+};
+
 module.exports = {
   registrar,
   login,
+  logout,
   perfil,
   cambiarPassword
 };

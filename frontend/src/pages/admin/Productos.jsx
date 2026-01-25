@@ -1,3 +1,36 @@
+// ============================================================
+// PRODUCTOS - Gestión del catálogo de productos
+// ============================================================
+//
+// Esta página permite a los administradores gestionar el catálogo:
+// - CRUD de productos (crear, editar, eliminar)
+// - Subir imágenes de productos
+// - Gestionar variantes (ej: tamaños de pizza)
+// - Agrupar productos existentes como variantes
+//
+// SISTEMA DE VARIANTES:
+// Un producto puede tener variantes (ej: Pizza → Chica, Mediana, Grande).
+// Las variantes comparten algunos datos del producto base pero tienen
+// su propio precio y multiplicador de insumos para el stock.
+//
+// Hay dos formas de crear variantes:
+// 1. Crear variante nueva: Desde el menú de un producto base
+// 2. Agrupar existentes: Convierte productos independientes en variantes
+//
+// VISTAS:
+// - Vista agrupada: Muestra productos base con variantes anidadas
+// - Vista plana: Muestra todos los productos (incluidas variantes) como lista
+//
+// ESTADOS PRINCIPALES:
+// - productos: Lista de productos (con o sin variantes según vista)
+// - categorias: Lista de categorías para el select
+// - showModal: Modal de crear/editar producto
+// - showVarianteModal: Modal de crear variante
+// - showAgruparModal: Modal de agrupar productos como variantes
+// - editando: Producto que se está editando (null si es nuevo)
+// - productoBase: Producto al que se le agregan variantes
+// ============================================================
+
 import { useState, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
@@ -14,37 +47,63 @@ import {
   PhotoIcon
 } from '@heroicons/react/24/outline'
 
+// ----------------------------------------------------------
+// CONFIGURACIÓN
+// ----------------------------------------------------------
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
-const BACKEND_URL = API_URL.replace('/api', '')
+const BACKEND_URL = API_URL.replace('/api', '') // Para URLs de imágenes
 
 export default function Productos() {
-  const [productos, setProductos] = useState([])
-  const [categorias, setCategorias] = useState([])
-  const [showModal, setShowModal] = useState(false)
-  const [showVarianteModal, setShowVarianteModal] = useState(false)
-  const [showAgruparModal, setShowAgruparModal] = useState(false)
-  const [editando, setEditando] = useState(null)
-  const [productoBase, setProductoBase] = useState(null)
-  const [expandedProducts, setExpandedProducts] = useState({})
-  const [vistaAgrupada, setVistaAgrupada] = useState(true)
-  const [imagePreview, setImagePreview] = useState(null)
+  // ----------------------------------------------------------
+  // ESTADO: Datos principales
+  // ----------------------------------------------------------
+  const [productos, setProductos] = useState([]) // Lista de productos
+  const [categorias, setCategorias] = useState([]) // Lista de categorías para select
 
+  // ----------------------------------------------------------
+  // ESTADO: Modales
+  // ----------------------------------------------------------
+  const [showModal, setShowModal] = useState(false) // Modal crear/editar producto
+  const [showVarianteModal, setShowVarianteModal] = useState(false) // Modal crear variante
+  const [showAgruparModal, setShowAgruparModal] = useState(false) // Modal agrupar variantes
+
+  // ----------------------------------------------------------
+  // ESTADO: Edición
+  // ----------------------------------------------------------
+  const [editando, setEditando] = useState(null) // Producto en edición (null = nuevo)
+  const [productoBase, setProductoBase] = useState(null) // Producto base para variantes
+  const [expandedProducts, setExpandedProducts] = useState({}) // Productos expandidos en vista
+  const [vistaAgrupada, setVistaAgrupada] = useState(true) // true = agrupada, false = plana
+  const [imagePreview, setImagePreview] = useState(null) // Preview de imagen en form
+
+  // ----------------------------------------------------------
+  // FORMULARIOS
+  // ----------------------------------------------------------
+
+  // Formulario principal de producto
   const [form, setForm] = useState({
-    nombre: '', descripcion: '', precio: '', categoriaId: '', disponible: true, destacado: false
+    nombre: '', // Nombre del producto
+    descripcion: '', // Descripción opcional
+    precio: '', // Precio en moneda local
+    categoriaId: '', // ID de la categoría
+    disponible: true, // Si está disponible para venta
+    destacado: false // Si aparece en destacados
   })
 
+  // Formulario para crear variante
   const [varianteForm, setVarianteForm] = useState({
-    nombreVariante: '',
-    precio: '',
-    multiplicadorInsumos: '1.0',
-    ordenVariante: '0',
-    esVariantePredeterminada: false,
-    descripcion: ''
+    nombreVariante: '', // Nombre de la variante (ej: "Grande")
+    precio: '', // Precio de esta variante
+    multiplicadorInsumos: '1.0', // Factor para multiplicar ingredientes (ej: 1.5 para grande)
+    ordenVariante: '0', // Orden de aparición
+    esVariantePredeterminada: false, // Si es la opción por defecto
+    descripcion: '' // Descripción específica de la variante
   })
 
+  // Formulario para agrupar productos como variantes
   const [agruparForm, setAgruparForm] = useState({
-    productoBaseId: '',
-    productosSeleccionados: []
+    productoBaseId: '', // ID del producto que será el "padre"
+    productosSeleccionados: [] // Productos que se convertirán en variantes
   })
 
   const cargarDatos = useCallback(async () => {

@@ -1,19 +1,76 @@
+/**
+ * Middleware de autenticación y autorización.
+ *
+ * Este archivo contiene los middlewares que protegen las rutas de la API:
+ * - verificarToken: Valida JWT y carga usuario en req.usuario
+ * - verificarRol: Verifica que el usuario tenga un rol permitido
+ * - Shortcuts: esAdmin, esMozo, esCocinero, etc.
+ *
+ * Uso en rutas:
+ * ```javascript
+ * // Ruta protegida solo para admin
+ * router.get('/reportes', verificarToken, verificarRol('ADMIN'), controller.get);
+ *
+ * // Ruta protegida para múltiples roles
+ * router.post('/pedidos', verificarToken, verificarRol('ADMIN', 'MOZO'), controller.create);
+ *
+ * // Usando shortcuts
+ * router.get('/mesas', verificarToken, esMozo, controller.listar);
+ * ```
+ *
+ * @module auth.middleware
+ */
+
 const jwt = require('jsonwebtoken');
 const { prisma } = require('../db/prisma');
 
 /**
- * Middleware para verificar token JWT
- * Incluye tenantId en el usuario para multi-tenancy
+ * Verifica el token JWT y agrega el usuario al request.
+ *
+ * Flujo de verificación:
+ * 1. Extrae token del header `Authorization: Bearer <token>`
+ * 2. Verifica la firma con JWT_SECRET
+ * 3. Busca el usuario en la base de datos
+ * 4. Verifica que el usuario esté activo
+ * 5. Para usuarios no-SUPER_ADMIN, verifica que el tenant esté activo
+ * 6. Agrega `req.usuario` con los datos del usuario
+ *
+ * @param {import('express').Request} req - Request de Express
+ * @param {import('express').Response} res - Response de Express
+ * @param {import('express').NextFunction} next - Siguiente middleware
+ *
+ * @returns {void} Llama a next() si el token es válido
+ *
+ * @example
+ * // El token debe enviarse así:
+ * // Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *
+ * // Después del middleware, req.usuario contiene:
+ * // {
+ * //   id: 1,
+ * //   email: 'admin@restaurante.com',
+ * //   nombre: 'Juan Admin',
+ * //   rol: 'ADMIN',
+ * //   activo: true,
+ * //   tenantId: 1
+ * // }
  */
 const verificarToken = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
+    // Try to get token from httpOnly cookie first (secure method)
+    let token = req.cookies?.token;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: { message: 'Token no proporcionado' } });
+    // Fallback to Authorization header for backwards compatibility
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.split(' ')[1];
+      }
     }
 
-    const token = authHeader.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: { message: 'Token no proporcionado' } });
+    }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
@@ -57,8 +114,31 @@ const verificarToken = async (req, res, next) => {
 };
 
 /**
- * Middleware para verificar roles
- * SUPER_ADMIN tiene acceso a todo
+ * Crea un middleware que verifica si el usuario tiene uno de los roles permitidos.
+ *
+ * IMPORTANTE: El rol SUPER_ADMIN siempre tiene acceso a todo, independientemente
+ * de los roles especificados.
+ *
+ * Roles disponibles (definidos en Prisma schema):
+ * - `SUPER_ADMIN`: Administrador global, gestiona todos los tenants
+ * - `ADMIN`: Administrador del restaurante
+ * - `MOZO`: Camarero, gestiona mesas y pedidos
+ * - `COCINERO`: Ve y gestiona pedidos en cocina
+ * - `CAJERO`: Cobra pedidos
+ * - `DELIVERY`: Gestiona entregas
+ *
+ * @param {...string} rolesPermitidos - Roles que pueden acceder a la ruta
+ * @returns {import('express').RequestHandler} Middleware de verificación
+ *
+ * @example
+ * // Solo admin
+ * router.get('/reportes', verificarToken, verificarRol('ADMIN'), controller.get);
+ *
+ * // Admin o mozo
+ * router.post('/pedidos', verificarToken, verificarRol('ADMIN', 'MOZO'), controller.create);
+ *
+ * // Cualquier rol (pero autenticado)
+ * router.get('/mi-perfil', verificarToken, controller.getPerfil);
  */
 const verificarRol = (...rolesPermitidos) => {
   return (req, res, next) => {
@@ -81,22 +161,27 @@ const verificarRol = (...rolesPermitidos) => {
   };
 };
 
-// Middleware para verificar si es admin
+// ============================================================
+// SHORTCUTS DE ROLES
+// Middlewares preconfigurados para roles comunes
+// ============================================================
+
+/** Middleware: Solo rol ADMIN */
 const esAdmin = verificarRol('ADMIN');
 
-// Middleware para verificar si es admin o cajero
+/** Middleware: Rol ADMIN o CAJERO */
 const esAdminOCajero = verificarRol('ADMIN', 'CAJERO');
 
-// Middleware para verificar si es mozo
+/** Middleware: Rol ADMIN o MOZO (para gestión de mesas y pedidos) */
 const esMozo = verificarRol('ADMIN', 'MOZO');
 
-// Middleware para verificar si es delivery
+/** Middleware: Rol ADMIN o DELIVERY (para gestión de entregas) */
 const esDelivery = verificarRol('ADMIN', 'DELIVERY');
 
-// Middleware para verificar si es cocinero
+/** Middleware: Rol ADMIN o COCINERO (para pantalla de cocina) */
 const esCocinero = verificarRol('ADMIN', 'COCINERO');
 
-// Middleware para verificar si es super admin
+/** Middleware: Solo SUPER_ADMIN (gestión global de tenants) */
 const esSuperAdmin = verificarRol('SUPER_ADMIN');
 
 module.exports = {

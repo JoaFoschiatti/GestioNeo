@@ -1,6 +1,36 @@
+/**
+ * Servicio de reportes y estadísticas para GestioNeo.
+ *
+ * Este servicio genera reportes analíticos del restaurante:
+ * - Dashboard con métricas en tiempo real
+ * - Reporte de ventas por período
+ * - Productos más vendidos (con soporte para variantes)
+ * - Ventas por mozo/empleado
+ * - Estado del inventario
+ * - Liquidaciones y sueldos
+ * - Consumo de insumos/ingredientes
+ *
+ * Todos los reportes están aislados por tenant (multi-tenancy).
+ *
+ * @module reportes.service
+ */
+
 const { createHttpError } = require('../utils/http-error');
 const { decimalToNumber } = require('../utils/decimal');
 
+/**
+ * Construye un rango de fechas para filtros de Prisma.
+ *
+ * @private
+ * @param {string} fechaDesde - Fecha inicio formato YYYY-MM-DD
+ * @param {string} fechaHasta - Fecha fin formato YYYY-MM-DD (inclusive)
+ * @returns {Object|null} Objeto { gte, lt } para Prisma o null si no hay fechas
+ *
+ * @example
+ * // Retorna rango que incluye todo el 15 y 16 de enero
+ * buildDateRange('2024-01-15', '2024-01-16')
+ * // { gte: Date(2024-01-15 00:00), lt: Date(2024-01-17 00:00) }
+ */
 const buildDateRange = (fechaDesde, fechaHasta) => {
   if (!fechaDesde || !fechaHasta) return null;
 
@@ -11,6 +41,36 @@ const buildDateRange = (fechaDesde, fechaHasta) => {
   return { gte: start, lt: endExclusive };
 };
 
+/**
+ * Obtiene métricas del dashboard en tiempo real.
+ *
+ * Ejecuta múltiples consultas en una transacción para obtener
+ * el estado actual del restaurante de forma eficiente.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma con scoping
+ * @param {number} tenantId - ID del tenant
+ *
+ * @returns {Promise<Object>} Métricas del dashboard
+ * @returns {number} returns.ventasHoy - Total vendido hoy (solo pedidos COBRADO)
+ * @returns {number} returns.pedidosHoy - Cantidad de pedidos hoy (excluye CANCELADO)
+ * @returns {number} returns.pedidosPendientes - Pedidos PENDIENTE o EN_PREPARACION
+ * @returns {number} returns.mesasOcupadas - Mesas con estado OCUPADA
+ * @returns {number} returns.mesasTotal - Total de mesas activas
+ * @returns {number} returns.alertasStock - Ingredientes con stock <= mínimo
+ * @returns {number} returns.empleadosTrabajando - Fichajes abiertos (sin salida)
+ *
+ * @example
+ * const stats = await dashboard(prisma, 1);
+ * // {
+ * //   ventasHoy: 45000,
+ * //   pedidosHoy: 25,
+ * //   pedidosPendientes: 3,
+ * //   mesasOcupadas: 8,
+ * //   mesasTotal: 15,
+ * //   alertasStock: 2,
+ * //   empleadosTrabajando: 5
+ * // }
+ */
 const dashboard = async (prisma, tenantId) => {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
@@ -70,6 +130,44 @@ const dashboard = async (prisma, tenantId) => {
   };
 };
 
+/**
+ * Genera reporte detallado de ventas por período.
+ *
+ * Incluye solo pedidos COBRADOS y agrupa por método de pago y tipo de pedido.
+ * Retorna también los pedidos individuales para análisis detallado.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma con scoping
+ * @param {number} tenantId - ID del tenant
+ * @param {Object} query - Parámetros del reporte
+ * @param {string} query.fechaDesde - Fecha inicio formato YYYY-MM-DD (requerido)
+ * @param {string} query.fechaHasta - Fecha fin formato YYYY-MM-DD (requerido)
+ *
+ * @returns {Promise<Object>} Reporte de ventas
+ * @returns {Object} returns.periodo - { desde, hasta }
+ * @returns {number} returns.totalVentas - Suma total de ventas
+ * @returns {number} returns.totalPedidos - Cantidad de pedidos cobrados
+ * @returns {number} returns.ticketPromedio - totalVentas / totalPedidos
+ * @returns {Object} returns.ventasPorMetodo - { EFECTIVO: 10000, MERCADOPAGO: 5000, ... }
+ * @returns {Object} returns.ventasPorTipo - { MESA: { cantidad, total }, DELIVERY: {...}, ... }
+ * @returns {Array} returns.pedidos - Lista de pedidos con items, usuario y pagos
+ *
+ * @throws {HttpError} 400 - Si no se proporcionan las fechas
+ *
+ * @example
+ * const reporte = await ventasReporte(prisma, 1, {
+ *   fechaDesde: '2024-01-01',
+ *   fechaHasta: '2024-01-31'
+ * });
+ * // {
+ * //   periodo: { desde: '2024-01-01', hasta: '2024-01-31' },
+ * //   totalVentas: 250000,
+ * //   totalPedidos: 150,
+ * //   ticketPromedio: 1666.67,
+ * //   ventasPorMetodo: { EFECTIVO: 150000, MERCADOPAGO: 100000 },
+ * //   ventasPorTipo: { MESA: { cantidad: 100, total: 180000 }, DELIVERY: {...} },
+ * //   pedidos: [...]
+ * // }
+ */
 const ventasReporte = async (prisma, tenantId, query) => {
   const { fechaDesde, fechaHasta } = query;
 
@@ -124,6 +222,51 @@ const ventasReporte = async (prisma, tenantId, query) => {
   };
 };
 
+/**
+ * Obtiene ranking de productos más vendidos.
+ *
+ * Puede agrupar variantes bajo su producto base o mostrarlas separadas.
+ * Solo cuenta items de pedidos COBRADOS.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma con scoping
+ * @param {number} tenantId - ID del tenant
+ * @param {Object} query - Parámetros del reporte
+ * @param {string} [query.fechaDesde] - Fecha inicio formato YYYY-MM-DD
+ * @param {string} [query.fechaHasta] - Fecha fin formato YYYY-MM-DD
+ * @param {number} [query.limite=10] - Máximo de productos a retornar
+ * @param {boolean} [query.agruparPorBase=false] - Si true, agrupa variantes bajo producto base
+ *
+ * @returns {Promise<Array>} Lista de productos ordenados por ventas
+ *
+ * @example
+ * // Sin agrupar variantes
+ * const top = await productosMasVendidos(prisma, 1, { limite: 5 });
+ * // [
+ * //   { producto: 'Hamburguesa Clásica', categoria: 'Hamburguesas',
+ * //     cantidadVendida: 150, totalVentas: 225000,
+ * //     esVariante: false, productoBase: null },
+ * //   { producto: 'Hamburguesa Doble', categoria: 'Hamburguesas',
+ * //     cantidadVendida: 120, totalVentas: 240000,
+ * //     esVariante: true, productoBase: 'Hamburguesa' },
+ * //   ...
+ * // ]
+ *
+ * @example
+ * // Agrupando variantes
+ * const topAgrupado = await productosMasVendidos(prisma, 1, {
+ *   agruparPorBase: true,
+ *   limite: 5
+ * });
+ * // [
+ * //   { productoBaseId: 1, producto: 'Hamburguesa', categoria: 'Hamburguesas',
+ * //     cantidadVendida: 270, totalVentas: 465000,
+ * //     variantes: [
+ * //       { nombre: 'Hamburguesa Clásica', nombreVariante: 'Clásica', ... },
+ * //       { nombre: 'Hamburguesa Doble', nombreVariante: 'Doble', ... }
+ * //     ] },
+ * //   ...
+ * // ]
+ */
 const productosMasVendidos = async (prisma, tenantId, query) => {
   const { fechaDesde, fechaHasta, limite, agruparPorBase } = query;
 
@@ -143,7 +286,7 @@ const productosMasVendidos = async (prisma, tenantId, query) => {
     by: ['productoId'],
     _sum: { cantidad: true, subtotal: true },
     where,
-    orderBy: { _sum: { cantidad: 'desc' } },
+    orderBy: { _sum: { subtotal: 'desc' } },
     take
   });
 
@@ -210,6 +353,32 @@ const productosMasVendidos = async (prisma, tenantId, query) => {
   });
 };
 
+/**
+ * Obtiene ventas agrupadas por mozo/empleado.
+ *
+ * Útil para evaluar rendimiento de empleados y calcular comisiones.
+ * Incluye pedidos sin usuario (Menú Público).
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma con scoping
+ * @param {number} tenantId - ID del tenant
+ * @param {Object} query - Parámetros del reporte
+ * @param {string} [query.fechaDesde] - Fecha inicio formato YYYY-MM-DD
+ * @param {string} [query.fechaHasta] - Fecha fin formato YYYY-MM-DD
+ *
+ * @returns {Promise<Array>} Lista de mozos con sus ventas, ordenados por total
+ *
+ * @example
+ * const ventasMozos = await ventasPorMozo(prisma, 1, {
+ *   fechaDesde: '2024-01-01',
+ *   fechaHasta: '2024-01-31'
+ * });
+ * // [
+ * //   { mozo: 'Juan Pérez', pedidos: 45, totalVentas: 67500 },
+ * //   { mozo: 'María García', pedidos: 38, totalVentas: 57000 },
+ * //   { mozo: 'Menú Público', pedidos: 20, totalVentas: 30000 },
+ * //   ...
+ * // ]
+ */
 const ventasPorMozo = async (prisma, tenantId, query) => {
   const { fechaDesde, fechaHasta } = query;
 
@@ -246,6 +415,35 @@ const ventasPorMozo = async (prisma, tenantId, query) => {
   });
 };
 
+/**
+ * Genera reporte del estado actual del inventario.
+ *
+ * Lista todos los ingredientes activos con su stock, estado
+ * y valor estimado basado en el costo unitario.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma con scoping
+ * @param {number} tenantId - ID del tenant
+ *
+ * @returns {Promise<Object>} Reporte de inventario
+ * @returns {Object} returns.resumen - Totales agregados
+ * @returns {number} returns.resumen.totalItems - Cantidad de ingredientes
+ * @returns {number} returns.resumen.itemsBajoStock - Items con stock <= mínimo
+ * @returns {number} returns.resumen.valorTotalEstimado - Suma de valorEstimado de todos
+ * @returns {Array} returns.ingredientes - Lista de ingredientes con estado
+ *
+ * @example
+ * const inventario = await inventarioReporte(prisma, 1);
+ * // {
+ * //   resumen: { totalItems: 25, itemsBajoStock: 3, valorTotalEstimado: 45000 },
+ * //   ingredientes: [
+ * //     { id: 1, nombre: 'Harina', unidad: 'kg',
+ * //       stockActual: 5, stockMinimo: 10, estado: 'BAJO', valorEstimado: 2500 },
+ * //     { id: 2, nombre: 'Tomate', unidad: 'kg',
+ * //       stockActual: 20, stockMinimo: 5, estado: 'OK', valorEstimado: 8000 },
+ * //     ...
+ * //   ]
+ * // }
+ */
 const inventarioReporte = async (prisma, tenantId) => {
   const ingredientes = await prisma.ingrediente.findMany({
     where: { tenantId, activo: true },
@@ -276,6 +474,43 @@ const inventarioReporte = async (prisma, tenantId) => {
   return { resumen, ingredientes: reporte };
 };
 
+/**
+ * Genera reporte de liquidaciones y sueldos de empleados.
+ *
+ * Puede filtrarse por mes/año o retornar todas las liquidaciones.
+ * Incluye resumen de totales pagados y pendientes.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma con scoping
+ * @param {number} tenantId - ID del tenant
+ * @param {Object} query - Parámetros del reporte
+ * @param {number} [query.mes] - Mes (1-12)
+ * @param {number} [query.anio] - Año (ej: 2024)
+ *
+ * @returns {Promise<Object>} Reporte de sueldos
+ * @returns {Object} returns.resumen - Totales agregados
+ * @returns {number} returns.resumen.totalLiquidaciones - Cantidad de liquidaciones
+ * @returns {number} returns.resumen.totalPagado - Suma de liquidaciones pagadas
+ * @returns {number} returns.resumen.totalPendiente - Suma de liquidaciones no pagadas
+ * @returns {number} returns.resumen.horasTotales - Suma de horas trabajadas
+ * @returns {Array} returns.liquidaciones - Lista de liquidaciones con empleado
+ *
+ * @example
+ * const sueldos = await sueldosReporte(prisma, 1, { mes: 1, anio: 2024 });
+ * // {
+ * //   resumen: {
+ * //     totalLiquidaciones: 10,
+ * //     totalPagado: 450000,
+ * //     totalPendiente: 50000,
+ * //     horasTotales: 1600
+ * //   },
+ * //   liquidaciones: [
+ * //     { id: 1, empleado: { nombre: 'Juan', apellido: 'Pérez', rol: 'MOZO' },
+ * //       periodoDesde: '2024-01-01', periodoHasta: '2024-01-31',
+ * //       horasTotales: 160, totalPagar: 50000, pagado: true },
+ * //     ...
+ * //   ]
+ * // }
+ */
 const sueldosReporte = async (prisma, tenantId, query) => {
   const { mes, anio } = query;
 
@@ -303,6 +538,38 @@ const sueldosReporte = async (prisma, tenantId, query) => {
   return { resumen, liquidaciones };
 };
 
+/**
+ * Obtiene ventas agrupadas por producto base con desglose de variantes.
+ *
+ * Similar a productosMasVendidos con agruparPorBase=true, pero siempre
+ * incluye el desglose de variantes con más detalle.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma con scoping
+ * @param {number} tenantId - ID del tenant
+ * @param {Object} query - Parámetros del reporte
+ * @param {string} [query.fechaDesde] - Fecha inicio formato YYYY-MM-DD
+ * @param {string} [query.fechaHasta] - Fecha fin formato YYYY-MM-DD
+ * @param {number} [query.limite=20] - Máximo de productos base a retornar
+ *
+ * @returns {Promise<Array>} Lista de productos base con variantes
+ *
+ * @example
+ * const ventas = await ventasPorProductoBase(prisma, 1, { limite: 5 });
+ * // [
+ * //   {
+ * //     productoBaseId: 1,
+ * //     nombreBase: 'Pizza',
+ * //     categoria: 'Pizzas',
+ * //     cantidadTotal: 200,
+ * //     totalVentas: 400000,
+ * //     variantes: [
+ * //       { nombre: 'Pizza Grande', nombreVariante: 'Grande', cantidad: 120, ventas: 280000 },
+ * //       { nombre: 'Pizza Chica', nombreVariante: 'Chica', cantidad: 80, ventas: 120000 }
+ * //     ]
+ * //   },
+ * //   ...
+ * // ]
+ */
 const ventasPorProductoBase = async (prisma, tenantId, query) => {
   const { fechaDesde, fechaHasta, limite } = query;
 
@@ -374,6 +641,57 @@ const ventasPorProductoBase = async (prisma, tenantId, query) => {
     .slice(0, limite || 20);
 };
 
+/**
+ * Calcula consumo de insumos/ingredientes por período.
+ *
+ * Analiza los items de pedidos COBRADOS y calcula cuánto de cada
+ * ingrediente se consumió basándose en las recetas de productos.
+ * Considera el multiplicadorInsumos de cada producto.
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma con scoping
+ * @param {number} tenantId - ID del tenant
+ * @param {Object} query - Parámetros del reporte
+ * @param {string} [query.fechaDesde] - Fecha inicio formato YYYY-MM-DD
+ * @param {string} [query.fechaHasta] - Fecha fin formato YYYY-MM-DD
+ *
+ * @returns {Promise<Object>} Reporte de consumo de insumos
+ * @returns {Object} returns.resumen - Totales agregados
+ * @returns {number} returns.resumen.totalIngredientes - Ingredientes únicos consumidos
+ * @returns {number} returns.resumen.ingredientesBajoStock - Items con stock <= mínimo
+ * @returns {number} returns.resumen.costoTotalEstimado - Costo total del consumo
+ * @returns {Array} returns.ingredientes - Lista de ingredientes consumidos
+ *
+ * @example
+ * const consumo = await consumoInsumos(prisma, 1, {
+ *   fechaDesde: '2024-01-01',
+ *   fechaHasta: '2024-01-31'
+ * });
+ * // {
+ * //   resumen: {
+ * //     totalIngredientes: 15,
+ * //     ingredientesBajoStock: 2,
+ * //     costoTotalEstimado: 125000
+ * //   },
+ * //   ingredientes: [
+ * //     {
+ * //       ingredienteId: 1,
+ * //       nombre: 'Harina',
+ * //       unidad: 'kg',
+ * //       consumoTotal: 50,
+ * //       stockActual: 10,
+ * //       stockMinimo: 15,
+ * //       costo: 500,
+ * //       costoTotal: 25000,
+ * //       estado: 'BAJO',
+ * //       detalleProductos: [
+ * //         { producto: 'Pizza Grande', multiplicador: 1.2, cantidad: 100, consumo: 30 },
+ * //         { producto: 'Pan', multiplicador: 1.0, cantidad: 50, consumo: 20 }
+ * //       ]
+ * //     },
+ * //     ...
+ * //   ]
+ * // }
+ */
 const consumoInsumos = async (prisma, tenantId, query) => {
   const { fechaDesde, fechaHasta } = query;
 
