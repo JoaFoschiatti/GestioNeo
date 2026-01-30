@@ -1,7 +1,7 @@
 /**
  * Middleware de resolución de tenant para multi-tenancy.
  *
- * GestioNeo soporta múltiples restaurantes (tenants) en la misma instancia.
+ * Comanda soporta múltiples restaurantes (tenants) en la misma instancia.
  * Cada tenant tiene sus propios datos completamente aislados.
  *
  * Este middleware resuelve el contexto del tenant de dos formas:

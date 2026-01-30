@@ -1,4 +1,4 @@
-# Scripts de Mantenimiento - GestioNeo
+# Scripts de Mantenimiento - Comanda
 
 Scripts automatizados para mantenimiento de la base de datos y limpieza de datos obsoletos.
 
@@ -22,7 +22,7 @@ node scripts/maintenance/cleanup-expired-tokens.js
 **Recomendación:** Ejecutar diariamente vía cron
 ```bash
 # Crontab: Ejecutar todos los días a las 2:00 AM
-0 2 * * * cd /path/to/backend && node scripts/maintenance/cleanup-expired-tokens.js >> /var/log/gestioneo/token-cleanup.log 2>&1
+0 2 * * * cd /path/to/backend && node scripts/maintenance/cleanup-expired-tokens.js >> /var/log/comanda/token-cleanup.log 2>&1
 ```
 
 ### 2. release-stale-print-jobs.js
@@ -46,7 +46,7 @@ node scripts/maintenance/release-stale-print-jobs.js 10
 **Recomendación:** Ejecutar cada 5 minutos vía cron
 ```bash
 # Crontab: Ejecutar cada 5 minutos
-*/5 * * * * cd /path/to/backend && node scripts/maintenance/release-stale-print-jobs.js >> /var/log/gestioneo/print-jobs.log 2>&1
+*/5 * * * * cd /path/to/backend && node scripts/maintenance/release-stale-print-jobs.js >> /var/log/comanda/print-jobs.log 2>&1
 ```
 
 ## Configuración de Cron Jobs
@@ -60,17 +60,17 @@ crontab -e
 
 2. Agregar las siguientes líneas:
 ```bash
-# GestioNeo - Limpieza de tokens (diario a las 2 AM)
-0 2 * * * cd /home/usuario/GestioNeo/backend && node scripts/maintenance/cleanup-expired-tokens.js >> /var/log/gestioneo/token-cleanup.log 2>&1
+# Comanda - Limpieza de tokens (diario a las 2 AM)
+0 2 * * * cd /home/usuario/Comanda/backend && node scripts/maintenance/cleanup-expired-tokens.js >> /var/log/comanda/token-cleanup.log 2>&1
 
-# GestioNeo - Liberar print jobs bloqueados (cada 5 minutos)
-*/5 * * * * cd /home/usuario/GestioNeo/backend && node scripts/maintenance/release-stale-print-jobs.js >> /var/log/gestioneo/print-jobs.log 2>&1
+# Comanda - Liberar print jobs bloqueados (cada 5 minutos)
+*/5 * * * * cd /home/usuario/Comanda/backend && node scripts/maintenance/release-stale-print-jobs.js >> /var/log/comanda/print-jobs.log 2>&1
 ```
 
 3. Crear directorio de logs:
 ```bash
-sudo mkdir -p /var/log/gestioneo
-sudo chown usuario:usuario /var/log/gestioneo
+sudo mkdir -p /var/log/comanda
+sudo chown usuario:usuario /var/log/comanda
 ```
 
 ### Verificar Cron Jobs
@@ -89,7 +89,7 @@ Para probar los scripts manualmente antes de configurar cron:
 
 ```bash
 # Desde el directorio backend
-cd /home/usuario/GestioNeo/backend
+cd /home/usuario/Comanda/backend
 
 # Limpieza de tokens
 node scripts/maintenance/cleanup-expired-tokens.js
@@ -104,10 +104,10 @@ node scripts/maintenance/release-stale-print-jobs.js
 
 ```bash
 # Ver últimas ejecuciones de limpieza de tokens
-tail -f /var/log/gestioneo/token-cleanup.log
+tail -f /var/log/comanda/token-cleanup.log
 
 # Ver liberación de print jobs en tiempo real
-tail -f /var/log/gestioneo/print-jobs.log
+tail -f /var/log/comanda/print-jobs.log
 ```
 
 ### Métricas de Limpieza
@@ -167,13 +167,13 @@ npx prisma db execute --stdin < /dev/null
 
 1. Verificar permisos del directorio:
 ```bash
-ls -ld /var/log/gestioneo
+ls -ld /var/log/comanda
 ```
 
 2. Crear si no existe:
 ```bash
-sudo mkdir -p /var/log/gestioneo
-sudo chown $USER:$USER /var/log/gestioneo
+sudo mkdir -p /var/log/comanda
+sudo chown $USER:$USER /var/log/comanda
 ```
 
 ## Mejoras Futuras

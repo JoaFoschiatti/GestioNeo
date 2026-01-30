@@ -37,11 +37,18 @@ const eliminar = async (req, res) => {
   res.json(resultado);
 };
 
+const actualizarPosiciones = async (req, res) => {
+  const prisma = getPrisma(req);
+  const resultado = await mesasService.actualizarPosiciones(prisma, req.body.posiciones);
+  res.json(resultado);
+};
+
 module.exports = {
   listar,
   obtener,
   crear,
   actualizar,
   cambiarEstado,
-  eliminar
+  eliminar,
+  actualizarPosiciones
 };

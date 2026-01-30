@@ -1,5 +1,5 @@
 -- =====================================================
--- Multi-Tenancy Migration for GestioNeo
+-- Multi-Tenancy Migration for Comanda
 -- =====================================================
 
 -- 1. Create new enums
@@ -49,7 +49,7 @@ CREATE INDEX "email_verificaciones_token_idx" ON "email_verificaciones"("token")
 
 -- 5. Create default tenant for existing data migration
 INSERT INTO "tenants" ("slug", "nombre", "email", "activo", "updatedAt")
-VALUES ('default', 'Restaurante Default', 'admin@gestioneo.local', true, CURRENT_TIMESTAMP);
+VALUES ('default', 'Restaurante Default', 'admin@comanda.local', true, CURRENT_TIMESTAMP);
 
 -- 6. Add tenantId columns to all tables (nullable first for migration)
 ALTER TABLE "usuarios" ADD COLUMN "tenantId" INTEGER;

@@ -1,6 +1,6 @@
-# Guía de Deploy a Producción - GestioNeo
+# Guía de Deploy a Producción - Comanda
 
-Esta guía te llevará paso a paso para desplegar GestioNeo en producción usando:
+Esta guía te llevará paso a paso para desplegar Comanda en producción usando:
 - **Supabase** - Base de datos PostgreSQL (gratis)
 - **Railway** - Backend Node.js (~$5/mes)
 - **Vercel** - Frontend React (gratis)
@@ -24,7 +24,7 @@ Esta guía te llevará paso a paso para desplegar GestioNeo en producción usand
 ## 1. Pre-requisitos
 
 ### Cuentas necesarias (todas gratuitas para crear)
-- [ ] Cuenta en [GitHub](https://github.com) con el repositorio de GestioNeo
+- [ ] Cuenta en [GitHub](https://github.com) con el repositorio de Comanda
 - [ ] Cuenta en [Supabase](https://supabase.com)
 - [ ] Cuenta en [Railway](https://railway.app)
 - [ ] Cuenta en [Vercel](https://vercel.com)
@@ -36,12 +36,12 @@ Esta guía te llevará paso a paso para desplegar GestioNeo en producción usand
 
 ### Subir código a GitHub (si no lo hiciste)
 ```bash
-cd /home/zet/GestioNeo
+cd /home/zet/Comanda
 git init
 git add .
 git commit -m "Initial commit"
 git branch -M main
-git remote add origin https://github.com/TU_USUARIO/gestioneo.git
+git remote add origin https://github.com/TU_USUARIO/comanda.git
 git push -u origin main
 ```
 
@@ -54,7 +54,7 @@ git push -u origin main
 1. Ir a [supabase.com](https://supabase.com) → **Start your project**
 2. Click en **New Project**
 3. Completar:
-   - **Name:** `gestioneo-prod`
+   - **Name:** `comanda-prod`
    - **Database Password:** (guardar en lugar seguro, lo necesitarás)
    - **Region:** Elegir el más cercano (ej: `South America (São Paulo)`)
 4. Click **Create new project** (tarda ~2 minutos)
@@ -87,7 +87,7 @@ DIRECT_URL=postgresql://postgres.xxxxx:TU_PASSWORD@aws-0-sa-east-1.pooler.supaba
 
 1. Ir a [railway.app](https://railway.app) → **Login with GitHub**
 2. Click en **New Project** → **Deploy from GitHub repo**
-3. Seleccionar el repositorio `gestioneo`
+3. Seleccionar el repositorio `comanda`
 4. Railway detectará que es un monorepo, seleccionar **backend** como carpeta root
 
 ### 3.2 Configurar el servicio
@@ -123,7 +123,7 @@ FRONTEND_URL=https://tu-app.vercel.app
 2. Click en **Generate Domain**
 3. Copiar la URL generada, será algo como:
    ```
-   https://gestioneo-backend-production.up.railway.app
+   https://comanda-backend-production.up.railway.app
    ```
 
 ### 3.5 Ejecutar migraciones (primera vez)
@@ -148,7 +148,7 @@ DATABASE_URL="tu-connection-string-de-supabase" node prisma/seed-test-data.js
 ### 4.1 Importar proyecto
 
 1. Ir a [vercel.com](https://vercel.com) → **Add New Project**
-2. Seleccionar el repositorio `gestioneo`
+2. Seleccionar el repositorio `comanda`
 3. Configurar:
    - **Framework Preset:** Vite
    - **Root Directory:** `frontend`
@@ -160,7 +160,7 @@ DATABASE_URL="tu-connection-string-de-supabase" node prisma/seed-test-data.js
 En la sección **Environment Variables**, agregar:
 
 ```env
-VITE_API_URL=https://gestioneo-backend-production.up.railway.app/api
+VITE_API_URL=https://comanda-backend-production.up.railway.app/api
 ```
 
 > Reemplazar con la URL real de tu backend en Railway
@@ -169,13 +169,13 @@ VITE_API_URL=https://gestioneo-backend-production.up.railway.app/api
 
 1. Click en **Deploy**
 2. Esperar ~2 minutos
-3. Vercel te dará una URL como: `https://gestioneo.vercel.app`
+3. Vercel te dará una URL como: `https://comanda.vercel.app`
 
 ### 4.4 Actualizar CORS en Railway
 
 Volver a Railway y actualizar la variable:
 ```env
-FRONTEND_URL=https://gestioneo.vercel.app
+FRONTEND_URL=https://comanda.vercel.app
 ```
 
 Esto permite que el frontend pueda comunicarse con el backend.

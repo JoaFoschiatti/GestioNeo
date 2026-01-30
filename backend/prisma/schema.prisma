@@ -318,6 +318,9 @@ model Mesa {
   capacidad Int         @default(4)
   estado    EstadoMesa  @default(LIBRE)
   activa    Boolean     @default(true)
+  posX      Int?                        // Posición X en el plano (píxeles)
+  posY      Int?                        // Posición Y en el plano (píxeles)
+  rotacion  Int         @default(0)     // Rotación en grados (0, 90, 180, 270)
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 

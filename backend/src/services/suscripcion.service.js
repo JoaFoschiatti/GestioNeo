@@ -65,8 +65,8 @@ async function crearSuscripcion(tenantId) {
   const preapproval = new PreApproval(client);
 
   const preapprovalData = {
-    reason: `Suscripción GestioNeo - ${tenant.nombre}`,
-    external_reference: `gestioneo-tenant-${tenantId}`,
+    reason: `Suscripción Comanda - ${tenant.nombre}`,
+    external_reference: `comanda-tenant-${tenantId}`,
     payer_email: tenant.email,
     auto_recurring: {
       frequency: 1,
@@ -278,8 +278,8 @@ async function procesarPreapprovalWebhook(client, preapprovalId) {
   if (!suscripcion) {
     // Intentar buscar por external_reference
     const externalRef = data.external_reference;
-    if (externalRef?.startsWith('gestioneo-tenant-')) {
-      const tenantId = parseInt(externalRef.replace('gestioneo-tenant-', ''));
+    if (externalRef?.startsWith('comanda-tenant-')) {
+      const tenantId = parseInt(externalRef.replace('comanda-tenant-', ''));
       if (tenantId) {
         await prisma.suscripcion.upsert({
           where: { tenantId },

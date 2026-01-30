@@ -1,4 +1,4 @@
-# Guía para Desarrolladores - GestioNeo
+# Guía para Desarrolladores - Comanda
 
 Esta guía está diseñada para ayudar a desarrolladores junior a entender la arquitectura, patrones y convenciones del proyecto.
 
@@ -122,7 +122,7 @@ const listar = async (prisma, query) => {
 
 ## Multi-Tenancy
 
-GestioNeo soporta múltiples restaurantes (tenants) en la misma instancia. Cada tenant tiene sus datos completamente aislados.
+Comanda soporta múltiples restaurantes (tenants) en la misma instancia. Cada tenant tiene sus datos completamente aislados.
 
 ### Cómo funciona
 

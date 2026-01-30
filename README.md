@@ -1,4 +1,4 @@
-# GestioNeo
+# Comanda
 
 Sistema de gestión integral para restaurantes y locales gastronómicos. Incluye punto de venta (POS), gestión de inventario, control de empleados y liquidación de sueldos.
 
@@ -102,8 +102,8 @@ npm run dev
 PORT=3001
 NODE_ENV=development
 # Nota: usar 127.0.0.1 evita problemas de IPv6 (::1) en algunas instalaciones.
-DATABASE_URL="postgresql://usuario:password@127.0.0.1:5432/gestioneo?schema=public"
-DIRECT_URL="postgresql://usuario:password@127.0.0.1:5432/gestioneo?schema=public"
+DATABASE_URL="postgresql://usuario:password@127.0.0.1:5432/comanda?schema=public"
+DIRECT_URL="postgresql://usuario:password@127.0.0.1:5432/comanda?schema=public"
 JWT_SECRET="tu-secreto-jwt-muy-seguro"
 JWT_EXPIRES_IN="24h"
 MERCADOPAGO_ACCESS_TOKEN="TEST-xxxx"
@@ -123,7 +123,7 @@ FRONTEND_URL="http://localhost:5173"
 ## Estructura del Proyecto
 
 ```
-GestioNeo/
+Comanda/
 ├── backend/
 │   ├── prisma/
 │   │   ├── schema.prisma         # Modelos de base de datos

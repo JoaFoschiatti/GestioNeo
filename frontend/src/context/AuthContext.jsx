@@ -1,5 +1,5 @@
 /**
- * Contexto de autenticación global para GestioNeo.
+ * Contexto de autenticación global para Comanda.
  *
  * Provee estado de autenticación a toda la aplicación:
  * - Usuario actual (datos del JWT decodificado)

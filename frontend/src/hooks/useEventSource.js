@@ -4,7 +4,7 @@ import { createEventSource } from '../services/eventos'
 /**
  * Hook para conectarse a Server-Sent Events (SSE).
  *
- * GestioNeo usa SSE para actualizaciones en tiempo real:
+ * Comanda usa SSE para actualizaciones en tiempo real:
  * - Nuevos pedidos en cocina
  * - Cambios de estado de mesas
  * - Actualizaciones de pagos

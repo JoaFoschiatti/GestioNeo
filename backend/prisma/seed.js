@@ -8,8 +8,8 @@ async function main() {
   console.log('Iniciando seed de la base de datos...');
 
   const tenantSlug = process.env.SEED_TENANT_SLUG || 'default';
-  const tenantNombre = process.env.SEED_TENANT_NOMBRE || 'GestioNeo Burger';
-  const tenantEmail = process.env.SEED_TENANT_EMAIL || 'admin@gestioneo.com';
+  const tenantNombre = process.env.SEED_TENANT_NOMBRE || 'Comanda Demo';
+  const tenantEmail = process.env.SEED_TENANT_EMAIL || 'admin@comanda.app';
 
   const tenant = await prisma.tenant.upsert({
     where: { slug: tenantSlug },
@@ -23,11 +23,11 @@ async function main() {
   const passwordHash = await bcrypt.hash('admin123', 10);
 
   const admin = await prisma.usuario.upsert({
-    where: { tenantId_email: { tenantId, email: 'admin@gestioneo.com' } },
+    where: { tenantId_email: { tenantId, email: 'admin@comanda.app' } },
     update: {},
     create: {
       tenantId,
-      email: 'admin@gestioneo.com',
+      email: 'admin@comanda.app',
       password: passwordHash,
       nombre: 'Administrador',
       rol: 'ADMIN'
@@ -37,11 +37,11 @@ async function main() {
 
   // Crear usuario mozo de prueba
   const mozo = await prisma.usuario.upsert({
-    where: { tenantId_email: { tenantId, email: 'mozo@gestioneo.com' } },
+    where: { tenantId_email: { tenantId, email: 'mozo@comanda.app' } },
     update: {},
     create: {
       tenantId,
-      email: 'mozo@gestioneo.com',
+      email: 'mozo@comanda.app',
       password: await bcrypt.hash('mozo123', 10),
       nombre: 'Juan Mozo',
       rol: 'MOZO'
@@ -51,11 +51,11 @@ async function main() {
 
   // Crear usuario cocinero de prueba
   const cocinero = await prisma.usuario.upsert({
-    where: { tenantId_email: { tenantId, email: 'cocinero@gestioneo.com' } },
+    where: { tenantId_email: { tenantId, email: 'cocinero@comanda.app' } },
     update: {},
     create: {
       tenantId,
-      email: 'cocinero@gestioneo.com',
+      email: 'cocinero@comanda.app',
       password: await bcrypt.hash('cocinero123', 10),
       nombre: 'Pedro Cocinero',
       rol: 'COCINERO'
@@ -255,7 +255,7 @@ async function main() {
 
   // Configuraciones iniciales
   const configs = [
-    { clave: 'nombre_local', valor: 'GestioNeo Burger' },
+    { clave: 'nombre_local', valor: 'Comanda Demo' },
     { clave: 'direccion', valor: 'Av. Principal 123' },
     { clave: 'telefono', valor: '11-5555-0000' },
     { clave: 'moneda', valor: 'ARS' }
@@ -272,9 +272,9 @@ async function main() {
 
   console.log('\n✅ Seed completado exitosamente!');
   console.log('\nUsuarios de prueba:');
-  console.log('  Admin: admin@gestioneo.com / admin123');
-  console.log('  Mozo: mozo@gestioneo.com / mozo123');
-  console.log('  Cocinero: cocinero@gestioneo.com / cocinero123');
+  console.log('  Admin: admin@comanda.app / admin123');
+  console.log('  Mozo: mozo@comanda.app / mozo123');
+  console.log('  Cocinero: cocinero@comanda.app / cocinero123');
 }
 
 main()

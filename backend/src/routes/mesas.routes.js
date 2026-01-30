@@ -10,13 +10,15 @@ const {
   listarQuerySchema,
   crearMesaBodySchema,
   actualizarMesaBodySchema,
-  cambiarEstadoBodySchema
+  cambiarEstadoBodySchema,
+  actualizarPosicionesBodySchema
 } = require('../schemas/mesas.schemas');
 
 router.use(verificarToken);
 router.use(setTenantFromAuth);
 
 router.get('/', validate({ query: listarQuerySchema }), asyncHandler(mesasController.listar));
+router.patch('/posiciones', bloquearSiSoloLectura, esAdmin, validate({ body: actualizarPosicionesBodySchema }), asyncHandler(mesasController.actualizarPosiciones));
 router.get('/:id', validate({ params: idParamSchema }), asyncHandler(mesasController.obtener));
 router.post('/', bloquearSiSoloLectura, esAdmin, validate({ body: crearMesaBodySchema }), asyncHandler(mesasController.crear));
 router.put('/:id', bloquearSiSoloLectura, esAdmin, validate({ params: idParamSchema, body: actualizarMesaBodySchema }), asyncHandler(mesasController.actualizar));

@@ -1,7 +1,7 @@
 {
-  "name": "gestioneo-backend",
+  "name": "comanda-backend",
   "version": "1.0.0",
-  "description": "Backend API para GestioNeo - Sistema de gestión para local de hamburguesas",
+  "description": "Backend API para Comanda - Sistema de gestión para restaurantes",
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",

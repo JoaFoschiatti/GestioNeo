@@ -15,7 +15,7 @@ Se han creado:
 
 ```bash
 # PostgreSQL backup
-pg_dump -h localhost -U usuario -d gestioneo > backup_pre_audit_$(date +%Y%m%d_%H%M%S).sql
+pg_dump -h localhost -U usuario -d comanda > backup_pre_audit_$(date +%Y%m%d_%H%M%S).sql
 
 # O si usas Supabase
 # Hacer backup desde el dashboard de Supabase
@@ -24,7 +24,7 @@ pg_dump -h localhost -U usuario -d gestioneo > backup_pre_audit_$(date +%Y%m%d_%
 ## 🔧 PASO 2: Verificar Estado Actual
 
 ```bash
-cd /home/zet/GestioNeo/backend
+cd /home/zet/Comanda/backend
 
 # Verificar estado de migrations
 npx prisma migrate status
@@ -40,7 +40,7 @@ npx prisma migrate status
 ### Opción A: Entorno de Desarrollo
 
 ```bash
-cd /home/zet/GestioNeo/backend
+cd /home/zet/Comanda/backend
 
 # Aplicar todas las migrations pendientes
 npx prisma migrate deploy
@@ -52,7 +52,7 @@ npx prisma migrate status
 ### Opción B: Entorno de Producción
 
 ```bash
-cd /home/zet/GestioNeo/backend
+cd /home/zet/Comanda/backend
 
 # 1. Revisar las migrations antes de aplicar
 cat prisma/migrations/20260126000001_fix_enum_tipo_pedido/migration.sql
@@ -72,7 +72,7 @@ Si prefieres aplicar manualmente vía psql:
 
 ```bash
 # Conectar a la base de datos
-psql -h localhost -U usuario -d gestioneo
+psql -h localhost -U usuario -d comanda
 
 # Ejecutar migration 1
 \i prisma/migrations/20260126000001_fix_enum_tipo_pedido/migration.sql
@@ -93,7 +93,7 @@ psql -h localhost -U usuario -d gestioneo
 
 ```bash
 # Conectar a psql
-psql -h localhost -U usuario -d gestioneo
+psql -h localhost -U usuario -d comanda
 
 # Verificar TipoPedido tiene ONLINE
 SELECT enumlabel FROM pg_enum WHERE enumtypid = 'TipoPedido'::regtype ORDER BY enumsortorder;
@@ -220,7 +220,7 @@ try {
 
 ```bash
 # Test 1: Limpieza de tokens
-cd /home/zet/GestioNeo/backend
+cd /home/zet/Comanda/backend
 node scripts/maintenance/cleanup-expired-tokens.js
 
 # Test 2: Liberar print jobs
@@ -238,17 +238,17 @@ crontab -e
 
 # Agregar estas líneas (ajustar rutas según tu instalación):
 # Limpieza de tokens (diario a las 2 AM)
-0 2 * * * cd /home/zet/GestioNeo/backend && node scripts/maintenance/cleanup-expired-tokens.js >> /var/log/gestioneo/token-cleanup.log 2>&1
+0 2 * * * cd /home/zet/Comanda/backend && node scripts/maintenance/cleanup-expired-tokens.js >> /var/log/comanda/token-cleanup.log 2>&1
 
 # Liberar print jobs (cada 5 minutos)
-*/5 * * * * cd /home/zet/GestioNeo/backend && node scripts/maintenance/release-stale-print-jobs.js >> /var/log/gestioneo/print-jobs.log 2>&1
+*/5 * * * * cd /home/zet/Comanda/backend && node scripts/maintenance/release-stale-print-jobs.js >> /var/log/comanda/print-jobs.log 2>&1
 ```
 
 ### 6.3 Crear Directorio de Logs
 
 ```bash
-sudo mkdir -p /var/log/gestioneo
-sudo chown $USER:$USER /var/log/gestioneo
+sudo mkdir -p /var/log/comanda
+sudo chown $USER:$USER /var/log/comanda
 ```
 
 ## 📊 PASO 7: Monitoreo Post-Aplicación
@@ -287,7 +287,7 @@ Si algo sale mal, restaurar el backup:
 # ... comando según tu setup (pm2 stop, systemctl stop, etc.)
 
 # Restaurar backup
-psql -h localhost -U usuario -d gestioneo < backup_pre_audit_YYYYMMDD_HHMMSS.sql
+psql -h localhost -U usuario -d comanda < backup_pre_audit_YYYYMMDD_HHMMSS.sql
 
 # Reiniciar aplicación
 # ... comando según tu setup

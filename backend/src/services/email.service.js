@@ -70,8 +70,8 @@ class EmailService {
         return null;
       }
 
-      const nombreNegocio = tenant?.nombre || 'GestioNeo';
-      const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || 'pedidos@gestioneo.com';
+      const nombreNegocio = tenant?.nombre || 'Comanda';
+      const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || 'pedidos@comanda.app';
 
       const html = this.generateOrderEmailHTML(pedido, nombreNegocio, tenant);
 
@@ -193,7 +193,7 @@ class EmailService {
 
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
       const verificationUrl = `${frontendUrl}/verificar-email/${token}`;
-      const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || 'noreply@gestioneo.com';
+      const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || 'noreply@comanda.app';
 
       const html = `
         <!DOCTYPE html>
@@ -215,12 +215,12 @@ class EmailService {
           <div class="container">
             <div class="header">
               <h1 style="margin: 0;">Verifica tu cuenta</h1>
-              <p style="margin: 10px 0 0 0;">GestioNeo</p>
+              <p style="margin: 10px 0 0 0;">Comanda</p>
             </div>
 
             <div class="content">
               <p>Hola <strong>${nombre}</strong>,</p>
-              <p>Gracias por registrar <strong>${nombreRestaurante}</strong> en GestioNeo.</p>
+              <p>Gracias por registrar <strong>${nombreRestaurante}</strong> en Comanda.</p>
               <p>Para activar tu cuenta y comenzar a usar el sistema, por favor verifica tu email haciendo clic en el siguiente botón:</p>
 
               <div style="text-align: center;">
@@ -237,7 +237,7 @@ class EmailService {
 
             <div class="footer">
               <p>Si no solicitaste esta cuenta, puedes ignorar este email.</p>
-              <p>GestioNeo - Sistema POS para restaurantes</p>
+              <p>Comanda - Sistema POS para restaurantes</p>
             </div>
           </div>
         </body>
@@ -245,7 +245,7 @@ class EmailService {
       `;
 
       const info = await transporter.sendMail({
-        from: `"GestioNeo" <${fromEmail}>`,
+        from: `"Comanda" <${fromEmail}>`,
         to: email,
         subject: `Verifica tu cuenta - ${nombreRestaurante}`,
         html

@@ -106,7 +106,7 @@ export default function VerificarEmail() {
             Cuenta Verificada
           </h1>
           <p className="text-gray-600 mb-6">
-            Tu cuenta ha sido verificada exitosamente. Ya puedes iniciar sesion y comenzar a usar GestioNeo.
+            Tu cuenta ha sido verificada exitosamente. Ya puedes iniciar sesion y comenzar a usar Comanda.
           </p>
           <div className="space-y-3">
             <Link

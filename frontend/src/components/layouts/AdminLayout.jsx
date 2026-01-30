@@ -26,14 +26,13 @@ import {
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, roles: ['ADMIN', 'COCINERO', 'CAJERO'] },
-  { name: 'Mesas', href: '/mozo/mesas', icon: TableCellsIcon, roles: ['ADMIN', 'MOZO'] },
+  { name: 'Mesas', href: '/mesas', icon: TableCellsIcon, roles: ['ADMIN', 'MOZO'] },
   { name: 'Reservas', href: '/reservas', icon: CalendarDaysIcon, roles: ['ADMIN'] },
   { name: 'Pedidos', href: '/pedidos', icon: ClipboardDocumentListIcon, roles: ['ADMIN', 'MOZO', 'CAJERO'] },
   { name: 'Cocina', href: '/cocina', icon: FireIcon, roles: ['ADMIN', 'COCINERO'] },
   { name: 'Mis Entregas', href: '/delivery/pedidos', icon: TruckIcon, roles: ['ADMIN', 'DELIVERY'] },
   { divider: true, roles: ['ADMIN'] },
   { name: 'Empleados', href: '/empleados', icon: UsersIcon, roles: ['ADMIN'] },
-  { name: 'Config. Mesas', href: '/mesas', icon: TableCellsIcon, roles: ['ADMIN'] },
   { name: 'Categorías', href: '/categorias', icon: TagIcon, roles: ['ADMIN'] },
   { name: 'Productos', href: '/productos', icon: CubeIcon, roles: ['ADMIN'] },
   { name: 'Modificadores', href: '/modificadores', icon: AdjustmentsHorizontalIcon, roles: ['ADMIN'] },
@@ -71,7 +70,7 @@ export default function AdminLayout() {
         />
         <div className="fixed inset-y-0 left-0 w-72 bg-surface shadow-xl flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle">
-            <h1 className="text-xl font-semibold text-text-primary">GestioNeo</h1>
+            <h1 className="text-xl font-semibold text-text-primary">Comanda</h1>
             <button
               onClick={() => setSidebarOpen(false)}
               className="p-1 rounded-lg hover:bg-surface-hover transition-colors"
@@ -106,7 +105,7 @@ export default function AdminLayout() {
         <div className="flex flex-col flex-grow overflow-hidden bg-surface border-r border-border-subtle">
           {/* Logo */}
           <div className="flex items-center px-6 py-5 border-b border-border-subtle">
-            <h1 className="text-xl font-semibold text-text-primary tracking-tight">GestioNeo</h1>
+            <h1 className="text-xl font-semibold text-text-primary tracking-tight">Comanda</h1>
           </div>
 
           {/* Navigation */}
@@ -166,7 +165,7 @@ export default function AdminLayout() {
           >
             <Bars3Icon className="w-6 h-6 text-text-secondary" />
           </button>
-          <h1 className="text-lg font-semibold text-text-primary">GestioNeo</h1>
+          <h1 className="text-lg font-semibold text-text-primary">Comanda</h1>
         </div>
 
         {/* Page content */}

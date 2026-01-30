@@ -17,7 +17,6 @@ import VerificarEmail from './pages/VerificarEmail'
 // Páginas admin
 import Dashboard from './pages/admin/Dashboard'
 import Empleados from './pages/admin/Empleados'
-import Mesas from './pages/admin/Mesas'
 import Categorias from './pages/admin/Categorias'
 import Productos from './pages/admin/Productos'
 import Ingredientes from './pages/admin/Ingredientes'
@@ -29,9 +28,9 @@ import Reservas from './pages/admin/Reservas'
 import Modificadores from './pages/admin/Modificadores'
 import TransaccionesMercadoPago from './pages/admin/TransaccionesMercadoPago'
 import Suscripcion from './pages/admin/Suscripcion'
+import MesasUnificado from './pages/admin/MesasUnificado'
 
 // Páginas mozo
-import MozoMesas from './pages/mozo/MozoMesas'
 import NuevoPedido from './pages/mozo/NuevoPedido'
 import Pedidos from './pages/admin/Pedidos'
 
@@ -98,7 +97,13 @@ export default function App() {
             <Empleados />
           </ProtectedRoute>
         } />
-        <Route path="mesas" element={<Mesas />} />
+        <Route path="mesas" element={
+          <ProtectedRoute roles={['ADMIN', 'MOZO']}>
+            <MesasUnificado />
+          </ProtectedRoute>
+        } />
+        {/* Redirects antiguos a /mesas */}
+        <Route path="plano-mesas" element={<Navigate to="/mesas" replace />} />
         <Route path="categorias" element={
           <ProtectedRoute roles={['ADMIN']}>
             <Categorias />
@@ -157,11 +162,7 @@ export default function App() {
         <Route path="pedidos" element={<Pedidos />} />
 
         {/* Mozo */}
-        <Route path="mozo/mesas" element={
-          <ProtectedRoute roles={['ADMIN', 'MOZO']}>
-            <MozoMesas />
-          </ProtectedRoute>
-        } />
+        <Route path="mozo/mesas" element={<Navigate to="/mesas" replace />} />
         <Route path="mozo/nuevo-pedido" element={
           <ProtectedRoute roles={['ADMIN', 'MOZO']}>
             <NuevoPedido />

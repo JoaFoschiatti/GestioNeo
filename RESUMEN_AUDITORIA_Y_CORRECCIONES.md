@@ -1,4 +1,4 @@
-# Auditoría y Correcciones de Base de Datos - GestioNeo
+# Auditoría y Correcciones de Base de Datos - Comanda
 
 ## 📊 Estado: ✅ CORRECCIONES LISTAS PARA APLICAR
 
@@ -10,7 +10,7 @@
 
 ## 🎯 Resumen Ejecutivo
 
-Se realizó una auditoría completa de la base de datos PostgreSQL multi-tenant de GestioNeo (25 modelos, ~45 índices). Se identificaron **2 problemas críticos** que bloqueaban funcionalidad y **5 problemas de alta prioridad** relacionados con performance e integridad.
+Se realizó una auditoría completa de la base de datos PostgreSQL multi-tenant de Comanda (25 modelos, ~45 índices). Se identificaron **2 problemas críticos** que bloqueaban funcionalidad y **5 problemas de alta prioridad** relacionados con performance e integridad.
 
 **Todas las correcciones han sido implementadas y están listas para aplicar.**
 
@@ -102,7 +102,7 @@ Se realizó una auditoría completa de la base de datos PostgreSQL multi-tenant 
 
 ```bash
 # 1. Backup
-pg_dump -h localhost -U usuario -d gestioneo > backup_$(date +%Y%m%d).sql
+pg_dump -h localhost -U usuario -d comanda > backup_$(date +%Y%m%d).sql
 
 # 2. Aplicar migrations
 cd backend
@@ -132,7 +132,7 @@ Ver guía completa en: **`backend/APLICAR_CORRECCIONES.md`**
 - [ ] Probar suscripción con estados
 - [ ] Probar constraint de stock negativo (debe fallar)
 - [ ] Configurar scripts de mantenimiento en cron
-- [ ] Crear directorio de logs: `/var/log/gestioneo`
+- [ ] Crear directorio de logs: `/var/log/comanda`
 - [ ] Monitorear logs durante 24-48 horas
 
 ---

@@ -190,9 +190,9 @@ export default function Registro() {
         {/* Logo + title */}
         <div className="text-center mb-6">
           <div className="w-14 h-14 bg-primary-500 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg">
-            <span className="text-2xl text-white font-bold">G</span>
+            <span className="text-2xl text-white font-bold">C</span>
           </div>
-          <h1 className="text-heading-1">GestioNeo</h1>
+          <h1 className="text-heading-1">Comanda</h1>
           <p className="text-text-secondary mt-2">Registra tu restaurante</p>
         </div>
 
@@ -249,7 +249,7 @@ export default function Registro() {
               <div className="input-group">
                 <label className="label">URL de tu menu</label>
                 <div className="flex items-center gap-2">
-                  <span className="text-text-tertiary text-sm whitespace-nowrap">gestioneo.com/</span>
+                  <span className="text-text-tertiary text-sm whitespace-nowrap">comanda.app/</span>
                   <div className="relative flex-1">
                     <input
                       type="text"

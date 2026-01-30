@@ -72,7 +72,7 @@ const createBridge = (env = process.env, deps = {}) => {
   const spawnImpl = deps.spawn || spawn;
 
   const printWithSpooler = async (content) => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gestioneo-print-'));
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'comanda-print-'));
     const filePath = path.join(tmpDir, `job-${Date.now()}.txt`);
     const payload = content.replace(/\n/g, '\r\n');
 

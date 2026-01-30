@@ -18,8 +18,8 @@ const baseCrud = createCrudService('mesa', {
 
   // Protección mass assignment
   allowedFilterFields: ['activa', 'estado', 'capacidad'],
-  allowedCreateFields: ['numero', 'capacidad', 'activa'],
-  allowedUpdateFields: ['capacidad', 'activa', 'estado']
+  allowedCreateFields: ['numero', 'capacidad', 'activa', 'zona'],
+  allowedUpdateFields: ['capacidad', 'activa', 'estado', 'zona', 'posX', 'posY', 'rotacion']
 });
 
 // Sobrescribir obtener para usar include más detallado
@@ -58,9 +58,22 @@ const cambiarEstado = async (prisma, id, estado) => {
   });
 };
 
+// Actualizar posiciones de múltiples mesas en batch (transacción)
+const actualizarPosiciones = async (prisma, posiciones) => {
+  return prisma.$transaction(
+    posiciones.map(({ id, zona, posX, posY, rotacion }) =>
+      prisma.mesa.update({
+        where: { id },
+        data: { zona, posX, posY, ...(rotacion !== undefined && { rotacion }) }
+      })
+    )
+  );
+};
+
 module.exports = {
   ...baseCrud,
   obtener, // Sobrescribir con versión custom
-  cambiarEstado
+  cambiarEstado,
+  actualizarPosiciones
 };
 

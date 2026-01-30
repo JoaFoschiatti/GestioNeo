@@ -10,7 +10,7 @@ let shuttingDown = false;
 
 const start = () => {
   server = app.listen(PORT, () => {
-    logger.info(`🚀 GestioNeo API corriendo en http://localhost:${PORT}`, {
+    logger.info(`🚀 Comanda API corriendo en http://localhost:${PORT}`, {
       port: PORT,
       environment: process.env.NODE_ENV || 'development'
     });

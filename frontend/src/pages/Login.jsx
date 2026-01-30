@@ -66,9 +66,9 @@ export default function Login() {
         {/* Logo + title */}
         <div className="text-center mb-8">
           <div className="w-14 h-14 bg-primary-500 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg">
-            <span className="text-2xl text-white font-bold">G</span>
+            <span className="text-2xl text-white font-bold">C</span>
           </div>
-          <h1 className="text-heading-1">GestioNeo</h1>
+          <h1 className="text-heading-1">Comanda</h1>
           <p className="text-text-secondary mt-2">Accede a tu cuenta</p>
         </div>
 

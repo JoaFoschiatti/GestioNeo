@@ -1,5 +1,5 @@
 /**
- * Servicio de reportes y estadísticas para GestioNeo.
+ * Servicio de reportes y estadísticas para Comanda.
  *
  * Este servicio genera reportes analíticos del restaurante:
  * - Dashboard con métricas en tiempo real

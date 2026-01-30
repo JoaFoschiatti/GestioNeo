@@ -171,7 +171,7 @@ const buildComandaText = (pedido, tipo, anchoMm) => {
   if (tipo !== 'COCINA') {
     lineas.push('');
     lineas.push(...wrapText('DOCUMENTO NO VALIDO COMO FACTURA', maxChars));
-    lineas.push(...wrapText('GestioNeo - Software gastronomico', maxChars));
+    lineas.push(...wrapText('Comanda - Software gastronomico', maxChars));
   }
 
   lineas.push('');

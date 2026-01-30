@@ -1,6 +1,6 @@
-# Variables de Entorno - GestioNeo Backend
+# Variables de Entorno - Comanda Backend
 
-Guía completa de configuración de variables de entorno para GestioNeo.
+Guía completa de configuración de variables de entorno para Comanda.
 
 ## 📋 Índice
 
@@ -19,7 +19,7 @@ Guía completa de configuración de variables de entorno para GestioNeo.
 #### `DATABASE_URL`
 **Descripción:** URL de conexión a PostgreSQL (con pooling si aplica)
 **Formato:** `postgresql://usuario:password@host:puerto/database?opciones`
-**Ejemplo desarrollo:** `postgresql://postgres:postgres@localhost:5432/gestioneo`
+**Ejemplo desarrollo:** `postgresql://postgres:postgres@localhost:5432/comanda`
 **Ejemplo Supabase:** `postgresql://postgres.xxxxx:PASSWORD@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true`
 
 #### `DIRECT_URL`
@@ -184,8 +184,8 @@ node generate-secrets.js
 NODE_ENV=development
 PORT=3001
 
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/gestioneo"
-DIRECT_URL="postgresql://postgres:postgres@localhost:5432/gestioneo"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/comanda"
+DIRECT_URL="postgresql://postgres:postgres@localhost:5432/comanda"
 
 JWT_SECRET=dev_secret_change_in_production
 JWT_EXPIRES_IN=24h
@@ -373,7 +373,7 @@ vercel env add ENCRYPTION_KEY production
 
 ```bash
 aws secretsmanager create-secret \
-  --name gestioneo/production/jwt \
+  --name comanda/production/jwt \
   --secret-string "valor_secreto"
 ```
 
