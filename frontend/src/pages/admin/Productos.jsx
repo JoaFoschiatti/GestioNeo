@@ -310,24 +310,28 @@ export default function Productos() {
   )
 
   if (loading && productos.length === 0) {
-    return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div></div>
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="spinner spinner-lg" />
+      </div>
+    )
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Productos</h1>
-          <div className="flex gap-2 mt-2">
+          <h1 className="text-heading-1">Productos</h1>
+          <div className="tabs mt-2">
             <button
               onClick={() => setVistaAgrupada(true)}
-              className={`text-sm px-3 py-1 rounded-full ${vistaAgrupada ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600'}`}
+              className={`tab ${vistaAgrupada ? 'tab-active' : ''}`}
             >
               Vista agrupada
             </button>
             <button
               onClick={() => setVistaAgrupada(false)}
-              className={`text-sm px-3 py-1 rounded-full ${!vistaAgrupada ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600'}`}
+              className={`tab ${!vistaAgrupada ? 'tab-active' : ''}`}
             >
               Vista plana
             </button>
@@ -353,7 +357,7 @@ export default function Productos() {
 
       <div className="space-y-4">
         {productos.map((producto) => (
-          <div key={producto.id} className={`card ${!producto.disponible ? 'opacity-60' : ''}`}>
+          <div key={producto.id} className={`card card-hover ${!producto.disponible ? 'opacity-60' : ''}`}>
             {/* Producto principal */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -361,47 +365,47 @@ export default function Productos() {
                   <button
                     onClick={() => toggleExpanded(producto.id)}
                     type="button"
-                    className="p-1 hover:bg-gray-100 rounded"
+                    className="p-1 hover:bg-surface-hover rounded transition-colors"
                     aria-label={`${expandedProducts[producto.id] ? 'Contraer' : 'Expandir'} variantes de ${producto.nombre}`}
                   >
                     {expandedProducts[producto.id]
-                      ? <ChevronDownIcon className="w-5 h-5 text-gray-500" />
-                      : <ChevronRightIcon className="w-5 h-5 text-gray-500" />
+                      ? <ChevronDownIcon className="w-5 h-5 text-text-tertiary" />
+                      : <ChevronRightIcon className="w-5 h-5 text-text-tertiary" />
                     }
                   </button>
                 )}
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-gray-900">{producto.nombre}</h3>
+                    <h3 className="font-semibold text-text-primary">{producto.nombre}</h3>
                     {producto.productoBase && (
-                      <span className="px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded-full">
+                      <span className="badge badge-info">
                         Variante de {producto.productoBase.nombre}
                       </span>
                     )}
                     {producto.variantes && producto.variantes.length > 0 && (
-                      <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">
+                      <span className="badge badge-info">
                         {producto.variantes.length} variante{producto.variantes.length > 1 ? 's' : ''}
                       </span>
                     )}
                     {producto.destacado && (
-                      <span className="px-2 py-1 text-xs bg-yellow-100 text-yellow-700 rounded-full">Destacado</span>
+                      <span className="badge badge-warning">Destacado</span>
                     )}
                   </div>
-                  <p className="text-sm text-gray-500">{producto.categoria?.nombre}</p>
+                  <p className="text-sm text-text-secondary">{producto.categoria?.nombre}</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-4">
-                <span className="text-xl font-bold text-primary-600">
+                <span className="text-xl font-bold text-primary-500">
                   ${parseFloat(producto.precio).toLocaleString('es-AR')}
                 </span>
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleToggleDisponible(producto)}
-                    className={`px-2 py-1 text-xs rounded ${
+                    className={`badge cursor-pointer transition-colors ${
                       producto.disponible
-                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                        : 'bg-red-100 text-red-700 hover:bg-red-200'
+                        ? 'badge-success hover:bg-success-200'
+                        : 'badge-error hover:bg-error-200'
                     }`}
                   >
                     {producto.disponible ? 'Disponible' : 'No disponible'}
@@ -411,7 +415,7 @@ export default function Productos() {
                     <button
                       onClick={() => openVarianteModal(producto)}
                       type="button"
-                      className="p-1.5 text-purple-600 hover:bg-purple-50 rounded"
+                      className="p-1.5 text-primary-500 hover:bg-primary-50 rounded transition-colors"
                       title="Crear variante"
                       aria-label={`Crear variante para ${producto.nombre}`}
                     >
@@ -423,7 +427,7 @@ export default function Productos() {
                     <button
                       onClick={() => handleDesagrupar(producto.id)}
                       type="button"
-                      className="p-1.5 text-orange-600 hover:bg-orange-50 rounded"
+                      className="p-1.5 text-warning-500 hover:bg-warning-50 rounded transition-colors"
                       title="Desagrupar variante"
                       aria-label={`Desagrupar variante ${producto.nombre}`}
                     >
@@ -433,7 +437,7 @@ export default function Productos() {
                   <button
                     onClick={() => handleEdit(producto)}
                     type="button"
-                    className="p-1.5 text-primary-600 hover:bg-primary-50 rounded"
+                    className="p-1.5 text-primary-500 hover:bg-primary-50 rounded transition-colors"
                     aria-label={`Editar producto: ${producto.nombre}`}
                   >
                     <PencilIcon className="w-5 h-5" />
@@ -444,33 +448,33 @@ export default function Productos() {
 
             {/* Variantes expandidas */}
             {producto.variantes && producto.variantes.length > 0 && expandedProducts[producto.id] && (
-              <div className="mt-4 ml-8 border-l-2 border-gray-200 pl-4 space-y-3">
+              <div className="mt-4 ml-8 border-l-2 border-border-default pl-4 space-y-3">
                 {producto.variantes.map((variante) => (
                   <div
                     key={variante.id}
-                    className={`flex items-center justify-between p-3 bg-gray-50 rounded-lg ${!variante.disponible ? 'opacity-60' : ''}`}
+                    className={`flex items-center justify-between p-3 bg-surface-hover rounded-xl ${!variante.disponible ? 'opacity-60' : ''}`}
                   >
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-gray-800">{variante.nombreVariante || variante.nombre}</span>
+                        <span className="font-medium text-text-primary">{variante.nombreVariante || variante.nombre}</span>
                         {variante.esVariantePredeterminada && (
-                          <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">
+                          <span className="badge badge-success">
                             Predeterminada
                           </span>
                         )}
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-text-tertiary">
                           Multiplicador: {variante.multiplicadorInsumos}x
                         </span>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="font-bold text-primary-600">
+                      <span className="font-bold text-primary-500">
                         ${parseFloat(variante.precio).toLocaleString('es-AR')}
                       </span>
                       <button
                         onClick={() => handleDesagrupar(variante.id)}
                         type="button"
-                        className="p-1 text-orange-600 hover:bg-orange-50 rounded"
+                        className="p-1 text-warning-500 hover:bg-warning-50 rounded transition-colors"
                         title="Desagrupar"
                         aria-label={`Desagrupar variante ${variante.nombreVariante || variante.nombre}`}
                       >
@@ -487,12 +491,12 @@ export default function Productos() {
 
       {/* Modal Crear/Editar Producto */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold mb-4">
+        <div className="modal-overlay">
+          <div className="modal">
+            <h2 className="text-heading-3 mb-4">
               {editando ? 'Editar Producto' : 'Nuevo Producto'}
             </h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto flex-1">
               <div>
                 <label className="label" htmlFor="producto-nombre">Nombre</label>
                 <input
@@ -525,19 +529,19 @@ export default function Productos() {
                 />
                 <label
                   htmlFor="imagen-input"
-                  className="block cursor-pointer border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-primary-400 transition-colors"
+                  className="block cursor-pointer border border-dashed border-border-default rounded-xl p-4 hover:border-primary-400 transition-colors"
                 >
                   {imagePreview ? (
                     <div className="flex flex-col items-center">
                       <img
                         src={imagePreview}
                         alt="Preview"
-                        className="w-32 h-32 object-cover rounded-lg mb-2"
+                        className="w-32 h-32 object-cover rounded-xl mb-2"
                       />
-                      <span className="text-sm text-gray-500">Click para cambiar imagen</span>
+                      <span className="text-sm text-text-secondary">Click para cambiar imagen</span>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center text-gray-400">
+                    <div className="flex flex-col items-center text-text-tertiary">
                       <PhotoIcon className="w-12 h-12 mb-2" />
                       <span className="text-sm">Click para subir imagen</span>
                       <span className="text-xs mt-1">PNG, JPG, WebP (max. 5MB)</span>
@@ -597,7 +601,7 @@ export default function Productos() {
                   <span className="text-sm">Destacado</span>
                 </label>
               </div>
-              <div className="flex gap-3 pt-4">
+              <div className="modal-footer">
                 <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary flex-1">
                   Cancelar
                 </button>
@@ -612,13 +616,13 @@ export default function Productos() {
 
       {/* Modal Crear Variante */}
       {showVarianteModal && productoBase && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold mb-2">Crear Variante</h2>
-            <p className="text-sm text-gray-500 mb-4">
-              Variante de: <span className="font-medium">{productoBase.nombre}</span>
+        <div className="modal-overlay">
+          <div className="modal">
+            <h2 className="text-heading-3 mb-2">Crear Variante</h2>
+            <p className="text-sm text-text-secondary mb-4">
+              Variante de: <span className="font-medium text-text-primary">{productoBase.nombre}</span>
             </p>
-            <form onSubmit={handleCrearVariante} className="space-y-4">
+            <form onSubmit={handleCrearVariante} className="space-y-4 overflow-y-auto flex-1">
               <div>
                 <label className="label" htmlFor="variante-nombre">Nombre de la Variante *</label>
                 <input
@@ -630,7 +634,7 @@ export default function Productos() {
                   placeholder="Ej: Simple, Doble, Triple"
                   required
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="input-hint">
                   Se mostrara como: {productoBase.nombre} {varianteForm.nombreVariante}
                 </p>
               </div>
@@ -658,7 +662,7 @@ export default function Productos() {
                     value={varianteForm.multiplicadorInsumos}
                     onChange={(e) => setVarianteForm({ ...varianteForm, multiplicadorInsumos: e.target.value })}
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="input-hint">
                     1.0 = igual, 2.0 = doble insumos
                   </p>
                 </div>
@@ -697,7 +701,7 @@ export default function Productos() {
                   placeholder="Dejar vacio para usar la del producto base"
                 />
               </div>
-              <div className="flex gap-3 pt-4">
+              <div className="modal-footer">
                 <button type="button" onClick={() => { setShowVarianteModal(false); resetVarianteForm() }} className="btn btn-secondary flex-1">
                   Cancelar
                 </button>
@@ -712,10 +716,10 @@ export default function Productos() {
 
       {/* Modal Agrupar Variantes */}
       {showAgruparModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-	            <h2 className="text-xl font-bold mb-4">Agrupar Productos como Variantes</h2>
-	            <form onSubmit={handleAgruparVariantes} className="space-y-4">
+        <div className="modal-overlay">
+          <div className="modal modal-lg">
+            <h2 className="text-heading-3 mb-4">Agrupar Productos como Variantes</h2>
+            <form onSubmit={handleAgruparVariantes} className="space-y-4 overflow-y-auto flex-1">
 	              <div>
 	                <label className="label" htmlFor="agrupar-producto-base">Producto Base *</label>
 	                <select
@@ -730,7 +734,7 @@ export default function Productos() {
                     <option key={prod.id} value={prod.id}>{prod.nombre}</option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="input-hint">
                   Este sera el producto principal que agrupa las variantes
                 </p>
               </div>
@@ -738,14 +742,14 @@ export default function Productos() {
               {agruparForm.productoBaseId && (
                 <div>
                   <label className="label">Seleccionar Variantes</label>
-                  <div className="border rounded-lg max-h-60 overflow-y-auto">
+                  <div className="border border-border-default rounded-xl max-h-60 overflow-y-auto">
                     {productosDisponiblesParaAgrupar.map((prod) => {
                       const isSelected = agruparForm.productosSeleccionados.some(p => p.id === prod.id)
                       const selectedProd = agruparForm.productosSeleccionados.find(p => p.id === prod.id)
 
                       return (
-	                        <div key={prod.id} className={`p-3 border-b last:border-b-0 ${isSelected ? 'bg-purple-50' : ''}`}>
-	                          <div className="flex items-center gap-3">
+                        <div key={prod.id} className={`p-3 border-b border-border-default last:border-b-0 ${isSelected ? 'bg-primary-50' : ''}`}>
+                          <div className="flex items-center gap-3">
 	                            <input
 	                              type="checkbox"
 	                              aria-label={`Seleccionar ${prod.nombre} como variante`}
@@ -769,8 +773,8 @@ export default function Productos() {
                               className="rounded"
                             />
                             <div className="flex-1">
-                              <span className="font-medium">{prod.nombre}</span>
-                              <span className="text-sm text-gray-500 ml-2">
+                              <span className="font-medium text-text-primary">{prod.nombre}</span>
+                              <span className="text-sm text-text-secondary ml-2">
                                 ${parseFloat(prod.precio).toLocaleString('es-AR')}
                               </span>
                             </div>
@@ -818,7 +822,7 @@ export default function Productos() {
                 </div>
               )}
 
-              <div className="flex gap-3 pt-4">
+              <div className="modal-footer">
                 <button type="button" onClick={() => { setShowAgruparModal(false); resetAgruparForm() }} className="btn btn-secondary flex-1">
                   Cancelar
                 </button>

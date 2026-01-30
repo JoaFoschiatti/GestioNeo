@@ -23,7 +23,7 @@ const TopProductosRanking = ({ data, agrupadoPorBase }) => {
   const [expandedItems, setExpandedItems] = useState({})
 
   if (!data || data.length === 0) {
-    return <p className="text-gray-500 text-center py-4">Sin datos de productos</p>
+    return <p className="text-text-secondary text-center py-4">Sin datos de productos</p>
   }
 
   const top5 = data.slice(0, 5)
@@ -44,22 +44,22 @@ const TopProductosRanking = ({ data, agrupadoPorBase }) => {
               <button
                 onClick={() => toggleExpand(i)}
                 type="button"
-                className="p-1 hover:bg-gray-100 rounded"
+                className="p-1 hover:bg-surface-hover rounded"
                 aria-label={`${expandedItems[i] ? 'Contraer' : 'Expandir'} variantes de ${prod.producto}`}
               >
                 {expandedItems[i]
-                  ? <ChevronDownIcon className="w-4 h-4 text-gray-500" />
-                  : <ChevronRightIcon className="w-4 h-4 text-gray-500" />
+                  ? <ChevronDownIcon className="w-4 h-4 text-text-tertiary" />
+                  : <ChevronRightIcon className="w-4 h-4 text-text-tertiary" />
                 }
               </button>
             )}
             <span className="text-2xl w-10 text-center">{medals[i]}</span>
             <div className="flex-1 min-w-0">
               <div className="flex justify-between items-center mb-1">
-                <span className="font-medium text-gray-900 truncate pr-2">{prod.producto}</span>
-                <span className="text-xs text-gray-500 whitespace-nowrap">{prod.cantidadVendida} uds</span>
+                <span className="font-medium text-text-primary truncate pr-2">{prod.producto}</span>
+                <span className="text-xs text-text-tertiary whitespace-nowrap">{prod.cantidadVendida} uds</span>
               </div>
-              <div className="h-5 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-5 bg-surface-hover rounded-full overflow-hidden">
                 <div
                   className="h-full rounded-full transition-all duration-500"
                   style={{
@@ -68,7 +68,7 @@ const TopProductosRanking = ({ data, agrupadoPorBase }) => {
                   }}
                 />
               </div>
-              <div className="text-right text-sm font-bold text-green-600 mt-1">
+              <div className="text-right text-sm font-bold text-success-600 mt-1">
                 ${Number(prod.totalVentas).toLocaleString('es-AR')}
               </div>
             </div>
@@ -77,7 +77,7 @@ const TopProductosRanking = ({ data, agrupadoPorBase }) => {
           {agrupadoPorBase && prod.variantes && prod.variantes.length > 0 && expandedItems[i] && (
             <div className="ml-16 mt-2 space-y-1">
               {prod.variantes.map((v, vi) => (
-                <div key={vi} className="flex justify-between text-sm text-gray-600 bg-gray-50 px-3 py-1.5 rounded">
+                <div key={vi} className="flex justify-between text-sm text-text-secondary bg-surface-hover px-3 py-1.5 rounded">
                   <span>{v.nombreVariante || v.nombre}</span>
                   <span>{v.cantidadVendida} uds - ${Number(v.totalVentas).toLocaleString('es-AR')}</span>
                 </div>
@@ -93,7 +93,7 @@ const TopProductosRanking = ({ data, agrupadoPorBase }) => {
 // Componente: Donut Chart generico
 const DonutChart = ({ data, colors, formatValue }) => {
   if (!data || data.length === 0) {
-    return <p className="text-gray-500 text-center py-4">Sin datos</p>
+    return <p className="text-text-secondary text-center py-4">Sin datos</p>
   }
 
   const total = data.reduce((sum, item) => sum + item.value, 0)
@@ -103,9 +103,9 @@ const DonutChart = ({ data, colors, formatValue }) => {
       const item = payload[0]
       const percentage = ((item.value / total) * 100).toFixed(1)
       return (
-        <div className="bg-white px-3 py-2 shadow-lg rounded-lg border">
-          <p className="font-medium">{item.name}</p>
-          <p className="text-sm text-gray-600">
+        <div className="bg-surface px-3 py-2 shadow-lg rounded-lg border border-border-default">
+          <p className="font-medium text-text-primary">{item.name}</p>
+          <p className="text-sm text-text-secondary">
             {formatValue ? formatValue(item.value) : item.value} ({percentage}%)
           </p>
         </div>
@@ -137,7 +137,7 @@ const DonutChart = ({ data, colors, formatValue }) => {
             verticalAlign="bottom"
             height={36}
             formatter={(value) => (
-              <span className="text-sm text-gray-700">{value}</span>
+              <span className="text-sm text-text-primary">{value}</span>
             )}
           />
         </PieChart>
@@ -149,7 +149,7 @@ const DonutChart = ({ data, colors, formatValue }) => {
 // Componente: Ranking de Mozos
 const VentasPorMozoRanking = ({ data }) => {
   if (!data || data.length === 0) {
-    return <p className="text-gray-500 text-center py-4">Sin datos de mozos</p>
+    return <p className="text-text-secondary text-center py-4">Sin datos de mozos</p>
   }
 
   const maxVentas = Math.max(...data.map(m => Number(m.totalVentas) || 0))
@@ -158,13 +158,13 @@ const VentasPorMozoRanking = ({ data }) => {
     <div className="space-y-3">
       {data.slice(0, 5).map((mozo, i) => (
         <div key={i} className="flex items-center gap-3">
-          <span className="text-sm font-medium text-gray-500 w-6">{i + 1}.</span>
+          <span className="text-sm font-medium text-text-tertiary w-6">{i + 1}.</span>
           <div className="flex-1 min-w-0">
             <div className="flex justify-between items-center mb-1">
-              <span className="font-medium text-gray-900 truncate">{mozo.mozo}</span>
-              <span className="text-xs text-gray-500">{mozo.pedidos} pedidos</span>
+              <span className="font-medium text-text-primary truncate">{mozo.mozo}</span>
+              <span className="text-xs text-text-tertiary">{mozo.pedidos} pedidos</span>
             </div>
-            <div className="h-4 bg-gray-100 rounded-full overflow-hidden">
+            <div className="h-4 bg-surface-hover rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full bg-primary-500 transition-all duration-500"
                 style={{
@@ -172,7 +172,7 @@ const VentasPorMozoRanking = ({ data }) => {
                 }}
               />
             </div>
-            <div className="text-right text-sm font-bold text-green-600 mt-1">
+            <div className="text-right text-sm font-bold text-success-600 mt-1">
               ${Number(mozo.totalVentas).toLocaleString('es-AR')}
             </div>
           </div>
@@ -187,7 +187,7 @@ const ConsumoInsumosTable = ({ data }) => {
   const [expandedItems, setExpandedItems] = useState({})
 
   if (!data || !data.ingredientes || data.ingredientes.length === 0) {
-    return <p className="text-gray-500 text-center py-4">Sin datos de consumo</p>
+    return <p className="text-text-secondary text-center py-4">Sin datos de consumo</p>
   }
 
   const toggleExpand = (id) => {
@@ -198,64 +198,64 @@ const ConsumoInsumosTable = ({ data }) => {
     <div>
       {/* Resumen */}
       <div className="grid grid-cols-3 gap-4 mb-4">
-        <div className="bg-gray-50 p-3 rounded-lg text-center">
-          <p className="text-2xl font-bold text-gray-900">{data.resumen.totalIngredientes}</p>
-          <p className="text-xs text-gray-500">Ingredientes</p>
+        <div className="bg-surface-hover p-3 rounded-lg text-center">
+          <p className="text-2xl font-bold text-text-primary">{data.resumen.totalIngredientes}</p>
+          <p className="text-xs text-text-tertiary">Ingredientes</p>
         </div>
-        <div className="bg-red-50 p-3 rounded-lg text-center">
-          <p className="text-2xl font-bold text-red-600">{data.resumen.ingredientesBajoStock}</p>
-          <p className="text-xs text-gray-500">Bajo Stock</p>
+        <div className="bg-error-50 p-3 rounded-lg text-center">
+          <p className="text-2xl font-bold text-error-600">{data.resumen.ingredientesBajoStock}</p>
+          <p className="text-xs text-text-tertiary">Bajo Stock</p>
         </div>
-        <div className="bg-green-50 p-3 rounded-lg text-center">
-          <p className="text-lg font-bold text-green-600">
+        <div className="bg-success-50 p-3 rounded-lg text-center">
+          <p className="text-lg font-bold text-success-600">
             ${data.resumen.costoTotalEstimado?.toLocaleString('es-AR', { maximumFractionDigits: 0 }) || '-'}
           </p>
-          <p className="text-xs text-gray-500">Costo Total</p>
+          <p className="text-xs text-text-tertiary">Costo Total</p>
         </div>
       </div>
 
       {/* Tabla */}
-      <div className="border rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50">
+      <div className="border border-border-default rounded-xl overflow-hidden">
+        <table className="table">
+          <thead>
             <tr>
-              <th className="text-left p-3 font-medium">Ingrediente</th>
-              <th className="text-right p-3 font-medium">Consumo</th>
-              <th className="text-right p-3 font-medium">Stock</th>
-              <th className="text-right p-3 font-medium">Estado</th>
+              <th className="text-left">Ingrediente</th>
+              <th className="text-right">Consumo</th>
+              <th className="text-right">Stock</th>
+              <th className="text-right">Estado</th>
             </tr>
           </thead>
           <tbody>
             {data.ingredientes.slice(0, 10).map((ing) => (
               <React.Fragment key={ing.ingredienteId}>
-                <tr className="border-t hover:bg-gray-50">
-                  <td className="p-3">
+                <tr className="hover:bg-surface-hover">
+                  <td>
                     <div className="flex items-center gap-2">
                       {ing.detalleProductos && ing.detalleProductos.length > 0 && (
                         <button
                           onClick={() => toggleExpand(ing.ingredienteId)}
                           type="button"
-                          className="p-0.5 hover:bg-gray-200 rounded"
+                          className="p-0.5 hover:bg-surface-hover rounded"
                           aria-label={`${expandedItems[ing.ingredienteId] ? 'Contraer' : 'Expandir'} detalle de ${ing.nombre}`}
                         >
                           {expandedItems[ing.ingredienteId]
-                            ? <ChevronDownIcon className="w-4 h-4 text-gray-500" />
-                            : <ChevronRightIcon className="w-4 h-4 text-gray-500" />
+                            ? <ChevronDownIcon className="w-4 h-4 text-text-tertiary" />
+                            : <ChevronRightIcon className="w-4 h-4 text-text-tertiary" />
                           }
                         </button>
                       )}
-                      <span className="font-medium">{ing.nombre}</span>
+                      <span className="font-medium text-text-primary">{ing.nombre}</span>
                     </div>
                   </td>
-                  <td className="p-3 text-right">
+                  <td className="text-right text-text-secondary">
                     {ing.consumoTotal.toFixed(2)} {ing.unidad}
                   </td>
-                  <td className="p-3 text-right">
+                  <td className="text-right text-text-secondary">
                     {ing.stockActual.toFixed(2)} {ing.unidad}
                   </td>
-                  <td className="p-3 text-right">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      ing.estado === 'BAJO' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                  <td className="text-right">
+                    <span className={`badge ${
+                      ing.estado === 'BAJO' ? 'badge-error' : 'badge-success'
                     }`}>
                       {ing.estado}
                     </span>
@@ -264,14 +264,14 @@ const ConsumoInsumosTable = ({ data }) => {
                 {/* Detalle de productos */}
                 {expandedItems[ing.ingredienteId] && ing.detalleProductos && (
                   <tr>
-                    <td colSpan={4} className="bg-gray-50 px-6 py-2">
+                    <td colSpan={4} className="bg-surface-hover px-6 py-2">
                       <div className="text-xs space-y-1">
                         {ing.detalleProductos.map((prod, pi) => (
-                          <div key={pi} className="flex justify-between text-gray-600">
+                          <div key={pi} className="flex justify-between text-text-secondary">
                             <span>
                               {prod.producto}
                               {prod.multiplicador !== 1 && (
-                                <span className="text-purple-600 ml-1">(x{prod.multiplicador})</span>
+                                <span className="text-primary-600 ml-1">(x{prod.multiplicador})</span>
                               )}
                             </span>
                             <span>{prod.cantidad} uds = {prod.consumo.toFixed(2)} {ing.unidad}</span>
@@ -394,7 +394,7 @@ export default function Reportes() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Reportes</h1>
+      <h1 className="text-heading-1 mb-6">Reportes</h1>
 
       {/* Filtros */}
       <div className="card mb-6">
@@ -426,16 +426,16 @@ export default function Reportes() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6">
+      <div className="tabs mb-6">
         <button
           onClick={() => setTabActiva('ventas')}
-          className={`px-4 py-2 rounded-lg font-medium ${tabActiva === 'ventas' ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600'}`}
+          className={`tab ${tabActiva === 'ventas' ? 'tab-active' : ''}`}
         >
           Ventas
         </button>
         <button
           onClick={() => setTabActiva('insumos')}
-          className={`px-4 py-2 rounded-lg font-medium ${tabActiva === 'insumos' ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600'}`}
+          className={`tab ${tabActiva === 'insumos' ? 'tab-active' : ''}`}
         >
           Consumo de Insumos
         </button>
@@ -446,28 +446,28 @@ export default function Reportes() {
           {/* Resumen de ventas - KPIs */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <div className="card">
-              <p className="text-sm text-gray-500">Total Ventas</p>
-              <p className="text-2xl font-bold text-green-600">
+              <p className="text-sm text-text-secondary">Total Ventas</p>
+              <p className="text-2xl font-bold text-success-600">
                 ${ventas.totalVentas?.toLocaleString('es-AR')}
               </p>
             </div>
             <div className="card">
-              <p className="text-sm text-gray-500">Total Pedidos</p>
-              <p className="text-2xl font-bold text-gray-900">{ventas.totalPedidos}</p>
+              <p className="text-sm text-text-secondary">Total Pedidos</p>
+              <p className="text-2xl font-bold text-text-primary">{ventas.totalPedidos}</p>
             </div>
             <div className="card">
-              <p className="text-sm text-gray-500">Ticket Promedio</p>
+              <p className="text-sm text-text-secondary">Ticket Promedio</p>
               <p className="text-2xl font-bold text-primary-600">
                 ${ventas.ticketPromedio?.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
               </p>
             </div>
             <div className="card">
-              <p className="text-sm text-gray-500">Ventas por Tipo</p>
+              <p className="text-sm text-text-secondary">Ventas por Tipo</p>
               <div className="text-sm mt-2">
                 {Object.entries(ventas.ventasPorTipo || {}).map(([tipo, data]) => (
-                  <div key={tipo} className="flex justify-between">
+                  <div key={tipo} className="flex justify-between text-text-secondary">
                     <span>{tipo}:</span>
-                    <span className="font-medium">{data.cantidad}</span>
+                    <span className="font-medium text-text-primary">{data.cantidad}</span>
                   </div>
                 ))}
               </div>
@@ -478,7 +478,7 @@ export default function Reportes() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <div className="card">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                <h3 className="text-heading-3 flex items-center gap-2">
                   <span className="text-xl">1.</span>
                   Top 5 Productos por Ingresos
                 </h3>
@@ -489,14 +489,14 @@ export default function Reportes() {
                     onChange={(e) => setAgruparPorBase(e.target.checked)}
                     className="rounded"
                   />
-                  <span className="text-gray-600">Agrupar variantes</span>
+                  <span className="text-text-secondary">Agrupar variantes</span>
                 </label>
               </div>
               <TopProductosRanking data={productosMasVendidos} agrupadoPorBase={agruparPorBase} />
             </div>
 
             <div className="card">
-              <h3 className="font-semibold text-gray-900 mb-4">Metodos de Pago</h3>
+              <h3 className="text-heading-3 mb-4">Metodos de Pago</h3>
               {datosMetodosPago.length > 0 ? (
                 <DonutChart
                   data={datosMetodosPago}
@@ -504,7 +504,7 @@ export default function Reportes() {
                   formatValue={(v) => `$${v.toLocaleString('es-AR')}`}
                 />
               ) : (
-                <p className="text-gray-500 text-center py-8">Sin datos de pagos</p>
+                <p className="text-text-secondary text-center py-8">Sin datos de pagos</p>
               )}
             </div>
           </div>
@@ -512,7 +512,7 @@ export default function Reportes() {
           {/* Fila 2: Tipo de Pedido + Ventas por Mozo */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <div className="card">
-              <h3 className="font-semibold text-gray-900 mb-4">Tipo de Pedido</h3>
+              <h3 className="text-heading-3 mb-4">Tipo de Pedido</h3>
               {datosTipoPedido.length > 0 ? (
                 <DonutChart
                   data={datosTipoPedido}
@@ -520,12 +520,12 @@ export default function Reportes() {
                   formatValue={(v) => `$${v.toLocaleString('es-AR')}`}
                 />
               ) : (
-                <p className="text-gray-500 text-center py-8">Sin datos de pedidos</p>
+                <p className="text-text-secondary text-center py-8">Sin datos de pedidos</p>
               )}
             </div>
 
             <div className="card">
-              <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <h3 className="text-heading-3 mb-4 flex items-center gap-2">
                 <span className="text-xl">2.</span>
                 Ventas por Mozo
               </h3>
@@ -537,10 +537,10 @@ export default function Reportes() {
 
       {tabActiva === 'insumos' && (
         <div className="card">
-          <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <h3 className="text-heading-3 mb-4 flex items-center gap-2">
             <span className="text-xl">3.</span>
             Consumo de Insumos
-            <span className="text-sm font-normal text-gray-500">(con multiplicadores de variantes)</span>
+            <span className="text-sm font-normal text-text-tertiary">(con multiplicadores de variantes)</span>
           </h3>
           <ConsumoInsumosTable data={consumoInsumos} />
         </div>

@@ -89,14 +89,14 @@ export default function TransaccionesMercadoPago() {
     switch (status) {
       case 'approved':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+          <span className="badge badge-success">
             <CheckCircleIcon className="w-3 h-3" />
             Aprobado
           </span>
         )
       case 'rejected':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+          <span className="badge badge-error">
             <XCircleIcon className="w-3 h-3" />
             Rechazado
           </span>
@@ -104,14 +104,14 @@ export default function TransaccionesMercadoPago() {
       case 'pending':
       case 'in_process':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
+          <span className="badge badge-warning">
             <ClockIcon className="w-3 h-3" />
             Pendiente
           </span>
         )
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+          <span className="badge">
             {status}
           </span>
         )
@@ -133,8 +133,8 @@ export default function TransaccionesMercadoPago() {
     <div className="max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <CreditCardIcon className="w-7 h-7 text-blue-500" />
+        <h1 className="text-heading-1 flex items-center gap-2">
+          <CreditCardIcon className="w-7 h-7 text-info-500" />
           Transacciones MercadoPago
         </h1>
 
@@ -152,7 +152,7 @@ export default function TransaccionesMercadoPago() {
         <div className="card mb-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="tx-desde">Desde</label>
+              <label className="label" htmlFor="tx-desde">Desde</label>
               <input
                 id="tx-desde"
                 type="date"
@@ -162,7 +162,7 @@ export default function TransaccionesMercadoPago() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="tx-hasta">Hasta</label>
+              <label className="label" htmlFor="tx-hasta">Hasta</label>
               <input
                 id="tx-hasta"
                 type="date"
@@ -172,7 +172,7 @@ export default function TransaccionesMercadoPago() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="tx-estado">Estado</label>
+              <label className="label" htmlFor="tx-estado">Estado</label>
               <select
                 id="tx-estado"
                 value={filtros.status}
@@ -201,50 +201,50 @@ export default function TransaccionesMercadoPago() {
 
       {/* Totales */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="card bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+        <div className="card">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-blue-500 rounded-lg">
+            <div className="p-3 bg-info-500 rounded-xl">
               <BanknotesIcon className="w-6 h-6 text-white" />
             </div>
             <div>
-              <p className="text-sm text-blue-600">Total Bruto</p>
-              <p className="text-xl font-bold text-blue-900">{formatMoney(totales.bruto)}</p>
+              <p className="text-sm text-text-secondary">Total Bruto</p>
+              <p className="text-xl font-bold text-text-primary">{formatMoney(totales.bruto)}</p>
             </div>
           </div>
         </div>
 
-        <div className="card bg-gradient-to-br from-red-50 to-red-100 border-red-200">
+        <div className="card">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-red-500 rounded-lg">
+            <div className="p-3 bg-error-500 rounded-xl">
               <ReceiptPercentIcon className="w-6 h-6 text-white" />
             </div>
             <div>
-              <p className="text-sm text-red-600">Comisiones MP</p>
-              <p className="text-xl font-bold text-red-900">{formatMoney(totales.comisiones)}</p>
+              <p className="text-sm text-text-secondary">Comisiones MP</p>
+              <p className="text-xl font-bold text-text-primary">{formatMoney(totales.comisiones)}</p>
             </div>
           </div>
         </div>
 
-        <div className="card bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+        <div className="card">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-green-500 rounded-lg">
+            <div className="p-3 bg-success-500 rounded-xl">
               <CurrencyDollarIcon className="w-6 h-6 text-white" />
             </div>
             <div>
-              <p className="text-sm text-green-600">Neto Recibido</p>
-              <p className="text-xl font-bold text-green-900">{formatMoney(totales.neto)}</p>
+              <p className="text-sm text-text-secondary">Neto Recibido</p>
+              <p className="text-xl font-bold text-text-primary">{formatMoney(totales.neto)}</p>
             </div>
           </div>
         </div>
 
-        <div className="card bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+        <div className="card">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-purple-500 rounded-lg">
+            <div className="p-3 bg-primary-500 rounded-xl">
               <CheckCircleIcon className="w-6 h-6 text-white" />
             </div>
             <div>
-              <p className="text-sm text-purple-600">Tx Aprobadas</p>
-              <p className="text-xl font-bold text-purple-900">{totales.cantidadAprobadas}</p>
+              <p className="text-sm text-text-secondary">Tx Aprobadas</p>
+              <p className="text-xl font-bold text-text-primary">{totales.cantidadAprobadas}</p>
             </div>
           </div>
         </div>
@@ -254,12 +254,12 @@ export default function TransaccionesMercadoPago() {
       <div className="card overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <ArrowPathIcon className="w-8 h-8 animate-spin text-blue-500" />
+            <div className="spinner spinner-lg" />
           </div>
         ) : errorMessage ? (
           <div className="text-center py-12">
-            <XCircleIcon className="w-16 h-16 text-red-300 mx-auto mb-4" />
-            <p className="text-red-600">{errorMessage}</p>
+            <XCircleIcon className="w-16 h-16 text-error-300 mx-auto mb-4" />
+            <p className="text-error-600">{errorMessage}</p>
             <button
               onClick={cargarTransaccionesAsync}
               className="mt-4 btn btn-secondary"
@@ -269,67 +269,67 @@ export default function TransaccionesMercadoPago() {
           </div>
         ) : transacciones.length === 0 ? (
           <div className="text-center py-12">
-            <CreditCardIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500">No hay transacciones registradas</p>
-            <p className="text-sm text-gray-400 mt-1">
+            <CreditCardIcon className="w-16 h-16 text-text-tertiary mx-auto mb-4" />
+            <p className="text-text-secondary">No hay transacciones registradas</p>
+            <p className="text-sm text-text-tertiary mt-1">
               Las transacciones apareceran aqui cuando los clientes paguen con MercadoPago
             </p>
           </div>
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead className="bg-gray-50 border-b">
+              <table className="table">
+                <thead>
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Fecha</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Pedido</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Monto</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Comision</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Neto</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Estado</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Metodo</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Pagador</th>
+                    <th>Fecha</th>
+                    <th>Pedido</th>
+                    <th>Monto</th>
+                    <th>Comision</th>
+                    <th>Neto</th>
+                    <th>Estado</th>
+                    <th>Metodo</th>
+                    <th>Pagador</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y">
+                <tbody>
                   {transacciones.map((tx) => (
-                    <tr key={tx.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm text-gray-600">
+                    <tr key={tx.id}>
+                      <td className="text-text-secondary">
                         {formatDate(tx.createdAt)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td>
                         {tx.pago?.pedido ? (
                           <Link
                             to={`/admin/pedidos?id=${tx.pago.pedido.id}`}
-                            className="text-blue-600 hover:underline font-medium"
+                            className="text-primary-600 hover:underline font-medium"
                           >
                             #{tx.pago.pedido.id}
                           </Link>
                         ) : (
-                          <span className="text-gray-400">-</span>
+                          <span className="text-text-tertiary">-</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 font-medium">
+                      <td className="font-medium text-text-primary">
                         {formatMoney(tx.amount)}
                       </td>
-                      <td className="px-4 py-3 text-sm text-red-600">
+                      <td className="text-error-600">
                         {tx.fee ? `-${formatMoney(tx.fee)}` : '-'}
                       </td>
-                      <td className="px-4 py-3 text-sm font-medium text-green-600">
+                      <td className="font-medium text-success-600">
                         {tx.netAmount ? formatMoney(tx.netAmount) : '-'}
                       </td>
-                      <td className="px-4 py-3">
+                      <td>
                         {getStatusBadge(tx.status)}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
+                      <td className="text-text-secondary">
                         {getPaymentMethodLabel(tx.paymentMethod)}
                         {tx.installments > 1 && (
-                          <span className="text-xs text-gray-400 ml-1">
+                          <span className="text-xs text-text-tertiary ml-1">
                             ({tx.installments} cuotas)
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-500 truncate max-w-[150px]">
+                      <td className="text-text-tertiary truncate max-w-[150px]">
                         {tx.payerEmail || '-'}
                       </td>
                     </tr>
@@ -340,8 +340,8 @@ export default function TransaccionesMercadoPago() {
 
             {/* Paginacion */}
             {pagination.pages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
-                <p className="text-sm text-gray-600">
+              <div className="flex items-center justify-between px-4 py-3 border-t border-border-default bg-surface-hover">
+                <p className="text-sm text-text-secondary">
                   Mostrando {transacciones.length} de {pagination.total} transacciones
                 </p>
                 <div className="flex gap-2">
@@ -352,7 +352,7 @@ export default function TransaccionesMercadoPago() {
                   >
                     Anterior
                   </button>
-                  <span className="px-3 py-1 text-sm">
+                  <span className="px-3 py-1 text-sm text-text-primary">
                     {pagination.page} / {pagination.pages}
                   </span>
                   <button

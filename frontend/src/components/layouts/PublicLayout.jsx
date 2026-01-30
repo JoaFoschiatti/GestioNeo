@@ -1,22 +1,22 @@
 export default function PublicLayout({ children }) {
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-canvas">
       {/* Header */}
-      <header className="bg-white shadow-sm">
+      <header className="bg-surface border-b border-border-subtle">
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <h1 className="text-2xl font-bold text-primary-600">GestioNeo</h1>
+          <h1 className="text-xl font-semibold text-text-primary tracking-tight">GestioNeo</h1>
         </div>
       </header>
 
-      {/* Contenido */}
+      {/* Content */}
       <main>
         {children}
       </main>
 
       {/* Footer */}
-      <footer className="bg-white border-t mt-12">
-        <div className="max-w-7xl mx-auto px-4 py-6 text-center text-gray-500 text-sm">
-          GestioNeo - Sistema de Gestión
+      <footer className="bg-surface border-t border-border-subtle mt-12">
+        <div className="max-w-7xl mx-auto px-4 py-6 text-center text-text-tertiary text-sm">
+          GestioNeo - Sistema de Gestion
         </div>
       </footer>
     </div>

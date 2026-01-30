@@ -56,37 +56,38 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center login-gradient-bg overflow-hidden relative px-4">
-      {/* Blobs decorativos */}
+      {/* Subtle decorative elements */}
       <div className="blob blob-1" />
       <div className="blob blob-2" />
       <div className="blob blob-3" />
 
-      {/* Card principal */}
-      <div className="glass-card w-full max-w-md p-8 relative z-10 animate-fade-in-up">
-        {/* Logo + título */}
+      {/* Main card */}
+      <div className="glass-card w-full max-w-md relative z-10 animate-fade-in-up">
+        {/* Logo + title */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl mx-auto mb-4 flex items-center justify-center border border-white/20">
-            <span className="text-3xl">🍔</span>
+          <div className="w-14 h-14 bg-primary-500 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg">
+            <span className="text-2xl text-white font-bold">G</span>
           </div>
-          <h1 className="text-3xl font-bold text-white">GestioNeo</h1>
-          <p className="text-white/70 mt-2">Accede a tu cuenta</p>
+          <h1 className="text-heading-1">GestioNeo</h1>
+          <p className="text-text-secondary mt-2">Accede a tu cuenta</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {error && (
             <div
-              className="bg-red-500/20 backdrop-blur-sm text-white p-3 rounded-xl flex items-center gap-2 border border-red-400/30"
+              className="alert alert-error"
               role="alert"
             >
               <span className="text-sm">{error}</span>
             </div>
           )}
-          {/* Input Restaurante */}
+
+          {/* Restaurant input */}
           {!urlSlug && (
-            <div>
-              <label className="glass-label">Restaurante</label>
+            <div className="input-group">
+              <label className="label">Restaurante</label>
               <div className="relative">
-                <BuildingStorefrontIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/50" />
+                <BuildingStorefrontIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-text-tertiary" />
                 <input
                   type="text"
                   className="glass-input"
@@ -98,17 +99,17 @@ export default function Login() {
                   placeholder="mi-restaurante"
                 />
               </div>
-              <p className="text-xs text-white/50 mt-1.5">
-                Deja vacío para login general
+              <p className="input-hint">
+                Deja vacio para login general
               </p>
             </div>
           )}
 
-          {/* Input Email */}
-          <div>
-            <label className="glass-label">Email</label>
+          {/* Email input */}
+          <div className="input-group">
+            <label className="label">Email</label>
             <div className="relative">
-              <EnvelopeIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/50" />
+              <EnvelopeIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-text-tertiary" />
               <input
                 type="email"
                 className="glass-input"
@@ -123,11 +124,11 @@ export default function Login() {
             </div>
           </div>
 
-          {/* Input Contraseña */}
-          <div>
-            <label className="glass-label">Contraseña</label>
+          {/* Password input */}
+          <div className="input-group">
+            <label className="label">Contrasena</label>
             <div className="relative">
-              <LockClosedIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/50" />
+              <LockClosedIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-text-tertiary" />
               <input
                 type={showPassword ? 'text' : 'password'}
                 className="glass-input pr-12"
@@ -136,14 +137,14 @@ export default function Login() {
                   setPassword(e.target.value)
                   setError(null)
                 }}
-                placeholder="••••••••"
+                placeholder="********"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/80 transition-colors"
-                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary transition-colors"
+                aria-label={showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'}
                 aria-pressed={showPassword}
               >
                 {showPassword ? (
@@ -155,7 +156,7 @@ export default function Login() {
             </div>
           </div>
 
-          {/* Botón Submit */}
+          {/* Submit button */}
           <button
             type="submit"
             className="btn-glass-primary mt-6"
@@ -163,22 +164,7 @@ export default function Login() {
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
-                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                    fill="none"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  />
-                </svg>
+                <div className="spinner spinner-sm border-white/30 border-t-white" />
                 Ingresando...
               </span>
             ) : (
@@ -187,22 +173,24 @@ export default function Login() {
           </button>
         </form>
 
-        {/* Link registro */}
+        {/* Register link */}
         <div className="mt-6 text-center text-sm">
-          <p className="text-white/70">
-            ¿No tienes cuenta?{' '}
+          <p className="text-text-secondary">
+            No tienes cuenta?{' '}
             <Link to="/registro" className="glass-link font-medium">
               Registra tu restaurante
             </Link>
           </p>
         </div>
 
-        {/* Info de prueba */}
-        <div className="mt-6 glass-info-box text-sm text-white/60">
-          <p className="font-medium text-white/80 mb-2">Usuarios de prueba:</p>
-          <p>Restaurante: restaurante-demo</p>
-          <p>Admin: admin@demo.com / demo123</p>
-          <p>Mozo: mozo1@demo.com / demo123</p>
+        {/* Test credentials info */}
+        <div className="mt-6 glass-info-box">
+          <p className="font-medium text-text-primary mb-2">Usuarios de prueba:</p>
+          <div className="space-y-0.5 text-text-tertiary">
+            <p>Restaurante: restaurante-demo</p>
+            <p>Admin: admin@demo.com / demo123</p>
+            <p>Mozo: mozo1@demo.com / demo123</p>
+          </div>
         </div>
       </div>
     </div>

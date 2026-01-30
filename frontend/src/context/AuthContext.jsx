@@ -45,12 +45,16 @@ const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [usuario, setUsuario] = useState(null)
   const [tenant, setTenant] = useState(null)
+  const [suscripcion, setSuscripcion] = useState(null)
+  const [modoSoloLectura, setModoSoloLectura] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Restore user/tenant from localStorage (not token - that's in httpOnly cookie)
+    // Restore user/tenant/suscripcion from localStorage (not token - that's in httpOnly cookie)
     const usuarioGuardado = localStorage.getItem('usuario')
     const tenantGuardado = localStorage.getItem('tenant')
+    const suscripcionGuardada = localStorage.getItem('suscripcion')
+    const modoSoloLecturaGuardado = localStorage.getItem('modoSoloLectura')
 
     if (usuarioGuardado) {
       setUsuario(JSON.parse(usuarioGuardado))
@@ -58,23 +62,35 @@ export function AuthProvider({ children }) {
     if (tenantGuardado) {
       setTenant(JSON.parse(tenantGuardado))
     }
+    if (suscripcionGuardada) {
+      setSuscripcion(JSON.parse(suscripcionGuardada))
+    }
+    if (modoSoloLecturaGuardado) {
+      setModoSoloLectura(JSON.parse(modoSoloLecturaGuardado))
+    }
     setLoading(false)
   }, [])
 
   const login = useCallback(async (email, password, slug = undefined, options = {}) => {
     const response = await api.post('/auth/login', { email, password, slug }, options)
-    const { usuario, tenant } = response.data
+    const { usuario, tenant, suscripcion: suscripcionData, modoSoloLectura: soloLectura } = response.data
 
     // Token is automatically set as httpOnly cookie by the backend
-    // Store only user/tenant info in localStorage for quick access
+    // Store only user/tenant/suscripcion info in localStorage for quick access
     localStorage.setItem('usuario', JSON.stringify(usuario))
     if (tenant) {
       localStorage.setItem('tenant', JSON.stringify(tenant))
       setTenant(tenant)
     }
+    if (suscripcionData) {
+      localStorage.setItem('suscripcion', JSON.stringify(suscripcionData))
+      setSuscripcion(suscripcionData)
+    }
+    localStorage.setItem('modoSoloLectura', JSON.stringify(soloLectura ?? false))
+    setModoSoloLectura(soloLectura ?? false)
 
     setUsuario(usuario)
-    return usuario
+    return { usuario, suscripcion: suscripcionData, modoSoloLectura: soloLectura }
   }, [])
 
   const logout = useCallback(async () => {
@@ -89,8 +105,32 @@ export function AuthProvider({ children }) {
     // Clear localStorage and state
     localStorage.removeItem('usuario')
     localStorage.removeItem('tenant')
+    localStorage.removeItem('suscripcion')
+    localStorage.removeItem('modoSoloLectura')
     setUsuario(null)
     setTenant(null)
+    setSuscripcion(null)
+    setModoSoloLectura(false)
+  }, [])
+
+  // Refresh subscription status (call after subscribing or to check current status)
+  const refrescarSuscripcion = useCallback(async () => {
+    try {
+      const response = await api.get('/auth/perfil')
+      const { suscripcion: suscripcionData, modoSoloLectura: soloLectura } = response.data
+
+      if (suscripcionData) {
+        localStorage.setItem('suscripcion', JSON.stringify(suscripcionData))
+        setSuscripcion(suscripcionData)
+      }
+      localStorage.setItem('modoSoloLectura', JSON.stringify(soloLectura ?? false))
+      setModoSoloLectura(soloLectura ?? false)
+
+      return { suscripcion: suscripcionData, modoSoloLectura: soloLectura }
+    } catch (error) {
+      console.error('Error refreshing subscription:', error)
+      throw error
+    }
   }, [])
 
   const value = useMemo(() => {
@@ -101,11 +141,22 @@ export function AuthProvider({ children }) {
     const esDelivery = usuario?.rol === 'DELIVERY' || esAdmin
     const esSuperAdmin = usuario?.rol === 'SUPER_ADMIN'
 
+    // Determine subscription status
+    const suscripcionActiva = suscripcion?.estado === 'ACTIVA'
+    const suscripcionPendiente = suscripcion?.estado === 'PENDIENTE' || !suscripcion
+    const suscripcionMorosa = suscripcion?.estado === 'MOROSA'
+
     return {
       usuario,
       tenant,
+      suscripcion,
+      modoSoloLectura,
+      suscripcionActiva,
+      suscripcionPendiente,
+      suscripcionMorosa,
       login,
       logout,
+      refrescarSuscripcion,
       loading,
       esAdmin,
       esMozo,
@@ -114,7 +165,7 @@ export function AuthProvider({ children }) {
       esDelivery,
       esSuperAdmin
     }
-  }, [usuario, tenant, login, logout, loading])
+  }, [usuario, tenant, suscripcion, modoSoloLectura, login, logout, refrescarSuscripcion, loading])
 
   return (
     <AuthContext.Provider value={value}>

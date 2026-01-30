@@ -80,13 +80,26 @@ export default function Empleados() {
   }
 
   if (loading && empleados.length === 0) {
-    return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div></div>
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="spinner spinner-lg" />
+      </div>
+    )
+  }
+
+  const getRolBadge = (rol) => {
+    switch (rol) {
+      case 'COCINERO': return 'badge-warning'
+      case 'MOZO': return 'badge-info'
+      case 'CAJERO': return 'badge-success'
+      default: return 'badge-info'
+    }
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Empleados</h1>
+        <h1 className="text-heading-1">Empleados</h1>
         <button
           onClick={() => { resetForm(); setShowModal(true) }}
           className="btn btn-primary flex items-center gap-2"
@@ -97,48 +110,44 @@ export default function Empleados() {
       </div>
 
       <div className="card overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+        <table className="table">
+          <thead>
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">DNI</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rol</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tarifa/Hora</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
+              <th>Nombre</th>
+              <th>DNI</th>
+              <th>Rol</th>
+              <th>Tarifa/Hora</th>
+              <th>Estado</th>
+              <th className="text-right">Acciones</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody>
             {empleados.map((empleado) => (
               <tr key={empleado.id}>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="font-medium text-gray-900">{empleado.nombre} {empleado.apellido}</div>
-                  <div className="text-sm text-gray-500">{empleado.telefono}</div>
+                <td>
+                  <div className="font-medium text-text-primary">{empleado.nombre} {empleado.apellido}</div>
+                  <div className="text-sm text-text-tertiary">{empleado.telefono}</div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-gray-500">{empleado.dni}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 text-xs rounded-full ${
-                    empleado.rol === 'COCINERO' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'
-                  }`}>
+                <td className="text-text-secondary">{empleado.dni}</td>
+                <td>
+                  <span className={`badge ${getRolBadge(empleado.rol)}`}>
                     {empleado.rol}
                   </span>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-gray-900">
+                <td className="text-text-primary">
                   ${parseFloat(empleado.tarifaHora).toLocaleString('es-AR')}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 text-xs rounded-full ${
-                    empleado.activo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                  }`}>
+                <td>
+                  <span className={`badge ${empleado.activo ? 'badge-success' : 'badge-error'}`}>
                     {empleado.activo ? 'Activo' : 'Inactivo'}
                   </span>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right space-x-2">
+                <td className="text-right space-x-2">
                   <button
                     onClick={() => handleEdit(empleado)}
                     type="button"
                     aria-label={`Editar empleado: ${empleado.nombre} ${empleado.apellido}`}
-                    className="text-primary-600 hover:text-primary-800"
+                    className="text-primary-500 hover:text-primary-600 transition-colors"
                   >
                     <PencilIcon className="w-5 h-5" />
                   </button>
@@ -146,7 +155,7 @@ export default function Empleados() {
                     onClick={() => handleDelete(empleado.id)}
                     type="button"
                     aria-label={`Desactivar empleado: ${empleado.nombre} ${empleado.apellido}`}
-                    className="text-red-600 hover:text-red-800"
+                    className="text-error-500 hover:text-error-600 transition-colors"
                   >
                     <TrashIcon className="w-5 h-5" />
                   </button>
@@ -159,9 +168,9 @@ export default function Empleados() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
-            <h2 className="text-xl font-bold mb-4">
+        <div className="modal-overlay">
+          <div className="modal">
+            <h2 className="text-heading-3 mb-4">
               {editando ? 'Editar Empleado' : 'Nuevo Empleado'}
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -236,7 +245,7 @@ export default function Empleados() {
                   />
                 </div>
               </div>
-              <div className="flex gap-3 pt-4">
+              <div className="modal-footer">
                 <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary flex-1">
                   Cancelar
                 </button>

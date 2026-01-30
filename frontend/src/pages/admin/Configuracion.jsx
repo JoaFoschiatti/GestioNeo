@@ -236,7 +236,7 @@ export default function Configuracion() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+        <div className="spinner spinner-lg" />
       </div>
     )
   }
@@ -247,15 +247,13 @@ export default function Configuracion() {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+        <h1 className="text-heading-1 flex items-center gap-2">
           <Cog6ToothIcon className="w-7 h-7" />
           Configuracion del Negocio
         </h1>
 
         {message && (
-          <div className={`px-4 py-2 rounded-lg flex items-center gap-2 ${
-            message.tipo === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
-          }`}>
+          <div className={`alert ${message.tipo === 'error' ? 'alert-error' : 'alert-success'}`}>
             {message.tipo === 'error' ? (
               <XCircleIcon className="w-5 h-5" />
             ) : (
@@ -268,7 +266,7 @@ export default function Configuracion() {
 
       {/* Datos del Negocio (Tenant) */}
       <div className="card mb-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <h2 className="text-heading-3 mb-4 flex items-center gap-2">
           <BuildingStorefrontIcon className="w-5 h-5" />
           Datos del Negocio
         </h2>
@@ -276,7 +274,7 @@ export default function Configuracion() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="tenant-nombre">
+              <label className="label" htmlFor="tenant-nombre">
                 Nombre del Negocio *
               </label>
               <input
@@ -290,11 +288,11 @@ export default function Configuracion() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="tenant-slug">
+              <label className="label" htmlFor="tenant-slug">
                 URL del Menu (slug) *
               </label>
               <div className="flex">
-                <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm">
+                <span className="inline-flex items-center px-3 rounded-l-xl border border-r-0 border-border-default bg-surface-hover text-text-tertiary text-sm">
                   {frontendUrl}/menu/
                 </span>
                 <input
@@ -303,21 +301,21 @@ export default function Configuracion() {
                   value={tenant.slug}
                   onChange={(e) => handleTenantChange('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
                   onBlur={handleSlugBlur}
-                  className={`input rounded-l-none flex-1 ${slugError ? 'border-red-500 focus:ring-red-500' : ''}`}
+                  className={`input rounded-l-none flex-1 ${slugError ? 'border-error-500 focus:ring-error-500' : ''}`}
                   placeholder="mi-restaurante"
                 />
               </div>
               {slugChecking && (
-                <p className="text-xs text-gray-500 mt-1">Verificando disponibilidad...</p>
+                <p className="input-hint">Verificando disponibilidad...</p>
               )}
               {slugError && (
-                <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                <p className="text-xs text-error-600 mt-1 flex items-center gap-1">
                   <ExclamationTriangleIcon className="w-3 h-3" />
                   {slugError}
                 </p>
               )}
               {!slugError && tenant.slug && !slugChecking && (
-                <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                <p className="text-xs text-success-600 mt-1 flex items-center gap-1">
                   <CheckCircleIcon className="w-3 h-3" />
                   URL disponible
                 </p>
@@ -327,7 +325,7 @@ export default function Configuracion() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="tenant-email">
+              <label className="label" htmlFor="tenant-email">
                 Email de Contacto
               </label>
               <input
@@ -341,7 +339,7 @@ export default function Configuracion() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="tenant-telefono">
+              <label className="label" htmlFor="tenant-telefono">
                 Telefono
               </label>
               <input
@@ -356,7 +354,7 @@ export default function Configuracion() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="tenant-direccion">
+            <label className="label" htmlFor="tenant-direccion">
               Direccion
             </label>
             <input
@@ -371,7 +369,7 @@ export default function Configuracion() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="tenant-color-primario">
+              <label className="label" htmlFor="tenant-color-primario">
                 Color Primario
               </label>
               <div className="flex items-center gap-2">
@@ -394,7 +392,7 @@ export default function Configuracion() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="tenant-color-secundario">
+              <label className="label" htmlFor="tenant-color-secundario">
                 Color Secundario
               </label>
               <div className="flex items-center gap-2">
@@ -418,8 +416,8 @@ export default function Configuracion() {
           </div>
 
           {/* Link al menu publico */}
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <div className="flex items-center gap-2 text-blue-700">
+          <div className="bg-info-50 p-4 rounded-xl">
+            <div className="flex items-center gap-2 text-info-700">
               <LinkIcon className="w-5 h-5" />
               <span className="font-medium">Link del Menu Publico:</span>
             </div>
@@ -427,11 +425,11 @@ export default function Configuracion() {
               href={`${frontendUrl}/menu/${tenant.slug}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-600 hover:underline text-sm mt-1 block"
+              className="text-info-600 hover:underline text-sm mt-1 block"
             >
               {frontendUrl}/menu/{tenant.slug}
             </a>
-            <p className="text-xs text-blue-600 mt-2">
+            <p className="text-xs text-info-600 mt-2">
               Comparte este link con tus clientes para que vean el menu y hagan pedidos
             </p>
           </div>
@@ -450,7 +448,7 @@ export default function Configuracion() {
 
       {/* Estado del Local */}
       <div className="card mb-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <h2 className="text-heading-3 mb-4 flex items-center gap-2">
           <ClockIcon className="w-5 h-5" />
           Estado del Local
         </h2>
@@ -460,8 +458,8 @@ export default function Configuracion() {
             onClick={toggleTiendaAbierta}
             className={`flex-1 py-4 rounded-xl font-bold text-lg transition-all ${
               config.tienda_abierta
-                ? 'bg-green-500 hover:bg-green-600 text-white'
-                : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                ? 'bg-success-500 hover:bg-success-600 text-white'
+                : 'bg-surface-hover hover:bg-border-default text-text-secondary'
             }`}
           >
             {config.tienda_abierta ? 'ABIERTO' : 'CERRADO'}
@@ -470,7 +468,7 @@ export default function Configuracion() {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="config-horario-apertura">
+            <label className="label" htmlFor="config-horario-apertura">
               Horario de Apertura
             </label>
             <input
@@ -482,7 +480,7 @@ export default function Configuracion() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="config-horario-cierre">
+            <label className="label" htmlFor="config-horario-cierre">
               Horario de Cierre
             </label>
             <input
@@ -498,14 +496,14 @@ export default function Configuracion() {
 
       {/* Branding */}
       <div className="card mb-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <h2 className="text-heading-3 mb-4 flex items-center gap-2">
           <PhotoIcon className="w-5 h-5" />
           Branding
         </h2>
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="config-nombre-negocio">
+            <label className="label" htmlFor="config-nombre-negocio">
               Nombre para mostrar en el Menu
             </label>
             <input
@@ -516,13 +514,13 @@ export default function Configuracion() {
               className="input"
               placeholder="Mi Restaurante"
             />
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="input-hint">
               Se muestra en el menu publico. Si esta vacio, se usa el nombre del negocio.
             </p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="config-tagline">
+            <label className="label" htmlFor="config-tagline">
               Tagline / Slogan
             </label>
             <input
@@ -536,7 +534,7 @@ export default function Configuracion() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="config-banner">
+            <label className="label" htmlFor="config-banner">
               Banner del Menu Publico
             </label>
             <div className="flex items-center gap-4">
@@ -558,18 +556,18 @@ export default function Configuracion() {
                   <img
                     src={`${backendUrl}${config.banner_imagen}`}
                     alt="Banner preview"
-                    className="h-16 w-32 object-cover rounded-lg border"
+                    className="h-16 w-32 object-cover rounded-xl border border-border-default"
                   />
                   <button
                     onClick={() => handleChange('banner_imagen', '')}
-                    className="text-red-500 hover:text-red-700 text-sm"
+                    className="text-error-500 hover:text-error-600 text-sm transition-colors"
                   >
                     Quitar
                   </button>
                 </div>
               )}
             </div>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="input-hint">
               Recomendado: 1200x400 px, JPG o PNG, max 10MB
             </p>
           </div>
@@ -578,7 +576,7 @@ export default function Configuracion() {
 
       {/* Delivery */}
       <div className="card mb-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <h2 className="text-heading-3 mb-4 flex items-center gap-2">
           <TruckIcon className="w-5 h-5" />
           Delivery
         </h2>
@@ -591,11 +589,11 @@ export default function Configuracion() {
               onChange={(e) => handleChange('delivery_habilitado', e.target.checked)}
               className="w-5 h-5 rounded text-primary-500 focus:ring-primary-500"
             />
-            <span className="font-medium text-gray-700">Delivery habilitado</span>
+            <span className="font-medium text-text-primary">Delivery habilitado</span>
           </label>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="config-costo-delivery">
+            <label className="label" htmlFor="config-costo-delivery">
               Costo de Envio ($)
             </label>
             <input
@@ -610,7 +608,7 @@ export default function Configuracion() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="config-direccion-retiro">
+            <label className="label" htmlFor="config-direccion-retiro">
               Direccion para Retiro
             </label>
             <input
@@ -624,7 +622,7 @@ export default function Configuracion() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="config-whatsapp">
+            <label className="label" htmlFor="config-whatsapp">
               WhatsApp (opcional)
             </label>
             <input
@@ -635,7 +633,7 @@ export default function Configuracion() {
               className="input"
               placeholder="5411XXXXXXXX"
             />
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="input-hint">
               Codigo de pais + numero sin espacios ni guiones
             </p>
           </div>
@@ -644,7 +642,7 @@ export default function Configuracion() {
 
       {/* Pagos */}
       <div className="mb-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <h2 className="text-heading-3 mb-4 flex items-center gap-2">
           <CreditCardIcon className="w-5 h-5" />
           Metodos de Pago
         </h2>
@@ -656,34 +654,34 @@ export default function Configuracion() {
           />
 
           {/* Efectivo */}
-          <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-            <div className="bg-gradient-to-r from-green-500 to-green-600 p-4 text-white">
-              <div className="flex items-center gap-3">
-                <BanknotesIcon className="w-8 h-8" />
-                <div>
-                  <h3 className="font-bold text-lg">Efectivo</h3>
-                  <p className="text-green-100 text-sm">Pago en efectivo al recibir</p>
-                </div>
+          <div className="card">
+            <div className="flex items-center gap-3 pb-4 mb-4 border-b border-border-subtle">
+              <div className="p-2 bg-success-100 rounded-xl">
+                <BanknotesIcon className="w-6 h-6 text-success-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-text-primary">Efectivo</h3>
+                <p className="text-text-secondary text-sm">Pago en efectivo al recibir</p>
               </div>
             </div>
 
-            <div className="p-6">
+            <div>
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={config.efectivo_enabled}
                   onChange={(e) => handleChange('efectivo_enabled', e.target.checked)}
-                  className="w-5 h-5 rounded text-green-500 focus:ring-green-500"
+                  className="w-5 h-5 rounded text-success-500 focus:ring-success-500"
                 />
-                <span className="font-medium text-gray-700">Aceptar pagos en efectivo</span>
+                <span className="font-medium text-text-primary">Aceptar pagos en efectivo</span>
               </label>
 
-              <p className="text-sm text-gray-600 mt-4">
+              <p className="text-sm text-text-secondary mt-4">
                 Los clientes podran elegir pagar en efectivo al momento de recibir su pedido (delivery) o al retirar en el local.
               </p>
 
               {!config.efectivo_enabled && !config.mercadopago_enabled && (
-                <div className="mt-4 bg-amber-50 text-amber-700 p-3 rounded-lg text-sm">
+                <div className="alert alert-warning mt-4">
                   Debes habilitar al menos un metodo de pago para recibir pedidos.
                 </div>
               )}

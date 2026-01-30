@@ -98,13 +98,17 @@ export default function Ingredientes() {
   const stockBajo = (ing) => parseFloat(ing.stockActual) <= parseFloat(ing.stockMinimo)
 
   if (loading && ingredientes.length === 0) {
-    return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div></div>
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="spinner spinner-lg" />
+      </div>
+    )
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Ingredientes / Stock</h1>
+        <h1 className="text-heading-1">Ingredientes / Stock</h1>
         <button
           onClick={() => { resetForm(); setShowModal(true) }}
           className="btn btn-primary flex items-center gap-2"
@@ -115,55 +119,53 @@ export default function Ingredientes() {
       </div>
 
       <div className="card overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+        <table className="table">
+          <thead>
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ingrediente</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock Actual</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock Mínimo</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Costo Unit.</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
+              <th>Ingrediente</th>
+              <th>Stock Actual</th>
+              <th>Stock Mínimo</th>
+              <th>Costo Unit.</th>
+              <th>Estado</th>
+              <th className="text-right">Acciones</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody>
             {ingredientes.map((ing) => (
-              <tr key={ing.id} className={stockBajo(ing) ? 'bg-red-50' : ''}>
-                <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{ing.nombre}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-gray-900">
+              <tr key={ing.id} className={stockBajo(ing) ? 'bg-error-50' : ''}>
+                <td className="font-medium text-text-primary">{ing.nombre}</td>
+                <td className="text-text-primary">
                   {parseFloat(ing.stockActual).toFixed(2)} {ing.unidad}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-gray-500">
+                <td className="text-text-secondary">
                   {parseFloat(ing.stockMinimo).toFixed(2)} {ing.unidad}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-gray-500">
+                <td className="text-text-secondary">
                   {ing.costo ? `$${parseFloat(ing.costo).toLocaleString('es-AR')}` : '-'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 text-xs rounded-full ${
-                    stockBajo(ing) ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
-                  }`}>
+                <td>
+                  <span className={`badge ${stockBajo(ing) ? 'badge-error' : 'badge-success'}`}>
                     {stockBajo(ing) ? 'Stock Bajo' : 'OK'}
                   </span>
                 </td>
-	                <td className="px-6 py-4 whitespace-nowrap text-right space-x-2">
-	                  <button
-	                    aria-label={`Movimiento de stock: ${ing.nombre}`}
-	                    onClick={() => abrirMovimiento(ing)}
-	                    className="text-green-600 hover:text-green-800"
-	                    title="Registrar movimiento"
-	                  >
+                <td className="text-right space-x-2">
+                  <button
+                    aria-label={`Movimiento de stock: ${ing.nombre}`}
+                    onClick={() => abrirMovimiento(ing)}
+                    className="text-success-500 hover:text-success-600 transition-colors"
+                    title="Registrar movimiento"
+                  >
                     <ArrowUpIcon className="w-5 h-5 inline" />
                     <ArrowDownIcon className="w-5 h-5 inline" />
                   </button>
-	                  <button
-	                    aria-label={`Editar ingrediente: ${ing.nombre}`}
-	                    onClick={() => handleEdit(ing)}
-	                    className="text-primary-600 hover:text-primary-800"
-	                  >
-	                    <PencilIcon className="w-5 h-5" />
-	                  </button>
-	                </td>
+                  <button
+                    aria-label={`Editar ingrediente: ${ing.nombre}`}
+                    onClick={() => handleEdit(ing)}
+                    className="text-primary-500 hover:text-primary-600 transition-colors"
+                  >
+                    <PencilIcon className="w-5 h-5" />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -172,9 +174,9 @@ export default function Ingredientes() {
 
       {/* Modal Ingrediente */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
-            <h2 className="text-xl font-bold mb-4">
+        <div className="modal-overlay">
+          <div className="modal">
+            <h2 className="text-heading-3 mb-4">
               {editando ? 'Editar Ingrediente' : 'Nuevo Ingrediente'}
             </h2>
 	            <form onSubmit={handleSubmit} className="space-y-4">
@@ -240,7 +242,7 @@ export default function Ingredientes() {
 	                  />
 	                </div>
 	              </div>
-              <div className="flex gap-3 pt-4">
+              <div className="modal-footer">
                 <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary flex-1">
                   Cancelar
                 </button>
@@ -255,9 +257,9 @@ export default function Ingredientes() {
 
       {/* Modal Movimiento */}
       {showMovModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
-            <h2 className="text-xl font-bold mb-4">
+        <div className="modal-overlay">
+          <div className="modal">
+            <h2 className="text-heading-3 mb-4">
               Movimiento de Stock: {ingredienteSeleccionado?.nombre}
             </h2>
 	            <form onSubmit={handleMovimiento} className="space-y-4">
@@ -296,7 +298,7 @@ export default function Ingredientes() {
 	                  placeholder="Compra proveedor, merma, etc."
 	                />
 	              </div>
-              <div className="flex gap-3 pt-4">
+              <div className="modal-footer">
                 <button type="button" onClick={() => setShowMovModal(false)} className="btn btn-secondary flex-1">
                   Cancelar
                 </button>

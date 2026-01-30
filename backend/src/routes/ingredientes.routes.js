@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const ingredientesController = require('../controllers/ingredientes.controller');
 const { verificarToken, esAdmin } = require('../middlewares/auth.middleware');
-const { setTenantFromAuth } = require('../middlewares/tenant.middleware');
+const { setTenantFromAuth, bloquearSiSoloLectura } = require('../middlewares/tenant.middleware');
 const { validate } = require('../middlewares/validate.middleware');
 const { asyncHandler } = require('../utils/async-handler');
 const {
@@ -20,16 +20,18 @@ router.use(setTenantFromAuth);
 router.get('/', validate({ query: listarQuerySchema }), asyncHandler(ingredientesController.listar));
 router.get('/alertas', asyncHandler(ingredientesController.alertasStock));
 router.get('/:id', validate({ params: idParamSchema }), asyncHandler(ingredientesController.obtener));
-router.post('/', esAdmin, validate({ body: crearIngredienteBodySchema }), asyncHandler(ingredientesController.crear));
-router.put('/:id', esAdmin, validate({ params: idParamSchema, body: actualizarIngredienteBodySchema }), asyncHandler(ingredientesController.actualizar));
+router.post('/', bloquearSiSoloLectura, esAdmin, validate({ body: crearIngredienteBodySchema }), asyncHandler(ingredientesController.crear));
+router.put('/:id', bloquearSiSoloLectura, esAdmin, validate({ params: idParamSchema, body: actualizarIngredienteBodySchema }), asyncHandler(ingredientesController.actualizar));
 router.post(
   '/:id/movimiento',
+  bloquearSiSoloLectura,
   esAdmin,
   validate({ params: idParamSchema, body: registrarMovimientoBodySchema }),
   asyncHandler(ingredientesController.registrarMovimiento)
 );
 router.post(
   '/:id/ajuste',
+  bloquearSiSoloLectura,
   esAdmin,
   validate({ params: idParamSchema, body: ajustarStockBodySchema }),
   asyncHandler(ingredientesController.ajustarStock)

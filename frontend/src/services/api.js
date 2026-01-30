@@ -14,6 +14,7 @@ api.interceptors.response.use(
   response => response,
   error => {
     const message = error.response?.data?.error?.message || 'Error de conexión'
+    const errorCode = error.response?.data?.error?.code
     const skipToast = Boolean(error.config?.skipToast)
 
     // Si es error 401 y no es la ruta de login, redirigir
@@ -21,7 +22,20 @@ api.interceptors.response.use(
       // Clear localStorage user/tenant info
       localStorage.removeItem('usuario')
       localStorage.removeItem('tenant')
+      localStorage.removeItem('suscripcion')
+      localStorage.removeItem('modoSoloLectura')
       window.location.href = '/login'
+      return Promise.reject(error)
+    }
+
+    // Manejar error de suscripcion requerida
+    if (errorCode === 'SUBSCRIPTION_REQUIRED') {
+      if (!skipToast) {
+        toast.error('Tu suscripcion no esta activa. Activa tu plan para realizar esta accion.', {
+          duration: 5000,
+          icon: '🔒'
+        })
+      }
       return Promise.reject(error)
     }
 

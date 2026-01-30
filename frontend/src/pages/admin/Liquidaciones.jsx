@@ -83,13 +83,17 @@ export default function Liquidaciones() {
   }
 
   if (loading && liquidaciones.length === 0 && empleados.length === 0) {
-    return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div></div>
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="spinner spinner-lg" />
+      </div>
+    )
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Liquidaciones de Sueldos</h1>
+        <h1 className="text-heading-1">Liquidaciones de Sueldos</h1>
         <button
           onClick={() => setShowModal(true)}
           className="btn btn-primary flex items-center gap-2"
@@ -100,47 +104,45 @@ export default function Liquidaciones() {
       </div>
 
       <div className="card overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+        <table className="table">
+          <thead>
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Empleado</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Período</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Horas</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
+              <th>Empleado</th>
+              <th>Período</th>
+              <th>Horas</th>
+              <th>Total</th>
+              <th>Estado</th>
+              <th className="text-right">Acciones</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody>
             {liquidaciones.map((liq) => (
               <tr key={liq.id}>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="font-medium text-gray-900">
+                <td>
+                  <div className="font-medium text-text-primary">
                     {liq.empleado?.nombre} {liq.empleado?.apellido}
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-gray-500">
+                <td className="text-text-secondary">
                   {new Date(liq.periodoDesde).toLocaleDateString('es-AR')} -
                   {new Date(liq.periodoHasta).toLocaleDateString('es-AR')}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-gray-500">
+                <td className="text-text-secondary">
                   {parseFloat(liq.horasTotales).toFixed(1)}h
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
+                <td className="font-medium text-text-primary">
                   ${parseFloat(liq.totalPagar).toLocaleString('es-AR')}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 text-xs rounded-full ${
-                    liq.pagado ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                  }`}>
+                <td>
+                  <span className={`badge ${liq.pagado ? 'badge-success' : 'badge-warning'}`}>
                     {liq.pagado ? 'Pagado' : 'Pendiente'}
                   </span>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right">
+                <td className="text-right">
                   {!liq.pagado && (
                     <button
                       onClick={() => marcarPagada(liq.id)}
-                      className="text-green-600 hover:text-green-800"
+                      className="text-success-500 hover:text-success-600 transition-colors"
                       title="Marcar como pagada"
                       aria-label={`Marcar liquidación #${liq.id} como pagada`}
                     >
@@ -156,10 +158,10 @@ export default function Liquidaciones() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold mb-4">Nueva Liquidación</h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="modal-overlay">
+          <div className="modal modal-lg">
+            <h2 className="text-heading-3 mb-4">Nueva Liquidación</h2>
+            <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto flex-1">
               <div>
                 <label className="label" htmlFor="liquidacion-empleado">Empleado</label>
                 <select
@@ -218,17 +220,17 @@ export default function Liquidaciones() {
               </div>
 
               {empleadoSeleccionado && horas > 0 && (
-                <div className="p-4 bg-gray-50 rounded-lg space-y-2">
-                  <div className="flex justify-between">
+                <div className="p-4 bg-surface-hover rounded-xl space-y-2">
+                  <div className="flex justify-between text-text-secondary">
                     <span>Horas trabajadas:</span>
-                    <span className="font-medium">{horas}h</span>
+                    <span className="font-medium text-text-primary">{horas}h</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between text-text-secondary">
                     <span>Tarifa/hora:</span>
-                    <span className="font-medium">${tarifaHora.toLocaleString('es-AR')}</span>
+                    <span className="font-medium text-text-primary">${tarifaHora.toLocaleString('es-AR')}</span>
                   </div>
-                  <hr />
-                  <div className="flex justify-between text-lg font-bold">
+                  <hr className="border-border-default" />
+                  <div className="flex justify-between text-lg font-bold text-text-primary">
                     <span>Subtotal:</span>
                     <span>${subtotal.toLocaleString('es-AR')}</span>
                   </div>
@@ -270,15 +272,15 @@ export default function Liquidaciones() {
               </div>
 
               {horas > 0 && (parseFloat(form.descuentos) > 0 || parseFloat(form.adicionales) > 0) && (
-                <div className="p-4 bg-primary-50 rounded-lg">
-                  <div className="flex justify-between text-lg font-bold text-primary-700">
+                <div className="p-4 bg-primary-50 rounded-xl">
+                  <div className="flex justify-between text-lg font-bold text-primary-600">
                     <span>TOTAL A PAGAR:</span>
                     <span>${totalPagar.toLocaleString('es-AR')}</span>
                   </div>
                 </div>
               )}
 
-              <div className="flex gap-3 pt-4">
+              <div className="modal-footer">
                 <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary flex-1">
                   Cancelar
                 </button>

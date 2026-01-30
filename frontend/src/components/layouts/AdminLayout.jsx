@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import SubscriptionBanner from '../SubscriptionBanner'
 import {
   HomeIcon,
   UsersIcon,
@@ -16,11 +17,11 @@ import {
   Bars3Icon,
   XMarkIcon,
   ArrowRightOnRectangleIcon,
-  UserCircleIcon,
   Cog6ToothIcon,
   CalendarDaysIcon,
   AdjustmentsHorizontalIcon,
-  CreditCardIcon
+  CreditCardIcon,
+  SparklesIcon
 } from '@heroicons/react/24/outline'
 
 const navigation = [
@@ -43,6 +44,7 @@ const navigation = [
   { name: 'Reportes', href: '/reportes', icon: ChartBarIcon, roles: ['ADMIN', 'CAJERO'] },
   { name: 'Cierre de Caja', href: '/cierre-caja', icon: BanknotesIcon, roles: ['ADMIN', 'CAJERO'] },
   { name: 'Configuración', href: '/configuracion', icon: Cog6ToothIcon, roles: ['ADMIN'] },
+  { name: 'Suscripción', href: '/suscripcion', icon: SparklesIcon, roles: ['ADMIN'] },
 ]
 
 export default function AdminLayout() {
@@ -60,21 +62,27 @@ export default function AdminLayout() {
   )
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Sidebar móvil */}
+    <div className="min-h-screen bg-canvas">
+      {/* Mobile sidebar overlay */}
       <div className={`fixed inset-0 z-50 lg:hidden ${sidebarOpen ? '' : 'hidden'}`}>
-        <div className="fixed inset-0 bg-gray-900/80" onClick={() => setSidebarOpen(false)} />
-        <div className="fixed inset-y-0 left-0 w-72 bg-white shadow-xl flex flex-col">
-          <div className="flex items-center justify-between px-6 py-4 border-b">
-            <h1 className="text-xl font-bold text-primary-600">GestioNeo</h1>
-            <button onClick={() => setSidebarOpen(false)}>
-              <XMarkIcon className="w-6 h-6 text-gray-500" />
+        <div
+          className="fixed inset-0 bg-text-primary/50 backdrop-blur-sm"
+          onClick={() => setSidebarOpen(false)}
+        />
+        <div className="fixed inset-y-0 left-0 w-72 bg-surface shadow-xl flex flex-col">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle">
+            <h1 className="text-xl font-semibold text-text-primary">GestioNeo</h1>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="p-1 rounded-lg hover:bg-surface-hover transition-colors"
+            >
+              <XMarkIcon className="w-5 h-5 text-text-secondary" />
             </button>
           </div>
           <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
             {filteredNav.map((item, i) =>
               item.divider ? (
-                <hr key={i} className="my-4 border-gray-200" />
+                <div key={i} className="divider" />
               ) : (
                 <NavLink
                   key={item.href}
@@ -93,16 +101,19 @@ export default function AdminLayout() {
         </div>
       </div>
 
-      {/* Sidebar desktop */}
+      {/* Desktop sidebar */}
       <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-72 lg:flex-col">
-        <div className="flex flex-col flex-grow overflow-hidden bg-white border-r border-gray-200">
-          <div className="flex items-center px-6 py-5 border-b">
-            <h1 className="text-2xl font-bold text-primary-600">GestioNeo</h1>
+        <div className="flex flex-col flex-grow overflow-hidden bg-surface border-r border-border-subtle">
+          {/* Logo */}
+          <div className="flex items-center px-6 py-5 border-b border-border-subtle">
+            <h1 className="text-xl font-semibold text-text-primary tracking-tight">GestioNeo</h1>
           </div>
+
+          {/* Navigation */}
           <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
             {filteredNav.map((item, i) =>
               item.divider ? (
-                <hr key={i} className="my-4 border-gray-200" />
+                <div key={i} className="divider" />
               ) : (
                 <NavLink
                   key={item.href}
@@ -117,19 +128,23 @@ export default function AdminLayout() {
               )
             )}
           </nav>
-          <div className="p-4 border-t">
-            <div className="flex items-center gap-3 px-4 py-3">
-              <UserCircleIcon className="w-10 h-10 text-gray-400" />
+
+          {/* User section */}
+          <div className="p-4 border-t border-border-subtle">
+            <div className="flex items-center gap-3 px-4 py-3 mb-2">
+              <div className="avatar avatar-md">
+                {usuario?.nombre?.charAt(0)?.toUpperCase() || 'U'}
+              </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
+                <p className="text-sm font-medium text-text-primary truncate">
                   {usuario?.nombre}
                 </p>
-                <p className="text-xs text-gray-500">{usuario?.rol}</p>
+                <p className="text-xs text-text-tertiary">{usuario?.rol}</p>
               </div>
             </div>
             <button
               onClick={handleLogout}
-              className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg"
+              className="flex items-center gap-3 w-full px-4 py-2.5 text-sm font-medium text-error-600 hover:bg-error-50 rounded-lg transition-colors"
             >
               <ArrowRightOnRectangleIcon className="w-5 h-5" />
               Cerrar sesión
@@ -138,17 +153,23 @@ export default function AdminLayout() {
         </div>
       </div>
 
-      {/* Contenido principal */}
+      {/* Main content */}
       <div className="lg:pl-72">
-        {/* Header móvil */}
-        <div className="sticky top-0 z-40 flex items-center gap-4 px-4 py-4 bg-white border-b lg:hidden">
-          <button onClick={() => setSidebarOpen(true)}>
-            <Bars3Icon className="w-6 h-6 text-gray-600" />
+        {/* Subscription Banner */}
+        <SubscriptionBanner />
+
+        {/* Mobile header */}
+        <div className="sticky top-0 z-40 flex items-center gap-4 px-4 py-4 bg-surface border-b border-border-subtle lg:hidden">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-1 rounded-lg hover:bg-surface-hover transition-colors"
+          >
+            <Bars3Icon className="w-6 h-6 text-text-secondary" />
           </button>
-          <h1 className="text-lg font-semibold text-primary-600">GestioNeo</h1>
+          <h1 className="text-lg font-semibold text-text-primary">GestioNeo</h1>
         </div>
 
-        {/* Contenido */}
+        {/* Page content */}
         <main className="p-4 lg:p-8">
           <Outlet />
         </main>

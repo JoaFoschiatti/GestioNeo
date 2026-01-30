@@ -114,6 +114,8 @@ const setTenantFromAuth = async (req, res, next) => {
     // SUPER_ADMIN can access without tenant context
     if (req.usuario && req.usuario.rol === 'SUPER_ADMIN') {
       req.isSuperAdmin = true;
+      req.modoSoloLectura = false;  // Super admin nunca está en modo solo lectura
+      req.suscripcion = null;
       req.prisma = prisma; // Super admin uses unscoped prisma
       return next();
     }
@@ -144,6 +146,28 @@ const setTenantFromAuth = async (req, res, next) => {
     req.tenant = tenant;
     req.isSuperAdmin = false;
     req.prisma = getTenantPrisma(tenant.id);
+
+    // Verificar estado de suscripción (non-blocking - errors don't break auth)
+    try {
+      const suscripcion = await prisma.suscripcion.findUnique({
+        where: { tenantId: tenant.id },
+        select: { id: true, estado: true, fechaVencimiento: true, precioMensual: true }
+      });
+
+      const ahora = new Date();
+      const tieneAcceso = suscripcion &&
+        suscripcion.estado === 'ACTIVA' &&
+        suscripcion.fechaVencimiento &&
+        suscripcion.fechaVencimiento > ahora;
+
+      req.modoSoloLectura = !tieneAcceso;
+      req.suscripcion = suscripcion;
+    } catch (suscripcionError) {
+      // If subscription check fails, default to read-only mode but don't block the request
+      console.error('Error verificando suscripcion:', suscripcionError);
+      req.modoSoloLectura = true;
+      req.suscripcion = null;
+    }
 
     return next();
   } catch (error) {
@@ -271,10 +295,32 @@ const setTenantFromSlugHeader = async (req, _res, next) => {
   }
 };
 
+/**
+ * Bloquea operaciones de escritura si el tenant está en modo solo lectura.
+ *
+ * DEBE usarse después de setTenantFromAuth (que ya verifica la suscripción).
+ *
+ * Retorna error 403 con código SUBSCRIPTION_REQUIRED.
+ * El frontend puede usar este código para mostrar un CTA de suscripción.
+ */
+const bloquearSiSoloLectura = (req, res, next) => {
+  if (req.modoSoloLectura) {
+    return res.status(403).json({
+      error: {
+        code: 'SUBSCRIPTION_REQUIRED',
+        message: 'Tu suscripción no está activa. Solo puedes ver información pero no realizar cambios.',
+        action: 'subscribe'
+      }
+    });
+  }
+  return next();
+};
+
 module.exports = {
   resolveTenantFromSlug,
   setTenantFromAuth,
   requireSuperAdmin,
   optionalTenantFromSlug,
-  setTenantFromSlugHeader
+  setTenantFromSlugHeader,
+  bloquearSiSoloLectura
 };

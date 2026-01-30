@@ -110,7 +110,7 @@ export default function NuevoPedido() {
   if (loading && categorias.length === 0) {
     return (
       <div className="flex justify-center py-12">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+        <div className="spinner spinner-lg" />
       </div>
     )
   }
@@ -122,7 +122,7 @@ export default function NuevoPedido() {
       {/* Panel izquierdo: Productos */}
       <div className="flex-1 flex flex-col">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-xl font-bold text-gray-900">
+          <h1 className="text-heading-2">
             {tipo === 'MESA' ? `Nuevo Pedido - Mesa ${mesa?.numero}` : 'Nuevo Pedido'}
           </h1>
           {!mesaId && (
@@ -142,16 +142,12 @@ export default function NuevoPedido() {
         </div>
 
         {/* Categorías */}
-        <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+        <div className="tabs mb-4 overflow-x-auto pb-2">
           {categorias.map((cat) => (
             <button
               key={cat.id}
               onClick={() => setCategoriaActiva(cat.id)}
-              className={`px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${
-                categoriaActiva === cat.id
-                  ? 'bg-primary-500 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+              className={`tab whitespace-nowrap ${categoriaActiva === cat.id ? 'tab-active' : ''}`}
             >
               {cat.nombre}
             </button>
@@ -166,19 +162,19 @@ export default function NuevoPedido() {
                 key={producto.id}
                 onClick={() => handleClickProducto(producto)}
                 disabled={!producto.disponible}
-                className={`p-4 bg-white rounded-lg border text-left transition-shadow ${
+                className={`p-4 bg-surface rounded-xl border border-border-default text-left transition-all ${
                   producto.disponible
-                    ? 'hover:shadow-md'
+                    ? 'hover:shadow-card hover:-translate-y-0.5'
                     : 'opacity-50 cursor-not-allowed'
                 }`}
               >
-                <h3 className="font-medium text-gray-900 mb-1">{producto.nombre}</h3>
-                <p className="text-sm text-gray-500 line-clamp-2 mb-2">{producto.descripcion}</p>
+                <h3 className="font-medium text-text-primary mb-1">{producto.nombre}</h3>
+                <p className="text-sm text-text-tertiary line-clamp-2 mb-2">{producto.descripcion}</p>
                 <p className="text-primary-600 font-bold">
                   ${parseFloat(producto.precio).toLocaleString('es-AR')}
                 </p>
                 {!producto.disponible && (
-                  <span className="text-xs text-red-500 font-medium">No disponible</span>
+                  <span className="text-xs text-error-500 font-medium">No disponible</span>
                 )}
               </button>
             ))}
@@ -187,8 +183,8 @@ export default function NuevoPedido() {
       </div>
 
       {/* Panel derecho: Carrito */}
-      <div className="w-full lg:w-96 bg-white rounded-xl shadow-sm border p-4 flex flex-col">
-        <h2 className="font-bold text-gray-900 mb-4">Pedido</h2>
+      <div className="w-full lg:w-96 bg-surface rounded-2xl shadow-card border border-border-default p-4 flex flex-col">
+        <h2 className="text-heading-3 mb-4">Pedido</h2>
 
         {/* Datos cliente (delivery) */}
         {tipo === 'DELIVERY' && (
@@ -226,20 +222,20 @@ export default function NuevoPedido() {
         {/* Items del carrito */}
         <div className="flex-1 overflow-y-auto space-y-3">
           {carrito.length === 0 ? (
-            <p className="text-gray-400 text-center py-8">Agrega productos al pedido</p>
+            <p className="text-text-tertiary text-center py-8">Agrega productos al pedido</p>
           ) : (
             carrito.map((item) => (
-              <div key={item.itemId} className="bg-gray-50 rounded-lg p-3">
+              <div key={item.itemId} className="bg-surface-hover rounded-xl p-3">
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex-1">
-                    <h4 className="font-medium text-gray-900">{item.nombre}</h4>
+                    <h4 className="font-medium text-text-primary">{item.nombre}</h4>
                     {item.modificadores.length > 0 && (
                       <div className="mt-1">
                         {item.modificadores.map(mod => (
                           <span
                             key={mod.id}
                             className={`text-xs mr-2 ${
-                              mod.tipo === 'EXCLUSION' ? 'text-red-600' : 'text-green-600'
+                              mod.tipo === 'EXCLUSION' ? 'text-error-600' : 'text-success-600'
                             }`}
                           >
                             {mod.tipo === 'EXCLUSION' ? `- Sin ${mod.nombre}` : `+ Extra ${mod.nombre}`}
@@ -248,7 +244,7 @@ export default function NuevoPedido() {
                         ))}
                       </div>
                     )}
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-text-tertiary">
                       ${parseFloat(item.precio).toLocaleString('es-AR')} c/u
                     </p>
                   </div>
@@ -256,7 +252,7 @@ export default function NuevoPedido() {
                     onClick={() => eliminarDelCarrito(item.itemId)}
                     type="button"
                     aria-label={`Eliminar ${item.nombre} del carrito`}
-                    className="text-red-500 hover:text-red-700"
+                    className="text-error-500 hover:text-error-700"
                   >
                     <TrashIcon className="w-5 h-5" />
                   </button>
@@ -267,21 +263,21 @@ export default function NuevoPedido() {
                       onClick={() => actualizarCantidad(item.itemId, -1)}
                       type="button"
                       aria-label={`Reducir cantidad de ${item.nombre}`}
-                      className="p-1 bg-gray-200 rounded hover:bg-gray-300"
+                      className="p-1 bg-surface rounded hover:bg-border-default"
                     >
                       <MinusIcon className="w-4 h-4" />
                     </button>
-                    <span className="w-8 text-center font-medium">{item.cantidad}</span>
+                    <span className="w-8 text-center font-medium text-text-primary">{item.cantidad}</span>
                     <button
                       onClick={() => actualizarCantidad(item.itemId, 1)}
                       type="button"
                       aria-label={`Aumentar cantidad de ${item.nombre}`}
-                      className="p-1 bg-gray-200 rounded hover:bg-gray-300"
+                      className="p-1 bg-surface rounded hover:bg-border-default"
                     >
                       <PlusIcon className="w-4 h-4" />
                     </button>
                   </div>
-                  <span className="font-medium text-gray-900">
+                  <span className="font-medium text-text-primary">
                     ${(parseFloat(item.precio) * item.cantidad).toLocaleString('es-AR')}
                   </span>
                 </div>
@@ -311,9 +307,9 @@ export default function NuevoPedido() {
         </div>
 
         {/* Total y boton */}
-        <div className="mt-4 pt-4 border-t">
+        <div className="mt-4 pt-4 border-t border-border-default">
           <div className="flex justify-between text-xl font-bold mb-4">
-            <span>Total:</span>
+            <span className="text-text-primary">Total:</span>
             <span className="text-primary-600">${calcularTotal().toLocaleString('es-AR')}</span>
           </div>
           <button
@@ -329,11 +325,11 @@ export default function NuevoPedido() {
 
       {/* Modal de Modificadores */}
       {showModModal && productoSeleccionado && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+        <div className="modal-overlay">
+          <div className="modal">
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">
+                <h3 className="text-heading-3">
                   {productoSeleccionado.nombre}
                 </h3>
                 <p className="text-primary-600 font-bold">
@@ -344,36 +340,36 @@ export default function NuevoPedido() {
                 onClick={closeModModal}
                 type="button"
                 aria-label="Cerrar modificadores"
-                className="text-gray-400 hover:text-gray-600"
+                className="text-text-tertiary hover:text-text-primary"
               >
                 <XMarkIcon className="w-6 h-6" />
               </button>
             </div>
 
             <div className="space-y-2 mb-6">
-              <p className="text-sm font-medium text-gray-700">Personaliza tu pedido:</p>
+              <p className="text-sm font-medium text-text-secondary">Personaliza tu pedido:</p>
               {modificadoresProducto.map(mod => (
                 <button
                   key={mod.id}
                   onClick={() => toggleModificador(mod)}
-                  className={`w-full p-3 rounded-lg border text-left transition-colors ${
+                  className={`w-full p-3 rounded-xl border text-left transition-colors ${
                     modificadoresSeleccionados.find(m => m.id === mod.id)
                       ? mod.tipo === 'EXCLUSION'
-                        ? 'border-red-500 bg-red-50'
-                        : 'border-green-500 bg-green-50'
-                      : 'border-gray-200 hover:border-gray-300'
+                        ? 'border-error-500 bg-error-50'
+                        : 'border-success-500 bg-success-50'
+                      : 'border-border-default hover:border-border-subtle'
                   }`}
                 >
                   <div className="flex justify-between items-center">
                     <span className={
                       modificadoresSeleccionados.find(m => m.id === mod.id)
-                        ? mod.tipo === 'EXCLUSION' ? 'text-red-700' : 'text-green-700'
-                        : 'text-gray-700'
+                        ? mod.tipo === 'EXCLUSION' ? 'text-error-700' : 'text-success-700'
+                        : 'text-text-primary'
                     }>
                       {mod.tipo === 'EXCLUSION' ? `Sin ${mod.nombre}` : `Extra ${mod.nombre}`}
                     </span>
                     {parseFloat(mod.precio) > 0 && (
-                      <span className="text-green-600 font-medium">
+                      <span className="text-success-600 font-medium">
                         +${parseFloat(mod.precio).toLocaleString('es-AR')}
                       </span>
                     )}
@@ -382,7 +378,7 @@ export default function NuevoPedido() {
               ))}
             </div>
 
-            <div className="flex gap-3">
+            <div className="modal-footer">
               <button
                 onClick={() => {
                   agregarAlCarrito(productoSeleccionado, [])

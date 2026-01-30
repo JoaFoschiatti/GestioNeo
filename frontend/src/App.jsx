@@ -28,6 +28,7 @@ import CierreCaja from './pages/admin/CierreCaja'
 import Reservas from './pages/admin/Reservas'
 import Modificadores from './pages/admin/Modificadores'
 import TransaccionesMercadoPago from './pages/admin/TransaccionesMercadoPago'
+import Suscripcion from './pages/admin/Suscripcion'
 
 // Páginas mozo
 import MozoMesas from './pages/mozo/MozoMesas'
@@ -146,6 +147,11 @@ export default function App() {
         <Route path="transacciones-mp" element={
           <ProtectedRoute roles={['ADMIN']}>
             <TransaccionesMercadoPago />
+          </ProtectedRoute>
+        } />
+        <Route path="suscripcion" element={
+          <ProtectedRoute roles={['ADMIN']}>
+            <Suscripcion />
           </ProtectedRoute>
         } />
         <Route path="pedidos" element={<Pedidos />} />

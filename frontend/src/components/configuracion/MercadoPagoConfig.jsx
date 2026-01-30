@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import api from '../../services/api'
 import useAsync from '../../hooks/useAsync'
 import {
@@ -22,17 +22,23 @@ export default function MercadoPagoConfig({ onStatusChange }) {
   const [error, setError] = useState(null)
   const [disconnecting, setDisconnecting] = useState(false)
 
+  // Use ref to avoid infinite loop from callback dependency
+  const onStatusChangeRef = useRef(onStatusChange)
+  useEffect(() => {
+    onStatusChangeRef.current = onStatusChange
+  }, [onStatusChange])
+
   const checkStatus = useCallback(async () => {
     const response = await api.get('/mercadopago/status', { skipToast: true })
     const data = response.data
     setConfigInfo(data.config)
     setStatus(data.connected ? 'connected' : 'disconnected')
 
-    if (onStatusChange) {
-      onStatusChange(data.connected)
+    if (onStatusChangeRef.current) {
+      onStatusChangeRef.current(data.connected)
     }
     return data
-  }, [onStatusChange])
+  }, [])
 
   const handleLoadError = useCallback((err) => {
     console.error('Error checking MP status:', err)
@@ -132,33 +138,33 @@ export default function MercadoPagoConfig({ onStatusChange }) {
 
   if (statusLoading && !status) {
     return (
-      <div className="bg-white rounded-xl shadow-sm border p-6">
+      <div className="card">
         <div className="flex items-center gap-3">
-          <ArrowPathIcon className="w-6 h-6 animate-spin text-gray-400" />
-          <span className="text-gray-500">Cargando estado de MercadoPago...</span>
+          <ArrowPathIcon className="w-6 h-6 animate-spin text-text-tertiary" />
+          <span className="text-text-secondary">Cargando estado de MercadoPago...</span>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+    <div className="card overflow-hidden">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-4 text-white">
-        <div className="flex items-center gap-3">
-          <CreditCardIcon className="w-8 h-8" />
-          <div>
-            <h3 className="font-bold text-lg">MercadoPago</h3>
-            <p className="text-blue-100 text-sm">Recibe pagos online de tus clientes</p>
-          </div>
+      <div className="flex items-center gap-3 pb-4 mb-4 border-b border-border-subtle">
+        <div className="p-2 bg-info-100 rounded-xl">
+          <CreditCardIcon className="w-6 h-6 text-info-600" />
+        </div>
+        <div>
+          <h3 className="font-bold text-text-primary">MercadoPago</h3>
+          <p className="text-text-secondary text-sm">Recibe pagos online de tus clientes</p>
         </div>
       </div>
 
       {/* Content */}
-      <div className="p-6">
+      <div>
         {/* Error message */}
         {error && (
-          <div className="mb-4 bg-red-50 text-red-700 p-3 rounded-lg flex items-center gap-2">
+          <div className="mb-4 bg-error-50 text-error-700 p-3 rounded-xl flex items-center gap-2">
             <ExclamationTriangleIcon className="w-5 h-5 flex-shrink-0" />
             <span>{error}</span>
             <button
@@ -175,20 +181,20 @@ export default function MercadoPagoConfig({ onStatusChange }) {
         {/* Connected state */}
         {status === 'connected' && (
           <div className="space-y-4">
-            <div className="flex items-center gap-3 bg-green-50 p-4 rounded-lg">
-              <CheckCircleIcon className="w-8 h-8 text-green-500" />
+            <div className="flex items-center gap-3 bg-success-50 p-4 rounded-xl">
+              <CheckCircleIcon className="w-8 h-8 text-success-500" />
               <div>
-                <p className="font-semibold text-green-800">Cuenta conectada</p>
+                <p className="font-semibold text-success-800">Cuenta conectada</p>
                 {configInfo?.email && (
-                  <p className="text-sm text-green-600">{configInfo.email}</p>
+                  <p className="text-sm text-success-600">{configInfo.email}</p>
                 )}
-                <p className="text-xs text-green-500 mt-1">
+                <p className="text-xs text-success-500 mt-1">
                   {configInfo?.isOAuth ? 'Conectado via OAuth' : 'Configuracion manual'}
                 </p>
               </div>
             </div>
 
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-text-secondary">
               Los pagos de tus clientes llegaran directamente a tu cuenta de MercadoPago.
             </p>
 
@@ -196,7 +202,7 @@ export default function MercadoPagoConfig({ onStatusChange }) {
               onClick={handleDisconnect}
               type="button"
               disabled={disconnecting}
-              className="text-red-600 hover:text-red-700 text-sm font-medium flex items-center gap-1"
+              className="text-error-600 hover:text-error-700 text-sm font-medium flex items-center gap-1"
             >
               {disconnecting ? (
                 <ArrowPathIcon className="w-4 h-4 animate-spin" />
@@ -211,17 +217,17 @@ export default function MercadoPagoConfig({ onStatusChange }) {
         {/* Disconnected state */}
         {status === 'disconnected' && (
           <div className="space-y-4">
-            <div className="flex items-center gap-3 bg-yellow-50 p-4 rounded-lg">
-              <ExclamationTriangleIcon className="w-8 h-8 text-yellow-500" />
+            <div className="flex items-center gap-3 bg-warning-50 p-4 rounded-xl">
+              <ExclamationTriangleIcon className="w-8 h-8 text-warning-500" />
               <div>
-                <p className="font-semibold text-yellow-800">No hay cuenta conectada</p>
-                <p className="text-sm text-yellow-600">
+                <p className="font-semibold text-warning-800">No hay cuenta conectada</p>
+                <p className="text-sm text-warning-600">
                   Conecta tu cuenta para recibir pagos online
                 </p>
               </div>
             </div>
 
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-text-secondary">
               Al conectar tu cuenta de MercadoPago, los clientes podran pagar sus pedidos
               con tarjeta de credito, debito o dinero en cuenta directamente desde el menu.
             </p>
@@ -231,7 +237,7 @@ export default function MercadoPagoConfig({ onStatusChange }) {
               onClick={handleConnectOAuth}
               type="button"
               disabled={connecting || statusLoading}
-              className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
+              className="btn btn-primary w-full py-3 flex items-center justify-center gap-2"
             >
               {connecting ? (
                 <ArrowPathIcon className="w-5 h-5 animate-spin" />
@@ -245,7 +251,7 @@ export default function MercadoPagoConfig({ onStatusChange }) {
             <button
               onClick={() => setShowManual(!showManual)}
               type="button"
-              className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 mx-auto"
+              className="text-sm text-text-tertiary hover:text-text-secondary flex items-center gap-1 mx-auto"
             >
               {showManual ? (
                 <ChevronUpIcon className="w-4 h-4" />
@@ -257,22 +263,22 @@ export default function MercadoPagoConfig({ onStatusChange }) {
 
             {/* Manual config form */}
             {showManual && (
-              <div className="mt-4 p-4 bg-gray-50 rounded-lg space-y-3">
-                <p className="text-sm text-gray-600">
+              <div className="mt-4 p-4 bg-surface-hover rounded-xl space-y-3">
+                <p className="text-sm text-text-secondary">
                   Si prefieres, puedes ingresar tu Access Token de MercadoPago manualmente.
                   Puedes obtenerlo desde el{' '}
                   <a
                     href="https://www.mercadopago.com.ar/developers/panel/app"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline"
+                    className="text-primary-600 hover:underline"
                   >
                     Panel de Desarrolladores
                   </a>.
                 </p>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="mp-access-token">
+                  <label className="label" htmlFor="mp-access-token">
                     Access Token
                   </label>
                   <input
@@ -281,7 +287,7 @@ export default function MercadoPagoConfig({ onStatusChange }) {
                     value={manualToken}
                     onChange={(e) => setManualToken(e.target.value)}
                     placeholder="APP_USR-xxxx..."
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input"
                   />
                 </div>
 
@@ -289,7 +295,7 @@ export default function MercadoPagoConfig({ onStatusChange }) {
                   onClick={handleSaveManual}
                   type="button"
                   disabled={savingManual || !manualToken.trim()}
-                  className="w-full bg-gray-800 hover:bg-gray-900 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn btn-secondary w-full flex items-center justify-center gap-2"
                 >
                   {savingManual ? (
                     <ArrowPathIcon className="w-4 h-4 animate-spin" />
@@ -306,12 +312,12 @@ export default function MercadoPagoConfig({ onStatusChange }) {
         {/* Error state */}
         {status === 'error' && (
           <div className="text-center py-4">
-            <ExclamationTriangleIcon className="w-12 h-12 text-red-400 mx-auto mb-2" />
-            <p className="text-red-600">Error al cargar estado</p>
+            <ExclamationTriangleIcon className="w-12 h-12 text-error-400 mx-auto mb-2" />
+            <p className="text-error-600">Error al cargar estado</p>
             <button
               onClick={checkStatusAsync}
               type="button"
-              className="mt-2 text-blue-600 hover:underline text-sm"
+              className="mt-2 text-primary-600 hover:underline text-sm"
             >
               Reintentar
             </button>

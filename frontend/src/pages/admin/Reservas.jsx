@@ -154,13 +154,13 @@ export default function Reservas() {
     })
   }
 
-  const getEstadoColor = (estado) => {
+  const getEstadoBadge = (estado) => {
     switch (estado) {
-      case 'CONFIRMADA': return 'bg-blue-100 text-blue-700'
-      case 'CLIENTE_PRESENTE': return 'bg-green-100 text-green-700'
-      case 'NO_LLEGO': return 'bg-red-100 text-red-700'
-      case 'CANCELADA': return 'bg-gray-100 text-gray-500'
-      default: return 'bg-gray-100 text-gray-700'
+      case 'CONFIRMADA': return 'badge-info'
+      case 'CLIENTE_PRESENTE': return 'badge-success'
+      case 'NO_LLEGO': return 'badge-error'
+      case 'CANCELADA': return 'badge-warning'
+      default: return 'badge-info'
     }
   }
 
@@ -177,7 +177,7 @@ export default function Reservas() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Reservas</h1>
+        <h1 className="text-heading-1">Reservas</h1>
         <button
           onClick={() => abrirModal()}
           className="btn btn-primary flex items-center gap-2"
@@ -190,7 +190,7 @@ export default function Reservas() {
       {/* Filtro por fecha */}
       <div className="card mb-6">
         <div className="flex items-center gap-4">
-          <CalendarDaysIcon className="w-5 h-5 text-gray-400" />
+          <CalendarDaysIcon className="w-5 h-5 text-text-tertiary" />
           <label htmlFor="reservas-fecha" className="sr-only">Fecha</label>
           <input
             id="reservas-fecha"
@@ -199,7 +199,7 @@ export default function Reservas() {
             onChange={(e) => setFechaFiltro(e.target.value)}
             className="input max-w-xs"
           />
-          <span className="text-sm text-gray-500">
+          <span className="text-sm text-text-secondary">
             {reservas.length} reservas
           </span>
         </div>
@@ -207,20 +207,20 @@ export default function Reservas() {
 
       {/* Lista de reservas */}
       {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+        <div className="flex items-center justify-center h-64">
+          <div className="spinner spinner-lg" />
         </div>
       ) : reservas.length === 0 ? (
         <div className="card text-center py-12">
-          <CalendarDaysIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500">No hay reservas para esta fecha</p>
+          <CalendarDaysIcon className="w-16 h-16 text-text-tertiary mx-auto mb-4" />
+          <p className="text-text-secondary">No hay reservas para esta fecha</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {reservas.map((reserva) => (
             <div
               key={reserva.id}
-              className={`card ${
+              className={`card card-hover ${
                 reserva.estado === 'CANCELADA' || reserva.estado === 'NO_LLEGO'
                   ? 'opacity-60'
                   : ''
@@ -228,43 +228,43 @@ export default function Reservas() {
             >
               <div className="flex justify-between items-start mb-3">
                 <div>
-                  <span className="text-2xl font-bold text-primary-600">
+                  <span className="text-2xl font-bold text-primary-500">
                     {formatHora(reserva.fechaHora)}
                   </span>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-text-secondary">
                     Mesa {reserva.mesa.numero}
                     {reserva.mesa.zona && ` - ${reserva.mesa.zona}`}
                   </p>
                 </div>
-                <span className={`px-2 py-1 text-xs rounded-full ${getEstadoColor(reserva.estado)}`}>
+                <span className={`badge ${getEstadoBadge(reserva.estado)}`}>
                   {getEstadoLabel(reserva.estado)}
                 </span>
               </div>
 
               <div className="space-y-2 mb-4">
                 <div className="flex items-center gap-2 text-sm">
-                  <UserIcon className="w-4 h-4 text-gray-400" />
-                  <span className="font-medium">{reserva.clienteNombre}</span>
+                  <UserIcon className="w-4 h-4 text-text-tertiary" />
+                  <span className="font-medium text-text-primary">{reserva.clienteNombre}</span>
                 </div>
                 {reserva.clienteTelefono && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <PhoneIcon className="w-4 h-4 text-gray-400" />
+                  <div className="flex items-center gap-2 text-sm text-text-secondary">
+                    <PhoneIcon className="w-4 h-4 text-text-tertiary" />
                     {reserva.clienteTelefono}
                   </div>
                 )}
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <UsersIcon className="w-4 h-4 text-gray-400" />
+                <div className="flex items-center gap-2 text-sm text-text-secondary">
+                  <UsersIcon className="w-4 h-4 text-text-tertiary" />
                   {reserva.cantidadPersonas} personas
                 </div>
                 {reserva.observaciones && (
-                  <p className="text-sm text-gray-500 italic">
+                  <p className="text-sm text-text-tertiary italic">
                     "{reserva.observaciones}"
                   </p>
                 )}
               </div>
 
               {reserva.estado === 'CONFIRMADA' && (
-                <div className="flex gap-2 pt-3 border-t">
+                <div className="flex gap-2 pt-3 border-t border-border-default">
                   <button
                     onClick={() => cambiarEstado(reserva.id, 'CLIENTE_PRESENTE')}
                     className="btn btn-success flex-1 text-sm py-2"
@@ -289,7 +289,7 @@ export default function Reservas() {
                   </button>
                   <button
                     onClick={() => cambiarEstado(reserva.id, 'CANCELADA')}
-                    className="btn btn-secondary text-sm py-2 px-2 text-red-600 hover:bg-red-50"
+                    className="btn btn-danger text-sm py-2 px-2"
                     title="Cancelar"
                     aria-label={`Cancelar reserva: ${reserva.clienteNombre}`}
                   >
@@ -304,23 +304,23 @@ export default function Reservas() {
 
       {/* Modal crear/editar */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+        <div className="modal-overlay">
+          <div className="modal">
+            <h3 className="text-heading-3 mb-4">
               {reservaEdit ? 'Editar Reserva' : 'Nueva Reserva'}
             </h3>
 
-	            <form onSubmit={guardarReserva} className="space-y-4">
-	              <div>
-	                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="reserva-mesa">
-	                  Mesa
-	                </label>
-	                <select
-	                  id="reserva-mesa"
-	                  value={formData.mesaId}
-	                  onChange={(e) => setFormData({ ...formData, mesaId: e.target.value })}
-	                  className="input"
-	                  required
+            <form onSubmit={guardarReserva} className="space-y-4">
+              <div>
+                <label className="label" htmlFor="reserva-mesa">
+                  Mesa
+                </label>
+                <select
+                  id="reserva-mesa"
+                  value={formData.mesaId}
+                  onChange={(e) => setFormData({ ...formData, mesaId: e.target.value })}
+                  className="input"
+                  required
                   disabled={!!reservaEdit}
                 >
                   <option value="">Seleccionar mesa...</option>
@@ -332,77 +332,77 @@ export default function Reservas() {
                 </select>
               </div>
 
-	              <div>
-	                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="reserva-fecha-hora">
-	                  Fecha y Hora
-	                </label>
-	                <input
-	                  id="reserva-fecha-hora"
-	                  type="datetime-local"
-	                  value={formData.fechaHora}
-	                  onChange={(e) => setFormData({ ...formData, fechaHora: e.target.value })}
-	                  className="input"
+              <div>
+                <label className="label" htmlFor="reserva-fecha-hora">
+                  Fecha y Hora
+                </label>
+                <input
+                  id="reserva-fecha-hora"
+                  type="datetime-local"
+                  value={formData.fechaHora}
+                  onChange={(e) => setFormData({ ...formData, fechaHora: e.target.value })}
+                  className="input"
                   required
                 />
               </div>
 
-	              <div>
-	                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="reserva-cliente-nombre">
-	                  Nombre del cliente
-	                </label>
-	                <input
-	                  id="reserva-cliente-nombre"
-	                  type="text"
-	                  value={formData.clienteNombre}
-	                  onChange={(e) => setFormData({ ...formData, clienteNombre: e.target.value })}
-	                  className="input"
+              <div>
+                <label className="label" htmlFor="reserva-cliente-nombre">
+                  Nombre del cliente
+                </label>
+                <input
+                  id="reserva-cliente-nombre"
+                  type="text"
+                  value={formData.clienteNombre}
+                  onChange={(e) => setFormData({ ...formData, clienteNombre: e.target.value })}
+                  className="input"
                   required
                 />
               </div>
 
-	              <div>
-	                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="reserva-cliente-telefono">
-	                  Teléfono (opcional)
-	                </label>
-	                <input
-	                  id="reserva-cliente-telefono"
-	                  type="tel"
-	                  value={formData.clienteTelefono}
-	                  onChange={(e) => setFormData({ ...formData, clienteTelefono: e.target.value })}
-	                  className="input"
-	                />
-	              </div>
+              <div>
+                <label className="label" htmlFor="reserva-cliente-telefono">
+                  Teléfono (opcional)
+                </label>
+                <input
+                  id="reserva-cliente-telefono"
+                  type="tel"
+                  value={formData.clienteTelefono}
+                  onChange={(e) => setFormData({ ...formData, clienteTelefono: e.target.value })}
+                  className="input"
+                />
+              </div>
 
-	              <div>
-	                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="reserva-cantidad-personas">
-	                  Cantidad de personas
-	                </label>
-	                <input
-	                  id="reserva-cantidad-personas"
-	                  type="number"
-	                  min="1"
-	                  max="20"
-	                  value={formData.cantidadPersonas}
+              <div>
+                <label className="label" htmlFor="reserva-cantidad-personas">
+                  Cantidad de personas
+                </label>
+                <input
+                  id="reserva-cantidad-personas"
+                  type="number"
+                  min="1"
+                  max="20"
+                  value={formData.cantidadPersonas}
                   onChange={(e) => setFormData({ ...formData, cantidadPersonas: parseInt(e.target.value) })}
                   className="input"
                   required
                 />
               </div>
 
-	              <div>
-	                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="reserva-observaciones">
-	                  Observaciones (opcional)
-	                </label>
-	                <textarea
-	                  id="reserva-observaciones"
-	                  value={formData.observaciones}
-	                  onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
-	                  className="input"
-	                  rows="2"
+              <div>
+                <label className="label" htmlFor="reserva-observaciones">
+                  Observaciones (opcional)
+                </label>
+                <textarea
+                  id="reserva-observaciones"
+                  value={formData.observaciones}
+                  onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
+                  className="input"
+                  rows="2"
                 />
               </div>
 
-              <div className="flex gap-3 justify-end pt-2">
+              <div className="modal-footer">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}

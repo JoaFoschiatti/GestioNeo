@@ -125,7 +125,7 @@ export default function Cocina() {
   if (loading && pedidos.length === 0) {
     return (
       <div className="flex justify-center py-12">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+        <div className="spinner spinner-lg" />
       </div>
     )
   }
@@ -133,9 +133,9 @@ export default function Cocina() {
   if (loadError && pedidos.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
-        <ClockIcon className="w-10 h-10 text-red-500 mb-3" />
-        <h2 className="text-lg font-semibold text-gray-900">No pudimos cargar los pedidos</h2>
-        <p className="text-sm text-gray-600 mb-4">{loadError}</p>
+        <ClockIcon className="w-10 h-10 text-error-500 mb-3" />
+        <h2 className="text-lg font-semibold text-text-primary">No pudimos cargar los pedidos</h2>
+        <p className="text-sm text-text-secondary mb-4">{loadError}</p>
         <button
           type="button"
           onClick={() => {
@@ -156,7 +156,7 @@ export default function Cocina() {
   return (
     <div>
       {loadError && pedidos.length > 0 && (
-        <div className="mb-4 bg-red-50 text-red-700 px-4 py-3 rounded-lg flex items-center gap-3">
+        <div className="mb-4 bg-error-50 text-error-700 px-4 py-3 rounded-xl flex items-center gap-3">
           <ClockIcon className="w-5 h-5" />
           <span className="flex-1 text-sm">{loadError}</span>
           <button
@@ -172,22 +172,22 @@ export default function Cocina() {
         </div>
       )}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Cocina</h1>
+        <h1 className="text-heading-1">Cocina</h1>
         <div className="flex items-center gap-4 text-sm">
-          <span className="flex items-center gap-1">
-            <span className="w-3 h-3 bg-yellow-400 rounded-full"></span>
+          <span className="flex items-center gap-1 text-text-secondary">
+            <span className="w-3 h-3 bg-warning-400 rounded-full"></span>
             Pendientes: {pedidosPendientes.length}
           </span>
-          <span className="flex items-center gap-1">
-            <span className="w-3 h-3 bg-blue-400 rounded-full"></span>
+          <span className="flex items-center gap-1 text-text-secondary">
+            <span className="w-3 h-3 bg-info-400 rounded-full"></span>
             En preparación: {pedidosEnPreparacion.length}
           </span>
           <button
             onClick={toggleSound}
             className={`p-2 rounded-lg transition-colors ${
               soundEnabled
-                ? 'bg-green-100 text-green-600 hover:bg-green-200'
-                : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                ? 'bg-success-100 text-success-600 hover:bg-success-200'
+                : 'bg-surface-hover text-text-tertiary hover:bg-border-default'
             }`}
             title={soundEnabled ? 'Sonido activado' : 'Sonido desactivado'}
             aria-label={soundEnabled ? 'Desactivar sonido' : 'Activar sonido'}
@@ -203,8 +203,8 @@ export default function Cocina() {
 
       {pedidos.length === 0 ? (
         <div className="text-center py-16">
-          <ClockIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <p className="text-xl text-gray-500">No hay pedidos pendientes</p>
+          <ClockIcon className="w-16 h-16 text-text-tertiary mx-auto mb-4" />
+          <p className="text-xl text-text-secondary">No hay pedidos pendientes</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -213,14 +213,14 @@ export default function Cocina() {
               key={pedido.id}
               className={`card ${
                 pedido.estado === 'PENDIENTE'
-                  ? 'border-2 border-yellow-400 bg-yellow-50'
-                  : 'border-2 border-blue-400 bg-blue-50'
+                  ? 'border border-warning-200 bg-warning-50/50'
+                  : 'border border-info-200 bg-info-50/50'
               }`}
             >
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <h3 className="text-xl font-bold text-gray-900">#{pedido.id}</h3>
-                  <p className="text-sm text-gray-600">
+                  <h3 className="text-xl font-bold text-text-primary">#{pedido.id}</h3>
+                  <p className="text-sm text-text-secondary">
                     {pedido.tipo === 'MESA'
                       ? `Mesa ${pedido.mesa?.numero}`
                       : pedido.tipo}
@@ -228,15 +228,15 @@ export default function Cocina() {
                 </div>
                 <div className="text-right">
                   <span
-                    className={`px-2 py-1 text-xs rounded-full ${
+                    className={`badge ${
                       pedido.estado === 'PENDIENTE'
-                        ? 'bg-yellow-200 text-yellow-800'
-                        : 'bg-blue-200 text-blue-800'
+                        ? 'badge-warning'
+                        : 'badge-info'
                     }`}
                   >
                     {pedido.estado === 'PENDIENTE' ? 'PENDIENTE' : 'PREPARANDO'}
                   </span>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-text-tertiary mt-1">
                     {getTiempoTranscurrido(pedido.createdAt)}
                   </p>
                 </div>
@@ -246,13 +246,13 @@ export default function Cocina() {
                 {pedido.items?.map((item) => (
                   <div
                     key={item.id}
-                    className="flex items-start gap-3 bg-white p-3 rounded-lg"
+                    className="flex items-start gap-3 bg-surface p-3 rounded-xl"
                   >
                     <span className="text-2xl font-bold text-primary-500">
                       {item.cantidad}x
                     </span>
                     <div>
-                      <p className="font-medium text-gray-900">
+                      <p className="font-medium text-text-primary">
                         {item.producto?.nombre}
                       </p>
                       {item.modificadores?.length > 0 && (
@@ -262,8 +262,8 @@ export default function Cocina() {
                               key={mod.id}
                               className={`text-sm font-medium ${
                                 mod.modificador?.tipo === 'EXCLUSION'
-                                  ? 'text-red-600'
-                                  : 'text-green-600'
+                                  ? 'text-error-600'
+                                  : 'text-success-600'
                               }`}
                             >
                               {mod.modificador?.tipo === 'EXCLUSION' ? '- Sin' : '+ Extra'}{' '}
@@ -273,7 +273,7 @@ export default function Cocina() {
                         </div>
                       )}
                       {item.observaciones && (
-                        <p className="text-sm text-orange-600 font-medium mt-1">
+                        <p className="text-sm text-warning-600 font-medium mt-1">
                           Nota: {item.observaciones}
                         </p>
                       )}
@@ -283,7 +283,7 @@ export default function Cocina() {
               </div>
 
               {pedido.observaciones && (
-                <div className="mb-4 p-2 bg-red-100 rounded text-sm text-red-700">
+                <div className="mb-4 p-2 bg-error-100 rounded-lg text-sm text-error-700">
                   <strong>Nota:</strong> {pedido.observaciones}
                 </div>
               )}

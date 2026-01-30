@@ -7,13 +7,13 @@ import useEventSource from '../../hooks/useEventSource'
 import NuevoPedidoModal from '../../components/pedidos/NuevoPedidoModal'
 import useAsync from '../../hooks/useAsync'
 
-const estadoColors = {
-  PENDIENTE: 'bg-yellow-100 text-yellow-700',
-  EN_PREPARACION: 'bg-blue-100 text-blue-700',
-  LISTO: 'bg-green-100 text-green-700',
-  ENTREGADO: 'bg-purple-100 text-purple-700',
-  COBRADO: 'bg-gray-100 text-gray-700',
-  CANCELADO: 'bg-red-100 text-red-700'
+const estadoBadges = {
+  PENDIENTE: 'badge-warning',
+  EN_PREPARACION: 'badge-info',
+  LISTO: 'badge-success',
+  ENTREGADO: 'badge-info',
+  COBRADO: 'badge-success',
+  CANCELADO: 'badge-error'
 }
 
 export default function Pedidos() {
@@ -147,7 +147,7 @@ export default function Pedidos() {
 
   const renderImpresion = (impresion) => {
     if (!impresion) {
-      return <span className="text-xs text-gray-400">-</span>
+      return <span className="text-xs text-text-tertiary">-</span>
     }
 
     const label = impresion.status === 'OK'
@@ -156,27 +156,40 @@ export default function Pedidos() {
         ? `ERR ${impresion.ok}/${impresion.total}`
         : `${impresion.ok}/${impresion.total}`
 
-    const color = impresion.status === 'OK'
-      ? 'bg-green-100 text-green-700'
+    const badgeClass = impresion.status === 'OK'
+      ? 'badge-success'
       : impresion.status === 'ERROR'
-        ? 'bg-red-100 text-red-700'
-        : 'bg-yellow-100 text-yellow-700'
+        ? 'badge-error'
+        : 'badge-warning'
 
     return (
-      <span title={impresion.lastError || ''} className={`px-2 py-1 text-xs rounded-full ${color}`}>
+      <span title={impresion.lastError || ''} className={`badge ${badgeClass}`}>
         {label}
       </span>
     )
   }
 
+  const getTipoBadge = (tipo) => {
+    switch (tipo) {
+      case 'DELIVERY': return 'badge-info'
+      case 'MOSTRADOR': return 'badge-warning'
+      case 'ONLINE': return 'badge-success'
+      default: return 'badge-info'
+    }
+  }
+
   if (loading && pedidos.length === 0) {
-    return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div></div>
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="spinner spinner-lg" />
+      </div>
+    )
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Pedidos</h1>
+        <h1 className="text-heading-1">Pedidos</h1>
         <div className="flex items-center gap-4">
           <label className="sr-only" htmlFor="pedidos-filtro-estado">Filtrar por estado</label>
           <select
@@ -206,61 +219,55 @@ export default function Pedidos() {
       </div>
 
       <div className="card overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+        <table className="table">
+          <thead>
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">#</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mesa/Cliente</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Impresion</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hora</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
+              <th>#</th>
+              <th>Tipo</th>
+              <th>Mesa/Cliente</th>
+              <th>Total</th>
+              <th>Estado</th>
+              <th>Impresion</th>
+              <th>Hora</th>
+              <th className="text-right">Acciones</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody>
             {pedidos.map((pedido) => (
               <tr key={pedido.id}>
-                <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">#{pedido.id}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 text-xs rounded-full ${
-                    pedido.tipo === 'DELIVERY'
-                      ? 'bg-purple-100 text-purple-700'
-                      : pedido.tipo === 'MOSTRADOR'
-                        ? 'bg-orange-100 text-orange-700'
-                        : 'bg-blue-100 text-blue-700'
-                  }`}>
+                <td className="font-medium text-text-primary">#{pedido.id}</td>
+                <td>
+                  <span className={`badge ${getTipoBadge(pedido.tipo)}`}>
                     {pedido.tipo}
                   </span>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-gray-600">
+                <td className="text-text-secondary">
                   {pedido.tipo === 'MESA'
                     ? `Mesa ${pedido.mesa?.numero}`
                     : pedido.tipo === 'MOSTRADOR'
                       ? pedido.clienteNombre || 'Mostrador'
                       : pedido.clienteNombre || 'Sin nombre'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
+                <td className="font-medium text-text-primary">
                   ${parseFloat(pedido.total).toLocaleString('es-AR')}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 text-xs rounded-full ${estadoColors[pedido.estado]}`}>
+                <td>
+                  <span className={`badge ${estadoBadges[pedido.estado]}`}>
                     {pedido.estado.replace('_', ' ')}
                   </span>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td>
                   {renderImpresion(pedido.impresion)}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-gray-500">
+                <td className="text-text-tertiary">
                   {new Date(pedido.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right space-x-2">
+                <td className="text-right space-x-2">
                   <button
                     onClick={() => verDetalle(pedido.id)}
                     type="button"
                     aria-label={`Ver detalle del pedido #${pedido.id}`}
-                    className="text-primary-600 hover:text-primary-800"
+                    className="text-primary-500 hover:text-primary-600 transition-colors"
                   >
                     <EyeIcon className="w-5 h-5" />
                   </button>
@@ -268,7 +275,7 @@ export default function Pedidos() {
                     onClick={() => imprimirComanda(pedido.id)}
                     type="button"
                     aria-label={`Reimprimir comanda del pedido #${pedido.id}`}
-                    className="text-gray-600 hover:text-gray-800"
+                    className="text-text-secondary hover:text-text-primary transition-colors"
                   >
                     <PrinterIcon className="w-5 h-5" />
                   </button>
@@ -277,7 +284,7 @@ export default function Pedidos() {
                       onClick={() => abrirPago(pedido)}
                       type="button"
                       aria-label={`Registrar pago del pedido #${pedido.id}`}
-                      className="text-green-600 hover:text-green-800"
+                      className="text-success-500 hover:text-success-600 transition-colors"
                     >
                       <CurrencyDollarIcon className="w-5 h-5" />
                     </button>
@@ -291,40 +298,40 @@ export default function Pedidos() {
 
       {/* Modal Detalle */}
       {showModal && pedidoSeleccionado && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="modal-overlay">
+          <div className="modal modal-lg">
             <div className="flex justify-between items-start mb-4">
-              <h2 className="text-xl font-bold">Pedido #{pedidoSeleccionado.id}</h2>
-              <span className={`px-2 py-1 text-xs rounded-full ${estadoColors[pedidoSeleccionado.estado]}`}>
+              <h2 className="text-heading-3">Pedido #{pedidoSeleccionado.id}</h2>
+              <span className={`badge ${estadoBadges[pedidoSeleccionado.estado]}`}>
                 {pedidoSeleccionado.estado.replace('_', ' ')}
               </span>
             </div>
 
-            <div className="space-y-4">
-              <div className="text-sm text-gray-600">
-                <p><strong>Tipo:</strong> {pedidoSeleccionado.tipo}</p>
-                {pedidoSeleccionado.mesa && <p><strong>Mesa:</strong> {pedidoSeleccionado.mesa.numero}</p>}
-                {pedidoSeleccionado.clienteNombre && <p><strong>Cliente:</strong> {pedidoSeleccionado.clienteNombre}</p>}
-                <p><strong>Mozo:</strong> {pedidoSeleccionado.usuario?.nombre}</p>
+            <div className="space-y-4 overflow-y-auto flex-1">
+              <div className="text-sm text-text-secondary">
+                <p><strong className="text-text-primary">Tipo:</strong> {pedidoSeleccionado.tipo}</p>
+                {pedidoSeleccionado.mesa && <p><strong className="text-text-primary">Mesa:</strong> {pedidoSeleccionado.mesa.numero}</p>}
+                {pedidoSeleccionado.clienteNombre && <p><strong className="text-text-primary">Cliente:</strong> {pedidoSeleccionado.clienteNombre}</p>}
+                <p><strong className="text-text-primary">Mozo:</strong> {pedidoSeleccionado.usuario?.nombre}</p>
               </div>
 
               <div>
-                <h3 className="font-semibold mb-2">Items:</h3>
+                <h3 className="font-semibold text-text-primary mb-2">Items:</h3>
                 <div className="space-y-2">
                   {pedidoSeleccionado.items?.map((item) => (
                     <div key={item.id} className="flex justify-between text-sm">
-                      <span>
+                      <span className="text-text-primary">
                         {item.cantidad}x {item.producto?.nombre}
-                        {item.observaciones && <span className="text-gray-500 ml-1">({item.observaciones})</span>}
+                        {item.observaciones && <span className="text-text-tertiary ml-1">({item.observaciones})</span>}
                       </span>
-                      <span>${parseFloat(item.subtotal).toLocaleString('es-AR')}</span>
+                      <span className="text-text-primary">${parseFloat(item.subtotal).toLocaleString('es-AR')}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="border-t pt-3">
-                <div className="flex justify-between font-bold text-lg">
+              <div className="border-t border-border-default pt-3">
+                <div className="flex justify-between font-bold text-lg text-text-primary">
                   <span>Total:</span>
                   <span>${parseFloat(pedidoSeleccionado.total).toLocaleString('es-AR')}</span>
                 </div>
@@ -332,8 +339,8 @@ export default function Pedidos() {
 
               {/* Cambiar estado */}
               {!['COBRADO', 'CANCELADO'].includes(pedidoSeleccionado.estado) && (
-                <div className="border-t pt-3">
-                  <p className="text-sm font-medium mb-2">Cambiar estado:</p>
+                <div className="border-t border-border-default pt-3">
+                  <p className="text-sm font-medium text-text-primary mb-2">Cambiar estado:</p>
                   <div className="flex flex-wrap gap-2">
                     {!esSoloMozo && pedidoSeleccionado.estado === 'PENDIENTE' && (
                       <button
@@ -373,9 +380,9 @@ export default function Pedidos() {
 
       {/* Modal Pago */}
       {showPagoModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
-            <h2 className="text-xl font-bold mb-4">Registrar Pago</h2>
+        <div className="modal-overlay">
+          <div className="modal">
+            <h2 className="text-heading-3 mb-4">Registrar Pago</h2>
             <form onSubmit={registrarPago} className="space-y-4">
               <div>
                 <label className="label" htmlFor="pago-monto">Monto ($)</label>
@@ -415,7 +422,7 @@ export default function Pedidos() {
                   />
                 </div>
               )}
-              <div className="flex gap-3 pt-4">
+              <div className="modal-footer">
                 <button type="button" onClick={() => setShowPagoModal(false)} className="btn btn-secondary flex-1">
                   Cancelar
                 </button>

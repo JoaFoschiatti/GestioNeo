@@ -71,13 +71,17 @@ export default function Categorias() {
   }
 
   if (loading && categorias.length === 0) {
-    return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div></div>
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="spinner spinner-lg" />
+      </div>
+    )
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Categorías</h1>
+        <h1 className="text-heading-1">Categorías</h1>
         <button
           onClick={() => { resetForm(); setShowModal(true) }}
           className="btn btn-primary flex items-center gap-2"
@@ -88,58 +92,56 @@ export default function Categorias() {
       </div>
 
       <div className="card overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+        <table className="table">
+          <thead>
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Orden</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descripción</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Productos</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
+              <th>Orden</th>
+              <th>Nombre</th>
+              <th>Descripción</th>
+              <th>Productos</th>
+              <th>Estado</th>
+              <th className="text-right">Acciones</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody>
             {categorias.map((categoria) => (
               <tr key={categoria.id}>
-                <td className="px-6 py-4 whitespace-nowrap text-gray-500">{categoria.orden}</td>
-                <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{categoria.nombre}</td>
-                <td className="px-6 py-4 text-gray-500 max-w-xs truncate">{categoria.descripcion || '-'}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-gray-500">{categoria._count?.productos || 0}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 text-xs rounded-full ${
-                    categoria.activa ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                  }`}>
+                <td className="text-text-tertiary">{categoria.orden}</td>
+                <td className="font-medium text-text-primary">{categoria.nombre}</td>
+                <td className="text-text-secondary max-w-xs truncate">{categoria.descripcion || '-'}</td>
+                <td className="text-text-secondary">{categoria._count?.productos || 0}</td>
+                <td>
+                  <span className={`badge ${categoria.activa ? 'badge-success' : 'badge-error'}`}>
                     {categoria.activa ? 'Activa' : 'Inactiva'}
                   </span>
-	                </td>
-	                <td className="px-6 py-4 whitespace-nowrap text-right space-x-2">
-	                  <button
-	                    aria-label={`Editar categoría: ${categoria.nombre}`}
-	                    onClick={() => handleEdit(categoria)}
-	                    className="text-primary-600 hover:text-primary-800"
-	                  >
-	                    <PencilIcon className="w-5 h-5" />
-	                  </button>
-	                  <button
-	                    aria-label={`Eliminar categoría: ${categoria.nombre}`}
-	                    onClick={() => handleDelete(categoria.id)}
-	                    className="text-red-600 hover:text-red-800"
-	                  >
-	                    <TrashIcon className="w-5 h-5" />
-	                  </button>
-	                </td>
-	              </tr>
-	            ))}
+                </td>
+                <td className="text-right space-x-2">
+                  <button
+                    aria-label={`Editar categoría: ${categoria.nombre}`}
+                    onClick={() => handleEdit(categoria)}
+                    className="text-primary-500 hover:text-primary-600 transition-colors"
+                  >
+                    <PencilIcon className="w-5 h-5" />
+                  </button>
+                  <button
+                    aria-label={`Eliminar categoría: ${categoria.nombre}`}
+                    onClick={() => handleDelete(categoria.id)}
+                    className="text-error-500 hover:text-error-600 transition-colors"
+                  >
+                    <TrashIcon className="w-5 h-5" />
+                  </button>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
-            <h2 className="text-xl font-bold mb-4">
+        <div className="modal-overlay">
+          <div className="modal">
+            <h2 className="text-heading-3 mb-4">
               {editando ? 'Editar Categoría' : 'Nueva Categoría'}
             </h2>
 	            <form onSubmit={handleSubmit} className="space-y-4">
@@ -174,7 +176,7 @@ export default function Categorias() {
 	                  onChange={(e) => setForm({ ...form, orden: parseInt(e.target.value) })}
 	                />
               </div>
-              <div className="flex gap-3 pt-4">
+              <div className="modal-footer">
                 <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary flex-1">
                   Cancelar
                 </button>

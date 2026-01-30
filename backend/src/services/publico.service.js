@@ -337,7 +337,7 @@ const createPublicOrder = async (prisma, { tenantId, tenantSlug, tenant, body })
   const pedido = await prisma.pedido.create({
     data: {
       tenantId,
-      tipo: tipoEntrega === 'DELIVERY' ? 'DELIVERY' : 'MOSTRADOR',
+      tipo: 'ONLINE',
       tipoEntrega,
       clienteNombre,
       clienteTelefono,

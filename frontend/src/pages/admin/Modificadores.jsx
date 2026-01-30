@@ -105,8 +105,8 @@ export default function Modificadores() {
 
   if (loading && modificadores.length === 0) {
     return (
-      <div className="flex justify-center py-12">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+      <div className="flex items-center justify-center h-64">
+        <div className="spinner spinner-lg" />
       </div>
     )
   }
@@ -114,7 +114,7 @@ export default function Modificadores() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Modificadores</h1>
+        <h1 className="text-heading-1">Modificadores</h1>
         <button
           onClick={() => abrirModal()}
           className="btn btn-primary flex items-center gap-2"
@@ -128,50 +128,50 @@ export default function Modificadores() {
         {/* Exclusiones */}
         <div className="card">
           <div className="flex items-center gap-2 mb-4">
-            <MinusCircleIcon className="w-6 h-6 text-red-500" />
-            <h2 className="text-lg font-semibold text-gray-900">Exclusiones</h2>
-            <span className="text-sm text-gray-500">(Sin precio adicional)</span>
+            <MinusCircleIcon className="w-6 h-6 text-error-500" />
+            <h2 className="text-heading-3">Exclusiones</h2>
+            <span className="text-sm text-text-tertiary">(Sin precio adicional)</span>
           </div>
 
           {exclusiones.length === 0 ? (
-            <p className="text-gray-500 text-center py-4">No hay exclusiones</p>
+            <p className="text-text-secondary text-center py-4">No hay exclusiones</p>
           ) : (
             <div className="space-y-2">
               {exclusiones.map((mod) => (
                 <div
                   key={mod.id}
                   className={`flex items-center justify-between p-3 rounded-lg ${
-                    mod.activo ? 'bg-red-50' : 'bg-gray-100 opacity-60'
+                    mod.activo ? 'bg-error-50' : 'bg-surface-hover opacity-60'
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <span className={`font-medium ${mod.activo ? 'text-red-700' : 'text-gray-500'}`}>
+                    <span className={`font-medium ${mod.activo ? 'text-error-600' : 'text-text-tertiary'}`}>
                       Sin {mod.nombre}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => toggleActivo(mod)}
-                      className={`text-xs px-2 py-1 rounded ${
-                        mod.activo ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'
+                      className={`text-xs px-2 py-1 rounded-full ${
+                        mod.activo ? 'bg-success-100 text-success-600' : 'bg-surface-hover text-text-tertiary'
                       }`}
                     >
                       {mod.activo ? 'Activo' : 'Inactivo'}
                     </button>
-	                    <button
-	                      aria-label={`Editar modificador: ${mod.nombre}`}
-	                      onClick={() => abrirModal(mod)}
-	                      className="p-1 text-gray-400 hover:text-gray-600"
-	                    >
-	                      <PencilIcon className="w-4 h-4" />
-	                    </button>
-	                    <button
-	                      aria-label={`Eliminar modificador: ${mod.nombre}`}
-	                      onClick={() => eliminarModificador(mod.id)}
-	                      className="p-1 text-red-400 hover:text-red-600"
-	                    >
-	                      <TrashIcon className="w-4 h-4" />
-	                    </button>
+                    <button
+                      aria-label={`Editar modificador: ${mod.nombre}`}
+                      onClick={() => abrirModal(mod)}
+                      className="p-1 text-text-tertiary hover:text-text-primary transition-colors"
+                    >
+                      <PencilIcon className="w-4 h-4" />
+                    </button>
+                    <button
+                      aria-label={`Eliminar modificador: ${mod.nombre}`}
+                      onClick={() => eliminarModificador(mod.id)}
+                      className="p-1 text-error-400 hover:text-error-600 transition-colors"
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -182,53 +182,53 @@ export default function Modificadores() {
         {/* Adiciones */}
         <div className="card">
           <div className="flex items-center gap-2 mb-4">
-            <PlusCircleIcon className="w-6 h-6 text-green-500" />
-            <h2 className="text-lg font-semibold text-gray-900">Adiciones (Extras)</h2>
-            <span className="text-sm text-gray-500">(Con precio adicional)</span>
+            <PlusCircleIcon className="w-6 h-6 text-success-500" />
+            <h2 className="text-heading-3">Adiciones (Extras)</h2>
+            <span className="text-sm text-text-tertiary">(Con precio adicional)</span>
           </div>
 
           {adiciones.length === 0 ? (
-            <p className="text-gray-500 text-center py-4">No hay adiciones</p>
+            <p className="text-text-secondary text-center py-4">No hay adiciones</p>
           ) : (
             <div className="space-y-2">
               {adiciones.map((mod) => (
                 <div
                   key={mod.id}
                   className={`flex items-center justify-between p-3 rounded-lg ${
-                    mod.activo ? 'bg-green-50' : 'bg-gray-100 opacity-60'
+                    mod.activo ? 'bg-success-50' : 'bg-surface-hover opacity-60'
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <span className={`font-medium ${mod.activo ? 'text-green-700' : 'text-gray-500'}`}>
+                    <span className={`font-medium ${mod.activo ? 'text-success-600' : 'text-text-tertiary'}`}>
                       Extra {mod.nombre}
                     </span>
-                    <span className="text-sm text-green-600 font-medium">
+                    <span className="text-sm text-success-500 font-medium">
                       +{formatCurrency(mod.precio)}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => toggleActivo(mod)}
-                      className={`text-xs px-2 py-1 rounded ${
-                        mod.activo ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'
+                      className={`text-xs px-2 py-1 rounded-full ${
+                        mod.activo ? 'bg-success-100 text-success-600' : 'bg-surface-hover text-text-tertiary'
                       }`}
                     >
                       {mod.activo ? 'Activo' : 'Inactivo'}
                     </button>
-	                    <button
-	                      aria-label={`Editar modificador: ${mod.nombre}`}
-	                      onClick={() => abrirModal(mod)}
-	                      className="p-1 text-gray-400 hover:text-gray-600"
-	                    >
-	                      <PencilIcon className="w-4 h-4" />
-	                    </button>
-	                    <button
-	                      aria-label={`Eliminar modificador: ${mod.nombre}`}
-	                      onClick={() => eliminarModificador(mod.id)}
-	                      className="p-1 text-red-400 hover:text-red-600"
-	                    >
-	                      <TrashIcon className="w-4 h-4" />
-	                    </button>
+                    <button
+                      aria-label={`Editar modificador: ${mod.nombre}`}
+                      onClick={() => abrirModal(mod)}
+                      className="p-1 text-text-tertiary hover:text-text-primary transition-colors"
+                    >
+                      <PencilIcon className="w-4 h-4" />
+                    </button>
+                    <button
+                      aria-label={`Eliminar modificador: ${mod.nombre}`}
+                      onClick={() => eliminarModificador(mod.id)}
+                      className="p-1 text-error-400 hover:text-error-600 transition-colors"
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -239,61 +239,61 @@ export default function Modificadores() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+        <div className="modal-overlay">
+          <div className="modal">
+            <h3 className="text-heading-3 mb-4">
               {editando ? 'Editar Modificador' : 'Nuevo Modificador'}
             </h3>
 
-	            <form onSubmit={guardarModificador} className="space-y-4">
-	              <div>
-	                <label htmlFor="modificador-tipo" className="block text-sm font-medium text-gray-700 mb-1">
-	                  Tipo
-	                </label>
-	                <select
-	                  id="modificador-tipo"
-	                  value={formData.tipo}
-	                  onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
-	                  className="input"
-	                  required
-	                >
+            <form onSubmit={guardarModificador} className="space-y-4">
+              <div>
+                <label htmlFor="modificador-tipo" className="label">
+                  Tipo
+                </label>
+                <select
+                  id="modificador-tipo"
+                  value={formData.tipo}
+                  onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
+                  className="input"
+                  required
+                >
                   <option value="EXCLUSION">Exclusion (Sin...)</option>
                   <option value="ADICION">Adicion (Extra...)</option>
                 </select>
               </div>
 
-	              <div>
-	                <label htmlFor="modificador-nombre" className="block text-sm font-medium text-gray-700 mb-1">
-	                  Nombre
-	                </label>
-	                <input
-	                  id="modificador-nombre"
-	                  type="text"
-	                  value={formData.nombre}
-	                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-	                  className="input"
-	                  placeholder={formData.tipo === 'EXCLUSION' ? 'ej: cebolla' : 'ej: queso'}
-	                  required
-	                />
-                <p className="text-xs text-gray-500 mt-1">
+              <div>
+                <label htmlFor="modificador-nombre" className="label">
+                  Nombre
+                </label>
+                <input
+                  id="modificador-nombre"
+                  type="text"
+                  value={formData.nombre}
+                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                  className="input"
+                  placeholder={formData.tipo === 'EXCLUSION' ? 'ej: cebolla' : 'ej: queso'}
+                  required
+                />
+                <p className="input-hint">
                   Se mostrara como: {formData.tipo === 'EXCLUSION' ? 'Sin' : 'Extra'} {formData.nombre || '...'}
                 </p>
               </div>
 
-	              {formData.tipo === 'ADICION' && (
-	                <div>
-	                  <label htmlFor="modificador-precio" className="block text-sm font-medium text-gray-700 mb-1">
-	                    Precio adicional
-	                  </label>
-	                  <div className="relative">
-	                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
-	                    <input
-	                      id="modificador-precio"
-	                      type="number"
-	                      step="0.01"
-	                      min="0"
-	                      value={formData.precio}
-	                      onChange={(e) => setFormData({ ...formData, precio: e.target.value })}
+              {formData.tipo === 'ADICION' && (
+                <div>
+                  <label htmlFor="modificador-precio" className="label">
+                    Precio adicional
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary">$</span>
+                    <input
+                      id="modificador-precio"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.precio}
+                      onChange={(e) => setFormData({ ...formData, precio: e.target.value })}
                       className="input pl-8"
                       placeholder="0.00"
                     />
@@ -301,7 +301,7 @@ export default function Modificadores() {
                 </div>
               )}
 
-              <div className="flex gap-3 justify-end pt-2">
+              <div className="modal-footer">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}

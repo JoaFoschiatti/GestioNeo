@@ -109,15 +109,15 @@ export default function Registro() {
       return false
     }
     if (!formData.password) {
-      setError('Ingresa una contraseña')
+      setError('Ingresa una contrasena')
       return false
     }
     if (formData.password.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres')
+      setError('La contrasena debe tener al menos 6 caracteres')
       return false
     }
     if (formData.password !== formData.confirmPassword) {
-      setError('Las contraseñas no coinciden')
+      setError('Las contrasenas no coinciden')
       return false
     }
     return true
@@ -148,38 +148,28 @@ export default function Registro() {
     }
   }
 
-  // Pantalla de éxito con glassmorphism
+  // Success screen
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center overflow-hidden relative px-4"
-        style={{
-          background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 30%, #059669 60%, #10b981 100%)',
-          backgroundSize: '400% 400%',
-          animation: 'gradient-shift 15s ease infinite'
-        }}
-      >
-        {/* Blobs decorativos */}
-        <div className="blob blob-1" style={{ background: 'rgba(255, 255, 255, 0.3)' }} />
-        <div className="blob blob-2" style={{ background: 'rgba(134, 239, 172, 0.4)' }} />
-
-        <div className="glass-card w-full max-w-md p-8 relative z-10 animate-fade-in-up text-center">
-          <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mx-auto mb-6 border border-white/30">
-            <CheckCircleIcon className="w-12 h-12 text-white" />
+      <div className="min-h-screen flex items-center justify-center overflow-hidden relative px-4 bg-canvas">
+        <div className="card card-lg w-full max-w-md relative z-10 animate-fade-in-up text-center">
+          <div className="w-16 h-16 bg-success-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <CheckCircleIcon className="w-10 h-10 text-success-600" />
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">
+          <h1 className="text-heading-2 mb-2">
             Registro Exitoso
           </h1>
-          <p className="text-white/80 mb-6">
-            Te enviamos un email de verificacion a <strong className="text-white">{formData.email}</strong>.
+          <p className="text-text-secondary mb-6">
+            Te enviamos un email de verificacion a <strong className="text-text-primary">{formData.email}</strong>.
             Por favor revisa tu bandeja de entrada y confirma tu cuenta.
           </p>
-          <div className="glass-info-box text-sm text-white/80 mb-6">
+          <div className="glass-info-box mb-6">
             <p>El link de verificacion expira en 24 horas.</p>
             <p className="mt-1">Revisa tambien tu carpeta de spam.</p>
           </div>
           <Link
             to="/login"
-            className="btn-glass-primary inline-block"
+            className="btn btn-primary w-full"
           >
             Ir al Login
           </Link>
@@ -190,38 +180,38 @@ export default function Registro() {
 
   return (
     <div className="min-h-screen flex items-center justify-center login-gradient-bg overflow-hidden relative px-4 py-8">
-      {/* Blobs decorativos */}
+      {/* Decorative blobs */}
       <div className="blob blob-1" />
       <div className="blob blob-2" />
       <div className="blob blob-3" />
 
-      {/* Card principal */}
-      <div className="glass-card w-full max-w-md p-8 relative z-10 animate-fade-in-up">
-        {/* Logo + título */}
+      {/* Main card */}
+      <div className="glass-card w-full max-w-md relative z-10 animate-fade-in-up">
+        {/* Logo + title */}
         <div className="text-center mb-6">
-          <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl mx-auto mb-4 flex items-center justify-center border border-white/20">
-            <span className="text-3xl">🍔</span>
+          <div className="w-14 h-14 bg-primary-500 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg">
+            <span className="text-2xl text-white font-bold">G</span>
           </div>
-          <h1 className="text-3xl font-bold text-white">GestioNeo</h1>
-          <p className="text-white/70 mt-2">Registra tu restaurante</p>
+          <h1 className="text-heading-1">GestioNeo</h1>
+          <p className="text-text-secondary mt-2">Registra tu restaurante</p>
         </div>
 
         {/* Progress Steps */}
         <div className="flex items-center justify-center mb-6">
           <div className={`flex items-center justify-center w-10 h-10 rounded-full font-medium transition-all ${
             step >= 1
-              ? 'bg-white/30 text-white border border-white/40'
-              : 'bg-white/10 text-white/50 border border-white/20'
+              ? 'bg-primary-500 text-white'
+              : 'bg-surface-hover text-text-tertiary'
           }`}>
             1
           </div>
           <div className={`w-16 h-1 rounded transition-all ${
-            step >= 2 ? 'bg-white/40' : 'bg-white/20'
+            step >= 2 ? 'bg-primary-500' : 'bg-border-default'
           }`} />
           <div className={`flex items-center justify-center w-10 h-10 rounded-full font-medium transition-all ${
             step >= 2
-              ? 'bg-white/30 text-white border border-white/40'
-              : 'bg-white/10 text-white/50 border border-white/20'
+              ? 'bg-primary-500 text-white'
+              : 'bg-surface-hover text-text-tertiary'
           }`}>
             2
           </div>
@@ -229,7 +219,7 @@ export default function Registro() {
 
         {/* Error */}
         {error && (
-          <div className="mb-5 bg-red-500/20 backdrop-blur-sm text-white p-3 rounded-xl flex items-center gap-2 border border-red-400/30">
+          <div className="alert alert-error mb-5">
             <ExclamationCircleIcon className="w-5 h-5 flex-shrink-0" />
             <span className="text-sm">{error}</span>
           </div>
@@ -238,11 +228,11 @@ export default function Registro() {
         <form onSubmit={handleSubmit} className="space-y-5">
           {step === 1 && (
             <>
-              {/* Nombre del Restaurante */}
-              <div>
-                <label className="glass-label">Nombre del Restaurante</label>
+              {/* Restaurant name */}
+              <div className="input-group">
+                <label className="label">Nombre del Restaurante</label>
                 <div className="relative">
-                  <BuildingStorefrontIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/50" />
+                  <BuildingStorefrontIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-text-tertiary" />
                   <input
                     type="text"
                     name="nombreRestaurante"
@@ -256,15 +246,15 @@ export default function Registro() {
               </div>
 
               {/* URL / Slug */}
-              <div>
-                <label className="glass-label">URL de tu menu</label>
+              <div className="input-group">
+                <label className="label">URL de tu menu</label>
                 <div className="flex items-center gap-2">
-                  <span className="text-white/50 text-sm whitespace-nowrap">gestioneo.com/</span>
+                  <span className="text-text-tertiary text-sm whitespace-nowrap">gestioneo.com/</span>
                   <div className="relative flex-1">
                     <input
                       type="text"
                       name="slug"
-                      className="glass-input pl-4"
+                      className="input"
                       value={formData.slug}
                       onChange={(e) => {
                         const slug = e.target.value.toLowerCase()
@@ -276,7 +266,7 @@ export default function Registro() {
                     />
                   </div>
                 </div>
-                <p className="text-xs text-white/50 mt-1.5">
+                <p className="input-hint">
                   Esta sera la URL donde tus clientes veran el menu
                 </p>
               </div>
@@ -293,11 +283,11 @@ export default function Registro() {
 
           {step === 2 && (
             <>
-              {/* Tu Nombre */}
-              <div>
-                <label className="glass-label">Tu Nombre</label>
+              {/* Name */}
+              <div className="input-group">
+                <label className="label">Tu Nombre</label>
                 <div className="relative">
-                  <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/50" />
+                  <UserIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-text-tertiary" />
                   <input
                     type="text"
                     name="nombre"
@@ -311,10 +301,10 @@ export default function Registro() {
               </div>
 
               {/* Email */}
-              <div>
-                <label className="glass-label">Email</label>
+              <div className="input-group">
+                <label className="label">Email</label>
                 <div className="relative">
-                  <EnvelopeIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/50" />
+                  <EnvelopeIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-text-tertiary" />
                   <input
                     type="email"
                     name="email"
@@ -326,24 +316,24 @@ export default function Registro() {
                 </div>
               </div>
 
-              {/* Contraseña */}
-              <div>
-                <label className="glass-label">Contraseña</label>
+              {/* Password */}
+              <div className="input-group">
+                <label className="label">Contrasena</label>
                 <div className="relative">
-                  <LockClosedIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/50" />
+                  <LockClosedIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-text-tertiary" />
                   <input
                     type={showPassword ? 'text' : 'password'}
                     name="password"
                     className="glass-input pr-12"
                     value={formData.password}
                     onChange={handleChange}
-                    placeholder="••••••••"
+                    placeholder="********"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/80 transition-colors"
-                    aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary transition-colors"
+                    aria-label={showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'}
                     aria-pressed={showPassword}
                   >
                     {showPassword ? (
@@ -355,24 +345,24 @@ export default function Registro() {
                 </div>
               </div>
 
-              {/* Confirmar Contraseña */}
-              <div>
-                <label className="glass-label">Confirmar Contraseña</label>
+              {/* Confirm password */}
+              <div className="input-group">
+                <label className="label">Confirmar Contrasena</label>
                 <div className="relative">
-                  <LockClosedIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/50" />
+                  <LockClosedIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-text-tertiary" />
                   <input
                     type={showConfirmPassword ? 'text' : 'password'}
                     name="confirmPassword"
                     className="glass-input pr-12"
                     value={formData.confirmPassword}
                     onChange={handleChange}
-                    placeholder="••••••••"
+                    placeholder="********"
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/80 transition-colors"
-                    aria-label={showConfirmPassword ? 'Ocultar confirmación' : 'Mostrar confirmación'}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary transition-colors"
+                    aria-label={showConfirmPassword ? 'Ocultar confirmacion' : 'Mostrar confirmacion'}
                     aria-pressed={showConfirmPassword}
                   >
                     {showConfirmPassword ? (
@@ -384,12 +374,12 @@ export default function Registro() {
                 </div>
               </div>
 
-              {/* Botones */}
+              {/* Buttons */}
               <div className="flex gap-3 mt-2">
                 <button
                   type="button"
                   onClick={() => setStep(1)}
-                  className="flex-1 py-3.5 rounded-xl font-medium bg-white/10 text-white border border-white/20 hover:bg-white/20 transition-all"
+                  className="btn btn-secondary flex-1"
                 >
                   Atras
                 </button>
@@ -400,22 +390,7 @@ export default function Registro() {
                 >
                   {loading ? (
                     <>
-                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                          fill="none"
-                        />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        />
-                      </svg>
+                      <div className="spinner spinner-sm border-white/30 border-t-white" />
                       Registrando...
                     </>
                   ) : (
@@ -427,10 +402,10 @@ export default function Registro() {
           )}
         </form>
 
-        {/* Link login */}
+        {/* Login link */}
         <div className="mt-6 text-center text-sm">
-          <p className="text-white/70">
-            ¿Ya tienes cuenta?{' '}
+          <p className="text-text-secondary">
+            Ya tienes cuenta?{' '}
             <Link to="/login" className="glass-link font-medium">
               Inicia sesion
             </Link>
@@ -439,7 +414,7 @@ export default function Registro() {
       </div>
 
       {/* Footer */}
-      <div className="absolute bottom-6 left-0 right-0 text-center text-white/50 text-sm">
+      <div className="absolute bottom-6 left-0 right-0 text-center text-text-tertiary text-sm">
         <p>Al registrarte aceptas nuestros terminos y condiciones</p>
       </div>
     </div>

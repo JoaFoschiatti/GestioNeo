@@ -561,8 +561,8 @@ export default function MenuPublico() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex justify-center items-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+      <div className="min-h-screen bg-canvas flex justify-center items-center">
+        <div className="spinner spinner-lg" />
       </div>
     )
   }
@@ -570,24 +570,24 @@ export default function MenuPublico() {
   // Pantalla mientras el usuario paga en otra pestaña (desktop)
   if (pedidoPendienteMP) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-8">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
+      <div className="min-h-screen bg-canvas flex flex-col items-center justify-center p-8">
+        <div className="bg-surface rounded-2xl shadow-card p-8 max-w-md w-full text-center">
           <div className="relative mb-6">
-            <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-500 mx-auto"></div>
-            <CreditCardIcon className="w-6 h-6 text-blue-500 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
+            <div className="spinner spinner-lg mx-auto"></div>
+            <CreditCardIcon className="w-6 h-6 text-info-500 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
           </div>
-          <h1 className="text-2xl font-bold mb-2">Esperando confirmacion de pago</h1>
-          <p className="text-gray-600 mb-6">
+          <h1 className="text-2xl font-bold text-text-primary mb-2">Esperando confirmacion de pago</h1>
+          <p className="text-text-secondary mb-6">
             Completa el pago en MercadoPago.
             Esta pagina se actualizara automaticamente.
           </p>
-          <div className="bg-gray-100 rounded-lg p-4 mb-6">
-            <p className="text-sm text-gray-500">Pedido #{pedidoPendienteMP.id}</p>
+          <div className="bg-surface-hover rounded-xl p-4 mb-6">
+            <p className="text-sm text-text-tertiary">Pedido #{pedidoPendienteMP.id}</p>
             <p className="text-2xl font-bold text-primary-600">
               ${parseFloat(pedidoPendienteMP.total).toLocaleString('es-AR')}
             </p>
           </div>
-          <p className="text-xs text-gray-400 mb-4">
+          <p className="text-xs text-text-tertiary mb-4">
             Verificando cada 3 segundos...
           </p>
           <button
@@ -595,7 +595,7 @@ export default function MenuPublico() {
               setPedidoPendienteMP(null)
               localStorage.removeItem('mp_pedido_pendiente')
             }}
-            className="text-gray-500 text-sm hover:underline"
+            className="text-text-tertiary text-sm hover:underline"
           >
             Cancelar y volver al menu
           </button>
@@ -607,30 +607,30 @@ export default function MenuPublico() {
   // Verificando pago de MercadoPago
   if (verificandoPago) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center text-center p-8">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
+      <div className="min-h-screen bg-canvas flex flex-col items-center justify-center text-center p-8">
+        <div className="bg-surface rounded-2xl shadow-card p-8 max-w-md w-full">
           <div className="relative mb-6">
-            <div className="animate-spin rounded-full h-20 w-20 border-4 border-primary-200 border-t-primary-500 mx-auto"></div>
+            <div className="spinner spinner-lg mx-auto"></div>
             <CreditCardIcon className="w-8 h-8 text-primary-500 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+          <h1 className="text-2xl font-bold text-text-primary mb-2">
             Verificando tu pago...
           </h1>
-          <p className="text-gray-600 mb-4">
+          <p className="text-text-secondary mb-4">
             Estamos confirmando tu pago con MercadoPago. Por favor espera un momento.
           </p>
-          <div className="bg-gray-100 rounded-lg p-3">
-            <p className="text-sm text-gray-500">
+          <div className="bg-surface-hover rounded-xl p-3">
+            <p className="text-sm text-text-tertiary">
               Tiempo de espera: {tiempoEspera} segundos
             </p>
-            <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+            <div className="w-full bg-border-default rounded-full h-2 mt-2">
               <div
                 className="bg-primary-500 h-2 rounded-full transition-all duration-300"
                 style={{ width: `${Math.min((tiempoEspera / 60) * 100, 100)}%` }}
               ></div>
             </div>
           </div>
-          <p className="text-xs text-gray-400 mt-4">
+          <p className="text-xs text-text-tertiary mt-4">
             No cierres esta ventana
           </p>
         </div>
@@ -640,11 +640,11 @@ export default function MenuPublico() {
 
   if (loadError) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-        <div className="bg-white rounded-2xl shadow-xl p-6 max-w-md w-full text-center">
-          <ExclamationCircleIcon className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">No pudimos cargar el menu</h1>
-          <p className="text-gray-600 mb-6">{loadError}</p>
+      <div className="min-h-screen bg-canvas flex items-center justify-center p-6">
+        <div className="bg-surface rounded-2xl shadow-card p-6 max-w-md w-full text-center">
+          <ExclamationCircleIcon className="w-12 h-12 text-error-500 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-text-primary mb-2">No pudimos cargar el menu</h1>
+          <p className="text-text-secondary mb-6">{loadError}</p>
           <button
             type="button"
             onClick={cargarConfigYMenuAsync}
@@ -660,21 +660,21 @@ export default function MenuPublico() {
   // Tienda cerrada overlay
   if (config && !config.tienda_abierta) {
     return (
-      <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-center p-8">
-        <LockClosedIcon className="w-24 h-24 text-gray-500 mb-6" />
+      <div className="min-h-screen bg-text-primary flex flex-col items-center justify-center text-center p-8">
+        <LockClosedIcon className="w-24 h-24 text-text-tertiary mb-6" />
         <h1 className="text-3xl md:text-4xl font-bold text-white mb-4">
           Estamos Cerrados
         </h1>
-        <p className="text-gray-400 text-lg mb-6">
+        <p className="text-text-tertiary text-lg mb-6">
           {config.nombre_negocio || 'El local'} no esta recibiendo pedidos en este momento
         </p>
-        <div className="bg-gray-800 rounded-xl p-6 max-w-sm w-full">
-          <div className="flex items-center justify-center gap-3 text-gray-300">
+        <div className="bg-surface/10 rounded-xl p-6 max-w-sm w-full">
+          <div className="flex items-center justify-center gap-3 text-text-tertiary">
             <ClockIcon className="w-6 h-6" />
             <span>Horario: {config.horario_apertura} - {config.horario_cierre}</span>
           </div>
         </div>
-        <p className="text-gray-500 mt-8">Volvemos pronto!</p>
+        <p className="text-text-tertiary mt-8">Volvemos pronto!</p>
       </div>
     )
   }
@@ -682,22 +682,22 @@ export default function MenuPublico() {
   // Pedido exitoso
   if (pedidoExitoso) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center text-center p-8">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
-          <CheckCircleIcon className="w-20 h-20 text-green-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+      <div className="min-h-screen bg-canvas flex flex-col items-center justify-center text-center p-8">
+        <div className="bg-surface rounded-2xl shadow-card p-8 max-w-md w-full">
+          <CheckCircleIcon className="w-20 h-20 text-success-500 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-text-primary mb-2">
             Pedido Confirmado!
           </h1>
-          <p className="text-gray-600 mb-4">
+          <p className="text-text-secondary mb-4">
             Tu pedido #{pedidoExitoso.id} ha sido recibido correctamente
           </p>
           {pedidoExitoso.pagoAprobado && (
-            <div className="bg-green-50 text-green-700 p-3 rounded-lg mb-4">
+            <div className="bg-success-50 text-success-700 p-3 rounded-xl mb-4">
               <CheckCircleIcon className="w-5 h-5 inline mr-2" />
               Pago aprobado
             </div>
           )}
-          <p className="text-sm text-gray-500 mb-6">
+          <p className="text-sm text-text-tertiary mb-6">
             Enviamos un comprobante a tu email. Te contactaremos para coordinar la entrega.
           </p>
           <button
@@ -712,7 +712,7 @@ export default function MenuPublico() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-canvas">
       {/* Hero Header */}
       <header
         className="menu-hero relative"
@@ -761,12 +761,12 @@ export default function MenuPublico() {
 
       {pageError && (
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="bg-red-50 text-red-700 p-4 rounded-xl flex items-start gap-3">
+          <div className="bg-error-50 text-error-700 p-4 rounded-xl flex items-start gap-3">
             <ExclamationCircleIcon className="w-6 h-6 flex-shrink-0" />
             <span className="flex-1">{pageError}</span>
             <button
               type="button"
-              className="text-red-500 hover:text-red-600"
+              className="text-error-500 hover:text-error-600"
               onClick={() => setPageError(null)}
               aria-label="Cerrar alerta"
             >
@@ -777,7 +777,7 @@ export default function MenuPublico() {
       )}
 
       {/* Sticky Category Navigation */}
-      <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm shadow-sm">
+      <div className="sticky top-0 z-30 bg-surface/95 backdrop-blur-sm shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex gap-3 overflow-x-auto pb-2 hide-scrollbar">
             <button
@@ -809,8 +809,8 @@ export default function MenuPublico() {
             {productosFiltrados.length === 0 ? (
               <div className="empty-state">
                 <CubeIcon className="empty-state-icon" />
-                <h3 className="text-gray-500 font-medium">No hay productos en esta categoria</h3>
-                <p className="text-gray-400 text-sm mt-1">Selecciona otra categoria para ver productos</p>
+                <h3 className="text-text-secondary font-medium">No hay productos en esta categoria</h3>
+                <p className="text-text-tertiary text-sm mt-1">Selecciona otra categoria para ver productos</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-24 lg:mb-6">
@@ -821,7 +821,7 @@ export default function MenuPublico() {
 
                   return (
                     <div key={producto.id} className="product-card group">
-                      <div className="relative h-48 overflow-hidden bg-gray-100">
+                      <div className="relative h-48 overflow-hidden bg-surface-hover">
                         {producto.imagen ? (
                           <img
                             src={producto.imagen.startsWith('http') ? producto.imagen : `${BACKEND_URL}${producto.imagen}`}
@@ -829,8 +829,8 @@ export default function MenuPublico() {
                             className="product-card-image"
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
-                            <CubeIcon className="w-16 h-16 text-gray-300" />
+                          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-surface-hover to-border-default">
+                            <CubeIcon className="w-16 h-16 text-text-tertiary" />
                           </div>
                         )}
                         <button
@@ -844,8 +844,8 @@ export default function MenuPublico() {
                       </div>
 
                       <div className="p-4">
-                        <h3 className="font-bold text-gray-900 text-lg mb-1">{producto.nombre}</h3>
-                        <p className="text-gray-500 text-sm line-clamp-2 mb-2 min-h-[2.5rem]">
+                        <h3 className="font-bold text-text-primary text-lg mb-1">{producto.nombre}</h3>
+                        <p className="text-text-tertiary text-sm line-clamp-2 mb-2 min-h-[2.5rem]">
                           {producto.descripcion || 'Delicioso producto'}
                         </p>
 
@@ -864,7 +864,7 @@ export default function MenuPublico() {
                                   className={`px-2.5 py-1 text-xs rounded-full font-medium transition-all ${
                                     isSelected
                                       ? 'bg-primary-500 text-white'
-                                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                      : 'bg-surface-hover text-text-secondary hover:bg-border-default'
                                   }`}
                                 >
                                   {variante.nombreVariante}
@@ -915,13 +915,13 @@ export default function MenuPublico() {
               <div className="max-h-[40vh] overflow-y-auto p-4 space-y-3 cart-scroll">
                 {carrito.length === 0 ? (
                   <div className="text-center py-8">
-                    <ShoppingCartIcon className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                    <p className="text-gray-500 text-sm">Tu carrito esta vacio</p>
-                    <p className="text-gray-400 text-xs mt-1">Agrega productos para comenzar</p>
+                    <ShoppingCartIcon className="w-12 h-12 mx-auto text-text-tertiary mb-3" />
+                    <p className="text-text-secondary text-sm">Tu carrito esta vacio</p>
+                    <p className="text-text-tertiary text-xs mt-1">Agrega productos para comenzar</p>
                   </div>
                 ) : (
                   carrito.map((item) => (
-                    <div key={item.id} className="flex items-center gap-3 bg-gray-50 p-3 rounded-lg">
+                    <div key={item.id} className="flex items-center gap-3 bg-surface-hover p-3 rounded-xl">
                       <div className="flex-1 min-w-0">
                         <h4 className="font-medium text-sm truncate">{item.nombre}</h4>
                         <p className="text-primary-600 text-sm font-semibold">
@@ -951,50 +951,50 @@ export default function MenuPublico() {
               </div>
 
               {carrito.length > 0 && (
-                <div className="border-t p-4 bg-gray-50">
+                <div className="border-t border-border-default p-4 bg-surface-hover">
                   {/* Tipo de entrega selector */}
                   <div className="grid grid-cols-2 gap-2 mb-4">
                     {config?.delivery_habilitado && (
                       <button
                         onClick={() => setTipoEntrega('DELIVERY')}
-                        className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
+                        className={`p-3 rounded-xl border text-sm font-medium transition-all ${
                           tipoEntrega === 'DELIVERY'
                             ? 'border-primary-500 bg-primary-50 text-primary-700'
-                            : 'border-gray-200 hover:border-gray-300'
+                            : 'border-border-default hover:border-border-subtle'
                         }`}
                       >
                         <TruckIcon className="w-5 h-5 mx-auto mb-1" />
                         Delivery
-                        <span className="block text-xs text-gray-500">+${config.costo_delivery?.toLocaleString('es-AR')}</span>
+                        <span className="block text-xs text-text-tertiary">+${config.costo_delivery?.toLocaleString('es-AR')}</span>
                       </button>
                     )}
                     <button
                       onClick={() => setTipoEntrega('RETIRO')}
-                      className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
+                      className={`p-3 rounded-xl border text-sm font-medium transition-all ${
                         tipoEntrega === 'RETIRO'
                           ? 'border-primary-500 bg-primary-50 text-primary-700'
-                          : 'border-gray-200 hover:border-gray-300'
+                          : 'border-border-default hover:border-border-subtle'
                       }`}
                     >
                       <MapPinIcon className="w-5 h-5 mx-auto mb-1" />
                       Retiro
-                      <span className="block text-xs text-gray-500">Gratis</span>
+                      <span className="block text-xs text-text-tertiary">Gratis</span>
                     </button>
                   </div>
 
                   <div className="space-y-1 text-sm mb-4">
-                    <div className="flex justify-between text-gray-600">
+                    <div className="flex justify-between text-text-secondary">
                       <span>Subtotal</span>
                       <span>${subtotal.toLocaleString('es-AR')}</span>
                     </div>
                     {costoEnvio > 0 && (
-                      <div className="flex justify-between text-gray-600">
+                      <div className="flex justify-between text-text-secondary">
                         <span>Envio</span>
                         <span>${costoEnvio.toLocaleString('es-AR')}</span>
                       </div>
                     )}
-                    <div className="flex justify-between text-xl font-bold pt-2 border-t">
-                      <span>Total</span>
+                    <div className="flex justify-between text-xl font-bold pt-2 border-t border-border-default">
+                      <span className="text-text-primary">Total</span>
                       <span className="text-primary-600">${total.toLocaleString('es-AR')}</span>
                     </div>
                   </div>
@@ -1029,31 +1029,31 @@ export default function MenuPublico() {
       {showCarrito && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div
-            className="absolute inset-0 bg-gray-900/80 backdrop-blur-sm"
+            className="absolute inset-0 bg-text-primary/80 backdrop-blur-sm"
             onClick={() => setShowCarrito(false)}
           />
 
-          <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl max-h-[85vh] overflow-hidden animate-slide-up">
-            <div className="sticky top-0 bg-white p-4 border-b flex justify-between items-center">
+          <div className="absolute inset-x-0 bottom-0 bg-surface rounded-t-3xl max-h-[85vh] overflow-hidden animate-slide-up">
+            <div className="sticky top-0 bg-surface p-4 border-b border-border-default flex justify-between items-center">
               <div className="flex items-center gap-3">
                 <ShoppingCartIcon className="w-6 h-6 text-primary-500" />
-                <h2 className="text-xl font-bold">Tu Pedido</h2>
+                <h2 className="text-xl font-bold text-text-primary">Tu Pedido</h2>
               </div>
               <button
                 onClick={() => setShowCarrito(false)}
-                className="p-2 hover:bg-gray-100 rounded-full"
+                className="p-2 hover:bg-surface-hover rounded-full"
                 aria-label="Cerrar carrito"
               >
-                <XMarkIcon className="w-6 h-6 text-gray-500" />
+                <XMarkIcon className="w-6 h-6 text-text-tertiary" />
               </button>
             </div>
 
             <div className="p-4 space-y-3 overflow-y-auto max-h-[40vh]">
               {carrito.map((item) => (
-                <div key={item.id} className="flex items-center gap-4 bg-gray-50 p-3 rounded-lg">
+                <div key={item.id} className="flex items-center gap-4 bg-surface-hover p-3 rounded-xl">
                   <div className="flex-1">
-                    <h4 className="font-medium">{item.nombre}</h4>
-                    <p className="text-sm text-gray-500">
+                    <h4 className="font-medium text-text-primary">{item.nombre}</h4>
+                    <p className="text-sm text-text-tertiary">
                       ${parseFloat(item.precio).toLocaleString('es-AR')} c/u
                     </p>
                   </div>
@@ -1079,16 +1079,16 @@ export default function MenuPublico() {
             </div>
 
             {/* Tipo entrega mobile */}
-            <div className="px-4 py-3 bg-gray-50 border-t">
-              <p className="text-sm font-medium text-gray-700 mb-2">Tipo de entrega</p>
+            <div className="px-4 py-3 bg-surface-hover border-t border-border-default">
+              <p className="text-sm font-medium text-text-secondary mb-2">Tipo de entrega</p>
               <div className="grid grid-cols-2 gap-2">
                 {config?.delivery_habilitado && (
                   <button
                     onClick={() => setTipoEntrega('DELIVERY')}
-                    className={`p-2 rounded-lg border-2 text-sm font-medium ${
+                    className={`p-2 rounded-xl border text-sm font-medium ${
                       tipoEntrega === 'DELIVERY'
                         ? 'border-primary-500 bg-primary-50 text-primary-700'
-                        : 'border-gray-200'
+                        : 'border-border-default'
                     }`}
                   >
                     <TruckIcon className="w-4 h-4 inline mr-1" />
@@ -1097,10 +1097,10 @@ export default function MenuPublico() {
                 )}
                 <button
                   onClick={() => setTipoEntrega('RETIRO')}
-                  className={`p-2 rounded-lg border-2 text-sm font-medium ${
+                  className={`p-2 rounded-xl border text-sm font-medium ${
                     tipoEntrega === 'RETIRO'
                       ? 'border-primary-500 bg-primary-50 text-primary-700'
-                      : 'border-gray-200'
+                      : 'border-border-default'
                   }`}
                 >
                   <MapPinIcon className="w-4 h-4 inline mr-1" />
@@ -1109,21 +1109,21 @@ export default function MenuPublico() {
               </div>
             </div>
 
-            <div className="sticky bottom-0 bg-white p-4 border-t">
+            <div className="sticky bottom-0 bg-surface p-4 border-t border-border-default">
               <div className="space-y-1 text-sm mb-3">
-                <div className="flex justify-between text-gray-600">
+                <div className="flex justify-between text-text-secondary">
                   <span>Subtotal</span>
                   <span>${subtotal.toLocaleString('es-AR')}</span>
                 </div>
                 {costoEnvio > 0 && (
-                  <div className="flex justify-between text-gray-600">
+                  <div className="flex justify-between text-text-secondary">
                     <span>Envio</span>
                     <span>${costoEnvio.toLocaleString('es-AR')}</span>
                   </div>
                 )}
               </div>
               <div className="flex justify-between text-xl font-bold mb-4">
-                <span>Total:</span>
+                <span className="text-text-primary">Total:</span>
                 <span className="text-primary-600">${total.toLocaleString('es-AR')}</span>
               </div>
               <button
@@ -1141,26 +1141,26 @@ export default function MenuPublico() {
       {showCheckout && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
           <div
-            className="absolute inset-0 bg-gray-900/80 backdrop-blur-sm"
+            className="absolute inset-0 bg-text-primary/80 backdrop-blur-sm"
             onClick={() => setShowCheckout(false)}
           />
 
-          <div className="relative bg-white w-full md:max-w-lg md:rounded-2xl rounded-t-3xl max-h-[90vh] overflow-y-auto">
-            <div className="p-4 border-b flex justify-between items-center sticky top-0 bg-white z-10">
-              <h2 className="text-xl font-bold">Datos de Entrega</h2>
+          <div className="relative bg-surface w-full md:max-w-lg md:rounded-2xl rounded-t-3xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-border-default flex justify-between items-center sticky top-0 bg-surface z-10">
+              <h2 className="text-xl font-bold text-text-primary">Datos de Entrega</h2>
               <button
                 onClick={() => setShowCheckout(false)}
-                className="p-2 hover:bg-gray-100 rounded-full"
+                className="p-2 hover:bg-surface-hover rounded-full"
                 aria-label="Cerrar checkout"
               >
-                <XMarkIcon className="w-6 h-6 text-gray-500" />
+                <XMarkIcon className="w-6 h-6 text-text-tertiary" />
               </button>
             </div>
 
-            <div className="p-4 space-y-4">
+            <div className="p-4 space-y-4 overflow-y-auto flex-1">
               {/* Error message */}
               {checkoutError && (
-                <div className="bg-red-50 text-red-700 p-3 rounded-lg flex items-center gap-2">
+                <div className="bg-error-50 text-error-700 p-3 rounded-xl flex items-center gap-2">
                   <ExclamationCircleIcon className="w-5 h-5 flex-shrink-0" />
                   <span>{checkoutError}</span>
                 </div>
@@ -1174,33 +1174,33 @@ export default function MenuPublico() {
                     <button
                       type="button"
                       onClick={() => setTipoEntrega('DELIVERY')}
-                      className={`p-4 rounded-xl border-2 text-center transition-all ${
+                      className={`p-4 rounded-xl border text-center transition-all ${
                         tipoEntrega === 'DELIVERY'
                           ? 'border-primary-500 bg-primary-50'
-                          : 'border-gray-200 hover:border-gray-300'
+                          : 'border-border-default hover:border-border-subtle'
                       }`}
                     >
                       <TruckIcon className="w-8 h-8 mx-auto mb-2 text-primary-500" />
-                      <p className="font-semibold">Delivery</p>
-                      <p className="text-sm text-gray-500">+${config.costo_delivery?.toLocaleString('es-AR')}</p>
+                      <p className="font-semibold text-text-primary">Delivery</p>
+                      <p className="text-sm text-text-tertiary">+${config.costo_delivery?.toLocaleString('es-AR')}</p>
                     </button>
                   )}
                   <button
                     type="button"
                     onClick={() => setTipoEntrega('RETIRO')}
-                    className={`p-4 rounded-xl border-2 text-center transition-all ${
+                    className={`p-4 rounded-xl border text-center transition-all ${
                       tipoEntrega === 'RETIRO'
                         ? 'border-primary-500 bg-primary-50'
-                        : 'border-gray-200 hover:border-gray-300'
+                        : 'border-border-default hover:border-border-subtle'
                     }`}
                   >
                     <MapPinIcon className="w-8 h-8 mx-auto mb-2 text-primary-500" />
-                    <p className="font-semibold">Retiro</p>
-                    <p className="text-sm text-gray-500">Gratis</p>
+                    <p className="font-semibold text-text-primary">Retiro</p>
+                    <p className="text-sm text-text-tertiary">Gratis</p>
                   </button>
                 </div>
                 {tipoEntrega === 'RETIRO' && config?.direccion_retiro && (
-                  <p className="text-sm text-gray-600 mt-2 bg-gray-50 p-2 rounded">
+                  <p className="text-sm text-text-secondary mt-2 bg-surface-hover p-2 rounded-lg">
                     <MapPinIcon className="w-4 h-4 inline mr-1" />
                     Retirar en: {config.direccion_retiro}
                   </p>
@@ -1262,22 +1262,22 @@ export default function MenuPublico() {
               </div>
 
               {/* Resumen */}
-              <div className="bg-gray-50 p-4 rounded-xl space-y-2">
-                <h3 className="font-semibold text-gray-700 mb-3">Resumen del Pedido</h3>
+              <div className="bg-surface-hover p-4 rounded-xl space-y-2">
+                <h3 className="font-semibold text-text-secondary mb-3">Resumen del Pedido</h3>
                 {carrito.map((item) => (
                   <div key={item.id} className="flex justify-between text-sm">
-                    <span className="text-gray-600">{item.cantidad}x {item.nombre}</span>
-                    <span className="font-medium">${(parseFloat(item.precio) * item.cantidad).toLocaleString('es-AR')}</span>
+                    <span className="text-text-secondary">{item.cantidad}x {item.nombre}</span>
+                    <span className="font-medium text-text-primary">${(parseFloat(item.precio) * item.cantidad).toLocaleString('es-AR')}</span>
                   </div>
                 ))}
                 {costoEnvio > 0 && (
-                  <div className="flex justify-between text-sm text-gray-600 pt-2 border-t">
+                  <div className="flex justify-between text-sm text-text-secondary pt-2 border-t border-border-default">
                     <span>Costo de envio</span>
                     <span>${costoEnvio.toLocaleString('es-AR')}</span>
                   </div>
                 )}
-                <div className="border-t pt-2 mt-2 flex justify-between font-bold text-lg">
-                  <span>Total:</span>
+                <div className="border-t border-border-default pt-2 mt-2 flex justify-between font-bold text-lg">
+                  <span className="text-text-primary">Total:</span>
                   <span className="text-primary-600">${total.toLocaleString('es-AR')}</span>
                 </div>
               </div>
@@ -1286,7 +1286,7 @@ export default function MenuPublico() {
               <div>
                 <label className="label">Metodo de Pago</label>
                 {!config?.mercadopago_enabled && !config?.efectivo_enabled ? (
-                  <div className="bg-amber-50 text-amber-700 p-4 rounded-xl">
+                  <div className="bg-warning-50 text-warning-700 p-4 rounded-xl">
                     <ExclamationCircleIcon className="w-6 h-6 inline mr-2" />
                     El negocio no tiene metodos de pago configurados. Contacta al local para realizar tu pedido.
                   </div>
@@ -1297,35 +1297,35 @@ export default function MenuPublico() {
                         <button
                           type="button"
                           onClick={() => setMetodoPago('MERCADOPAGO')}
-                          className={`p-4 rounded-xl border-2 text-center transition-all ${
+                          className={`p-4 rounded-xl border text-center transition-all ${
                             metodoPago === 'MERCADOPAGO'
-                              ? 'border-blue-500 bg-blue-50'
-                              : 'border-gray-200 hover:border-gray-300'
+                              ? 'border-info-500 bg-info-50'
+                              : 'border-border-default hover:border-border-subtle'
                           }`}
                         >
-                          <CreditCardIcon className="w-8 h-8 mx-auto mb-2 text-blue-500" />
-                          <p className="font-semibold text-sm">MercadoPago</p>
-                          <p className="text-xs text-gray-500 mt-1">Tarjeta o dinero en cuenta</p>
+                          <CreditCardIcon className="w-8 h-8 mx-auto mb-2 text-info-500" />
+                          <p className="font-semibold text-sm text-text-primary">MercadoPago</p>
+                          <p className="text-xs text-text-tertiary mt-1">Tarjeta o dinero en cuenta</p>
                         </button>
                       )}
                       {config?.efectivo_enabled && (
                         <button
                           type="button"
                           onClick={() => setMetodoPago('EFECTIVO')}
-                          className={`p-4 rounded-xl border-2 text-center transition-all ${
+                          className={`p-4 rounded-xl border text-center transition-all ${
                             metodoPago === 'EFECTIVO'
-                              ? 'border-green-500 bg-green-50'
-                              : 'border-gray-200 hover:border-gray-300'
+                              ? 'border-success-500 bg-success-50'
+                              : 'border-border-default hover:border-border-subtle'
                           }`}
                         >
-                          <BanknotesIcon className="w-8 h-8 mx-auto mb-2 text-green-500" />
-                          <p className="font-semibold text-sm">Efectivo</p>
-                          <p className="text-xs text-gray-500 mt-1">Pagas al recibir</p>
+                          <BanknotesIcon className="w-8 h-8 mx-auto mb-2 text-success-500" />
+                          <p className="font-semibold text-sm text-text-primary">Efectivo</p>
+                          <p className="text-xs text-text-tertiary mt-1">Pagas al recibir</p>
                         </button>
                       )}
                     </div>
                     {!config?.mercadopago_enabled && config?.efectivo_enabled && (
-                      <p className="text-sm text-gray-500 mt-2 text-center">
+                      <p className="text-sm text-text-tertiary mt-2 text-center">
                         Solo se acepta pago en efectivo al momento de la entrega
                       </p>
                     )}
@@ -1335,8 +1335,8 @@ export default function MenuPublico() {
 
               {/* Monto abonado para efectivo */}
               {metodoPago === 'EFECTIVO' && (
-                <div className="bg-green-50 p-4 rounded-xl space-y-3">
-                  <label className="label text-green-800">Con cuanto abonas? *</label>
+                <div className="bg-success-50 p-4 rounded-xl space-y-3">
+                  <label className="label text-success-800">Con cuanto abonas? *</label>
                   <input
                     type="number"
                     className="input text-lg"
@@ -1347,7 +1347,7 @@ export default function MenuPublico() {
                     step="100"
                   />
                   {vuelto > 0 && (
-                    <div className="flex justify-between text-green-700 font-semibold">
+                    <div className="flex justify-between text-success-700 font-semibold">
                       <span>Tu vuelto:</span>
                       <span>${vuelto.toLocaleString('es-AR')}</span>
                     </div>
@@ -1361,13 +1361,13 @@ export default function MenuPublico() {
                 disabled={enviandoPedido || (!config?.mercadopago_enabled && !config?.efectivo_enabled)}
                 className={`btn w-full py-4 text-lg flex items-center justify-center gap-2 ${
                   metodoPago === 'MERCADOPAGO'
-                    ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                    ? 'bg-info-500 hover:bg-info-600 text-white'
                     : 'btn-primary'
                 } ${(enviandoPedido || (!config?.mercadopago_enabled && !config?.efectivo_enabled)) ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 {enviandoPedido ? (
                   <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    <div className="spinner" />
                     Procesando...
                   </>
                 ) : metodoPago === 'MERCADOPAGO' ? (
@@ -1387,7 +1387,7 @@ export default function MenuPublico() {
               {config?.whatsapp_numero && (
                 <button
                   onClick={enviarPedidoWhatsApp}
-                  className="btn w-full py-3 bg-green-500 hover:bg-green-600 text-white flex items-center justify-center gap-2"
+                  className="btn w-full py-3 bg-success-500 hover:bg-success-600 text-white flex items-center justify-center gap-2"
                 >
                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>

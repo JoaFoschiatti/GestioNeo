@@ -159,13 +159,32 @@ const login = async (req, res) => {
       colorPrimario: tenant.colorPrimario,
       colorSecundario: tenant.colorSecundario
     };
+
+    // Incluir info de suscripción
+    const suscripcion = await prisma.suscripcion.findUnique({
+      where: { tenantId: tenant.id },
+      select: { id: true, estado: true, fechaVencimiento: true, precioMensual: true }
+    });
+
+    const ahora = new Date();
+    const tieneAcceso = suscripcion &&
+      suscripcion.estado === 'ACTIVA' &&
+      suscripcion.fechaVencimiento &&
+      suscripcion.fechaVencimiento > ahora;
+
+    response.suscripcion = suscripcion || { estado: 'SIN_SUSCRIPCION' };
+    response.modoSoloLectura = !tieneAcceso;
+  } else {
+    // SUPER_ADMIN sin tenant
+    response.suscripcion = null;
+    response.modoSoloLectura = false;
   }
 
   res.json(response);
 };
 
 /**
- * Obtener perfil actual con info de tenant
+ * Obtener perfil actual con info de tenant y suscripción
  */
 const perfil = async (req, res) => {
   const response = { ...req.usuario };
@@ -186,7 +205,26 @@ const perfil = async (req, res) => {
 
     if (tenant) {
       response.tenant = tenant;
+
+      // Incluir info de suscripción
+      const suscripcion = await prisma.suscripcion.findUnique({
+        where: { tenantId: tenant.id },
+        select: { id: true, estado: true, fechaVencimiento: true, precioMensual: true }
+      });
+
+      const ahora = new Date();
+      const tieneAcceso = suscripcion &&
+        suscripcion.estado === 'ACTIVA' &&
+        suscripcion.fechaVencimiento &&
+        suscripcion.fechaVencimiento > ahora;
+
+      response.suscripcion = suscripcion || { estado: 'SIN_SUSCRIPCION' };
+      response.modoSoloLectura = !tieneAcceso;
     }
+  } else {
+    // SUPER_ADMIN sin tenant
+    response.suscripcion = null;
+    response.modoSoloLectura = false;
   }
 
   res.json(response);

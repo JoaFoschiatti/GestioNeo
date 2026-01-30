@@ -41,8 +41,8 @@ export default function Dashboard() {
   const handleProductoAgotado = useCallback((event) => {
     try {
       const data = JSON.parse(event.data)
-      toast.error(`⚠️ Producto agotado: ${data.nombre}`, { duration: 5000 })
-      cargarDashboardAsync().catch(() => {}) // Recargar para actualizar alertas
+      toast.error(`Producto agotado: ${data.nombre}`, { duration: 5000 })
+      cargarDashboardAsync().catch(() => {})
     } catch (e) {
       console.error('Error parsing producto.agotado event:', e)
     }
@@ -51,7 +51,7 @@ export default function Dashboard() {
   const handleProductoDisponible = useCallback((event) => {
     try {
       const data = JSON.parse(event.data)
-      toast.success(`✓ Producto disponible: ${data.nombre}`, { duration: 4000 })
+      toast.success(`Producto disponible: ${data.nombre}`, { duration: 4000 })
       cargarDashboardAsync().catch(() => {})
     } catch (e) {
       console.error('Error parsing producto.disponible event:', e)
@@ -73,7 +73,7 @@ export default function Dashboard() {
   if (loading && !data) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+        <div className="spinner spinner-lg" />
       </div>
     )
   }
@@ -83,49 +83,49 @@ export default function Dashboard() {
       name: 'Ventas de Hoy',
       value: `$${data?.ventasHoy?.toLocaleString('es-AR') || 0}`,
       icon: CurrencyDollarIcon,
-      color: 'bg-green-500'
+      link: null
     },
     {
       name: 'Pedidos Hoy',
       value: data?.pedidosHoy || 0,
       icon: ShoppingCartIcon,
-      color: 'bg-blue-500'
+      link: null
     },
     {
       name: 'Pedidos Pendientes',
       value: data?.pedidosPendientes || 0,
       icon: ClockIcon,
-      color: 'bg-yellow-500',
+      highlight: data?.pedidosPendientes > 0,
       link: '/pedidos'
     },
     {
       name: 'Mesas Ocupadas',
       value: `${data?.mesasOcupadas || 0} / ${data?.mesasTotal || 0}`,
       icon: TableCellsIcon,
-      color: 'bg-purple-500',
       link: '/mozo/mesas'
     },
     {
       name: 'Alertas de Stock',
       value: data?.alertasStock || 0,
       icon: ExclamationTriangleIcon,
-      color: data?.alertasStock > 0 ? 'bg-red-500' : 'bg-gray-400',
+      highlight: data?.alertasStock > 0,
+      isWarning: data?.alertasStock > 0,
       link: '/ingredientes'
     },
     {
       name: 'Empleados Trabajando',
       value: data?.empleadosTrabajando || 0,
       icon: UsersIcon,
-      color: 'bg-indigo-500'
+      link: null
     }
   ]
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Dashboard</h1>
+      <h1 className="text-heading-1 mb-6">Dashboard</h1>
 
       {errorMessage && (
-        <div className="card mb-6 border border-red-200 bg-red-50 text-red-700 flex items-center justify-between">
+        <div className="alert alert-error mb-6 flex items-center justify-between">
           <span>{errorMessage}</span>
           <button
             type="button"
@@ -133,13 +133,14 @@ export default function Dashboard() {
               cargarDashboardAsync()
                 .catch(() => {})
             }}
-            className="btn btn-secondary"
+            className="btn btn-secondary btn-sm"
           >
             Reintentar
           </button>
         </div>
       )}
 
+      {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {stats.map((stat) => {
           const Card = stat.link ? Link : 'div'
@@ -147,51 +148,61 @@ export default function Dashboard() {
             <Card
               key={stat.name}
               to={stat.link}
-              className={`card flex items-center gap-4 ${stat.link ? 'hover:shadow-md transition-shadow cursor-pointer' : ''}`}
+              className={`stat-card card-hover flex items-center gap-4 ${stat.link ? 'cursor-pointer' : ''}`}
             >
-              <div className={`p-3 rounded-lg ${stat.color}`}>
-                <stat.icon className="w-6 h-6 text-white" />
+              <div className={`p-3 rounded-xl ${
+                stat.isWarning
+                  ? 'bg-warning-100'
+                  : stat.highlight
+                    ? 'bg-primary-100'
+                    : 'bg-primary-50'
+              }`}>
+                <stat.icon className={`w-6 h-6 ${
+                  stat.isWarning
+                    ? 'text-warning-600'
+                    : 'text-primary-500'
+                }`} />
               </div>
               <div>
-                <p className="text-sm text-gray-500">{stat.name}</p>
-                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                <p className="stat-label">{stat.name}</p>
+                <p className="stat-value">{stat.value}</p>
               </div>
             </Card>
           )
         })}
       </div>
 
-      {/* Accesos rápidos */}
-      <div className="mt-8">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Accesos Rápidos</h2>
+      {/* Quick access */}
+      <div className="mt-10">
+        <h2 className="text-heading-3 mb-4">Accesos Rapidos</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Link
             to="/mozo/nuevo-pedido"
-            className="card text-center hover:shadow-md transition-shadow"
+            className="card card-hover text-center py-8"
           >
-            <ShoppingCartIcon className="w-8 h-8 mx-auto text-primary-500 mb-2" />
-            <p className="font-medium text-gray-900">Nuevo Pedido</p>
+            <ShoppingCartIcon className="w-8 h-8 mx-auto text-primary-500 mb-3" />
+            <p className="font-medium text-text-primary">Nuevo Pedido</p>
           </Link>
           <Link
             to="/mozo/mesas"
-            className="card text-center hover:shadow-md transition-shadow"
+            className="card card-hover text-center py-8"
           >
-            <TableCellsIcon className="w-8 h-8 mx-auto text-primary-500 mb-2" />
-            <p className="font-medium text-gray-900">Ver Mesas</p>
+            <TableCellsIcon className="w-8 h-8 mx-auto text-primary-500 mb-3" />
+            <p className="font-medium text-text-primary">Ver Mesas</p>
           </Link>
           <Link
             to="/cocina"
-            className="card text-center hover:shadow-md transition-shadow"
+            className="card card-hover text-center py-8"
           >
-            <ClockIcon className="w-8 h-8 mx-auto text-primary-500 mb-2" />
-            <p className="font-medium text-gray-900">Cocina</p>
+            <ClockIcon className="w-8 h-8 mx-auto text-primary-500 mb-3" />
+            <p className="font-medium text-text-primary">Cocina</p>
           </Link>
           <Link
             to="/reportes"
-            className="card text-center hover:shadow-md transition-shadow"
+            className="card card-hover text-center py-8"
           >
-            <CurrencyDollarIcon className="w-8 h-8 mx-auto text-primary-500 mb-2" />
-            <p className="font-medium text-gray-900">Reportes</p>
+            <CurrencyDollarIcon className="w-8 h-8 mx-auto text-primary-500 mb-3" />
+            <p className="font-medium text-text-primary">Reportes</p>
           </Link>
         </div>
       </div>

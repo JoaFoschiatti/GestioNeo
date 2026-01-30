@@ -69,23 +69,27 @@ export default function Mesas() {
     setEditando(null)
   }
 
-  const getEstadoColor = (estado) => {
+  const getEstadoBadge = (estado) => {
     switch (estado) {
-      case 'LIBRE': return 'bg-green-100 text-green-700'
-      case 'OCUPADA': return 'bg-red-100 text-red-700'
-      case 'RESERVADA': return 'bg-yellow-100 text-yellow-700'
-      default: return 'bg-gray-100 text-gray-700'
+      case 'LIBRE': return 'badge-success'
+      case 'OCUPADA': return 'badge-error'
+      case 'RESERVADA': return 'badge-warning'
+      default: return 'badge-info'
     }
   }
 
   if (loading && mesas.length === 0) {
-    return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div></div>
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="spinner spinner-lg" />
+      </div>
+    )
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Mesas</h1>
+        <h1 className="text-heading-1">Mesas</h1>
         <button
           onClick={() => { resetForm(); setShowModal(true) }}
           className="btn btn-primary flex items-center gap-2"
@@ -99,12 +103,12 @@ export default function Mesas() {
         {mesas.map((mesa) => (
           <div
             key={mesa.id}
-            className={`card text-center ${!mesa.activa ? 'opacity-50' : ''}`}
+            className={`card card-hover text-center ${!mesa.activa ? 'opacity-50' : ''}`}
           >
-            <div className="text-3xl font-bold text-gray-900 mb-2">{mesa.numero}</div>
-            <p className="text-sm text-gray-500 mb-2">{mesa.zona || 'Sin zona'}</p>
-            <p className="text-xs text-gray-400 mb-3">{mesa.capacidad} personas</p>
-            <span className={`px-2 py-1 text-xs rounded-full ${getEstadoColor(mesa.estado)}`}>
+            <div className="text-3xl font-bold text-text-primary mb-2">{mesa.numero}</div>
+            <p className="text-sm text-text-secondary mb-2">{mesa.zona || 'Sin zona'}</p>
+            <p className="text-xs text-text-tertiary mb-3">{mesa.capacidad} personas</p>
+            <span className={`badge ${getEstadoBadge(mesa.estado)}`}>
               {mesa.estado}
             </span>
             <div className="flex justify-center gap-2 mt-4">
@@ -112,7 +116,7 @@ export default function Mesas() {
                 onClick={() => handleEdit(mesa)}
                 type="button"
                 aria-label={`Editar mesa ${mesa.numero}`}
-                className="text-primary-600 hover:text-primary-800"
+                className="text-primary-500 hover:text-primary-600 transition-colors"
               >
                 <PencilIcon className="w-5 h-5" />
               </button>
@@ -120,7 +124,7 @@ export default function Mesas() {
                 onClick={() => handleDelete(mesa.id)}
                 type="button"
                 aria-label={`Desactivar mesa ${mesa.numero}`}
-                className="text-red-600 hover:text-red-800"
+                className="text-error-500 hover:text-error-600 transition-colors"
               >
                 <TrashIcon className="w-5 h-5" />
               </button>
@@ -131,9 +135,9 @@ export default function Mesas() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
-            <h2 className="text-xl font-bold mb-4">
+        <div className="modal-overlay">
+          <div className="modal">
+            <h2 className="text-heading-3 mb-4">
               {editando ? 'Editar Mesa' : 'Nueva Mesa'}
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -177,7 +181,7 @@ export default function Mesas() {
                   required
                 />
               </div>
-              <div className="flex gap-3 pt-4">
+              <div className="modal-footer">
                 <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary flex-1">
                   Cancelar
                 </button>

@@ -28,6 +28,7 @@ const registroRoutes = require('./routes/registro.routes');
 const superadminRoutes = require('./routes/superadmin.routes');
 const mercadopagoRoutes = require('./routes/mercadopago.routes');
 const tenantRoutes = require('./routes/tenant.routes');
+const suscripcionRoutes = require('./routes/suscripcion.routes');
 
 const { errorMiddleware } = require('./middlewares/error.middleware');
 const { createHttpError } = require('./utils/http-error');
@@ -118,6 +119,7 @@ app.use('/api/registro', registroRoutes);
 app.use('/api/super-admin', superadminRoutes);
 app.use('/api/mercadopago', mercadopagoRoutes);
 app.use('/api/tenant', tenantRoutes);
+app.use('/api/suscripcion', suscripcionRoutes);
 
 // Ruta de salud
 app.get('/api/health', (req, res) => {

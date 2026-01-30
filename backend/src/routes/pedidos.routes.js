@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pedidosController = require('../controllers/pedidos.controller');
 const { verificarToken, esMozo, esAdminOCajero, verificarRol } = require('../middlewares/auth.middleware');
-const { setTenantFromAuth } = require('../middlewares/tenant.middleware');
+const { setTenantFromAuth, bloquearSiSoloLectura } = require('../middlewares/tenant.middleware');
 const { validate } = require('../middlewares/validate.middleware');
 const { asyncHandler } = require('../utils/async-handler');
 const {
@@ -21,9 +21,9 @@ router.get('/', validate({ query: listarQuerySchema }), asyncHandler(pedidosCont
 router.get('/cocina', verificarRol('ADMIN', 'COCINERO'), asyncHandler(pedidosController.pedidosCocina));
 router.get('/delivery', verificarRol('ADMIN', 'DELIVERY'), asyncHandler(pedidosController.pedidosDelivery));
 router.get('/:id', validate({ params: idParamSchema }), asyncHandler(pedidosController.obtener));
-router.post('/', verificarRol('ADMIN', 'CAJERO', 'MOZO'), validate({ body: crearPedidoBodySchema }), asyncHandler(pedidosController.crear));
-router.patch('/:id/estado', verificarRol('ADMIN', 'COCINERO', 'MOZO'), validate({ params: idParamSchema, body: cambiarEstadoBodySchema }), asyncHandler(pedidosController.cambiarEstado));
-router.post('/:id/items', esMozo, validate({ params: idParamSchema, body: agregarItemsBodySchema }), asyncHandler(pedidosController.agregarItems));
-router.post('/:id/cancelar', esAdminOCajero, validate({ params: idParamSchema, body: cancelarBodySchema }), asyncHandler(pedidosController.cancelar));
+router.post('/', bloquearSiSoloLectura, verificarRol('ADMIN', 'CAJERO', 'MOZO'), validate({ body: crearPedidoBodySchema }), asyncHandler(pedidosController.crear));
+router.patch('/:id/estado', bloquearSiSoloLectura, verificarRol('ADMIN', 'COCINERO', 'MOZO'), validate({ params: idParamSchema, body: cambiarEstadoBodySchema }), asyncHandler(pedidosController.cambiarEstado));
+router.post('/:id/items', bloquearSiSoloLectura, esMozo, validate({ params: idParamSchema, body: agregarItemsBodySchema }), asyncHandler(pedidosController.agregarItems));
+router.post('/:id/cancelar', bloquearSiSoloLectura, esAdminOCajero, validate({ params: idParamSchema, body: cancelarBodySchema }), asyncHandler(pedidosController.cancelar));
 
 module.exports = router;
