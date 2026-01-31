@@ -28,12 +28,11 @@ const { prisma } = require('../db/prisma');
  * Verifica el token JWT y agrega el usuario al request.
  *
  * Flujo de verificación:
- * 1. Extrae token del header `Authorization: Bearer <token>`
+ * 1. Extrae token del header `Authorization: Bearer <token>` o cookie
  * 2. Verifica la firma con JWT_SECRET
  * 3. Busca el usuario en la base de datos
  * 4. Verifica que el usuario esté activo
- * 5. Para usuarios no-SUPER_ADMIN, verifica que el tenant esté activo
- * 6. Agrega `req.usuario` con los datos del usuario
+ * 5. Agrega `req.usuario` con los datos del usuario
  *
  * @param {import('express').Request} req - Request de Express
  * @param {import('express').Response} res - Response de Express
@@ -51,8 +50,7 @@ const { prisma } = require('../db/prisma');
  * //   email: 'admin@restaurante.com',
  * //   nombre: 'Juan Admin',
  * //   rol: 'ADMIN',
- * //   activo: true,
- * //   tenantId: 1
+ * //   activo: true
  * // }
  */
 const verificarToken = async (req, res, next) => {
@@ -81,26 +79,12 @@ const verificarToken = async (req, res, next) => {
         email: true,
         nombre: true,
         rol: true,
-        activo: true,
-        tenantId: true
+        activo: true
       }
     });
 
     if (!usuario || !usuario.activo) {
       return res.status(401).json({ error: { message: 'Usuario no válido o inactivo' } });
-    }
-
-    // For non-SUPER_ADMIN users, verify tenant is active
-    if (usuario.rol !== 'SUPER_ADMIN' && usuario.tenantId) {
-      const tenant = await prisma.tenant.findUnique({
-        where: { id: usuario.tenantId }
-      });
-
-      if (!tenant || !tenant.activo) {
-        return res.status(403).json({
-          error: { message: 'El restaurante asociado no está activo' }
-        });
-      }
     }
 
     req.usuario = usuario;
@@ -116,12 +100,8 @@ const verificarToken = async (req, res, next) => {
 /**
  * Crea un middleware que verifica si el usuario tiene uno de los roles permitidos.
  *
- * IMPORTANTE: El rol SUPER_ADMIN siempre tiene acceso a todo, independientemente
- * de los roles especificados.
- *
  * Roles disponibles (definidos en Prisma schema):
- * - `SUPER_ADMIN`: Administrador global, gestiona todos los tenants
- * - `ADMIN`: Administrador del restaurante
+ * - `ADMIN`: Administrador del negocio (rol más alto)
  * - `MOZO`: Camarero, gestiona mesas y pedidos
  * - `COCINERO`: Ve y gestiona pedidos en cocina
  * - `CAJERO`: Cobra pedidos
@@ -144,11 +124,6 @@ const verificarRol = (...rolesPermitidos) => {
   return (req, res, next) => {
     if (!req.usuario) {
       return res.status(401).json({ error: { message: 'No autenticado' } });
-    }
-
-    // SUPER_ADMIN siempre tiene acceso
-    if (req.usuario.rol === 'SUPER_ADMIN') {
-      return next();
     }
 
     if (!rolesPermitidos.includes(req.usuario.rol)) {
@@ -181,9 +156,6 @@ const esDelivery = verificarRol('ADMIN', 'DELIVERY');
 /** Middleware: Rol ADMIN o COCINERO (para pantalla de cocina) */
 const esCocinero = verificarRol('ADMIN', 'COCINERO');
 
-/** Middleware: Solo SUPER_ADMIN (gestión global de tenants) */
-const esSuperAdmin = verificarRol('SUPER_ADMIN');
-
 module.exports = {
   verificarToken,
   verificarRol,
@@ -191,6 +163,5 @@ module.exports = {
   esAdminOCajero,
   esMozo,
   esDelivery,
-  esCocinero,
-  esSuperAdmin
+  esCocinero
 };

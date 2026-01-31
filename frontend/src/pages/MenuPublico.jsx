@@ -2,9 +2,8 @@
 // MENÚ PÚBLICO - Página del menú QR para clientes
 // ============================================================
 //
-// Esta página se accede desde: /menu/:slug (ej: /menu/mi-restaurante)
+// Esta página se accede desde: /menu
 // NO requiere autenticación - es pública para los clientes.
-// El tenant (restaurante) se resuelve por el slug en la URL.
 //
 // FLUJO PRINCIPAL:
 // 1. Cliente escanea código QR → Abre esta página
@@ -35,7 +34,7 @@
 // ============================================================
 
 import { useState, useEffect, useCallback } from 'react'
-import { useSearchParams, useParams, useNavigate } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import useAsync from '../hooks/useAsync'
 import {
   ShoppingCartIcon,
@@ -109,7 +108,6 @@ export default function MenuPublico() {
   // ----------------------------------------------------------
   // ROUTING Y NAVEGACIÓN
   // ----------------------------------------------------------
-  const { slug } = useParams() // Slug del restaurante desde la URL
   const navigate = useNavigate()
   const [searchParams] = useSearchParams() // Para leer ?pago=exito después de MP
 
@@ -176,21 +174,20 @@ export default function MenuPublico() {
 
   const cargarConfigYMenu = useCallback(async () => {
     setLoadError(null)
-    const tenantSlug = slug || 'default'
     const [configData, menuData] = await Promise.all([
       fetchJson(
-        `${API_URL}/publico/${tenantSlug}/config`,
+        `${API_URL}/publico/config`,
         {},
         'Error al cargar la configuracion'
       ),
       fetchJson(
-        `${API_URL}/publico/${tenantSlug}/menu`,
+        `${API_URL}/publico/menu`,
         {},
         'Error al cargar el menu'
       )
     ])
-    // Flatten tenant and config into a single object for easier access
-    const flatConfig = { ...configData.tenant, ...configData.config }
+    // Flatten negocio and config into a single object for easier access
+    const flatConfig = { ...configData.negocio, ...configData.config }
     setConfig(flatConfig)
     setCategorias(menuData)
 
@@ -205,7 +202,7 @@ export default function MenuPublico() {
       setMetodoPago('EFECTIVO')
     }
     return { config: flatConfig, categorias: menuData }
-  }, [slug])
+  }, [])
 
   const handleLoadError = useCallback((err) => {
     console.error('Error cargando datos:', err)
@@ -263,14 +260,13 @@ export default function MenuPublico() {
       setVerificandoPago(true)
       setTiempoEspera(0)
 
-      const tenantSlug = slug || 'default'
       let intentos = 0
       const maxIntentos = 20 // 60 segundos (20 intentos * 3 segundos)
 
       const verificarPago = async () => {
         try {
           const pedido = await fetchJson(
-            `${API_URL}/publico/${tenantSlug}/pedido/${pedidoId}`,
+            `${API_URL}/publico/pedido/${pedidoId}`,
             {},
             'Error al verificar el pago'
           )
@@ -280,7 +276,7 @@ export default function MenuPublico() {
             setVerificandoPago(false)
             setPedidoExitoso({ ...pedido, pagoAprobado: true })
             // Limpiar URL params
-            navigate(`/menu/${tenantSlug}`, { replace: true })
+            navigate('/menu', { replace: true })
             return true
           }
 
@@ -312,7 +308,7 @@ export default function MenuPublico() {
                 'No pudimos confirmar tu pago. Si ya pagaste, por favor contacta al local. Tu número de pedido es: #' +
                   pedidoId
               )
-              navigate(`/menu/${tenantSlug}`, { replace: true })
+              navigate('/menu', { replace: true })
             }
           }
         }, 3000)
@@ -325,13 +321,12 @@ export default function MenuPublico() {
       cancelled = true
       if (intervalId) clearInterval(intervalId)
     }
-  }, [searchParams, slug, navigate])
+  }, [searchParams, navigate])
 
   // Polling automático cuando hay pedido pendiente de MP (desktop - nueva pestaña)
   useEffect(() => {
     if (!pedidoPendienteMP) return
 
-    const tenantSlug = slug || 'default'
     let intentos = 0
     const maxIntentos = 60 // 3 minutos (60 * 3 segundos)
     let cancelled = false
@@ -339,7 +334,7 @@ export default function MenuPublico() {
     const verificarPago = async () => {
       try {
         const pedido = await fetchJson(
-          `${API_URL}/publico/${tenantSlug}/pedido/${pedidoPendienteMP.id}`,
+          `${API_URL}/publico/pedido/${pedidoPendienteMP.id}`,
           {},
           'Error al verificar el pago'
         )
@@ -381,7 +376,7 @@ export default function MenuPublico() {
       cancelled = true
       clearInterval(interval)
     }
-  }, [pedidoPendienteMP, slug])
+  }, [pedidoPendienteMP])
 
   const agregarAlCarrito = (producto) => {
     // Si el producto tiene variantes, usar la variante seleccionada o la predeterminada
@@ -495,9 +490,8 @@ export default function MenuPublico() {
         observaciones: clienteData.observaciones
       }
 
-      const tenantSlug = slug || 'default'
       const data = await fetchJson(
-        `${API_URL}/publico/${tenantSlug}/pedido`,
+        `${API_URL}/publico/pedido`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -701,7 +695,7 @@ export default function MenuPublico() {
             Enviamos un comprobante a tu email. Te contactaremos para coordinar la entrega.
           </p>
           <button
-            onClick={() => { setPedidoExitoso(null); navigate(`/menu/${slug || 'default'}`) }}
+            onClick={() => { setPedidoExitoso(null); navigate('/menu') }}
             className="btn btn-primary w-full py-3"
           >
             Hacer otro pedido

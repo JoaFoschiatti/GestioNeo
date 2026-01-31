@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { CheckIcon, ClockIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/outline'
@@ -46,17 +46,19 @@ export default function Cocina() {
   const [soundEnabled, setSoundEnabled] = useState(() => {
     return localStorage.getItem('cocina_sound') !== 'false'
   })
+  const [selectedIndex, setSelectedIndex] = useState(0)
   const pedidosRef = useRef([])
 
-  const toggleSound = () => {
-    const newValue = !soundEnabled
-    setSoundEnabled(newValue)
-    localStorage.setItem('cocina_sound', newValue.toString())
-    if (newValue) {
-      // Reproducir sonido de prueba al activar
-      playNotificationSound()
-    }
-  }
+  const toggleSound = useCallback(() => {
+    setSoundEnabled(prev => {
+      const newValue = !prev
+      localStorage.setItem('cocina_sound', newValue.toString())
+      if (newValue) {
+        playNotificationSound()
+      }
+      return newValue
+    })
+  }, [])
 
   const cargarPedidos = useCallback(async () => {
     const response = await api.get('/pedidos/cocina', { skipToast: true })
@@ -101,7 +103,7 @@ export default function Cocina() {
     }
   })
 
-  const cambiarEstado = async (id, nuevoEstado) => {
+  const cambiarEstado = useCallback(async (id, nuevoEstado) => {
     try {
       await api.patch(
         `/pedidos/${id}/estado`,
@@ -114,7 +116,69 @@ export default function Cocina() {
       console.error('Error:', error)
       toast.error('No pudimos actualizar el pedido.')
     }
-  }
+  }, [cargarPedidosAsync])
+
+  const confirmarPedidoSeleccionado = useCallback(() => {
+    const pedido = pedidos[selectedIndex]
+    if (!pedido) return
+
+    if (pedido.estado === 'PENDIENTE') {
+      cambiarEstado(pedido.id, 'EN_PREPARACION')
+    } else {
+      cambiarEstado(pedido.id, 'LISTO')
+    }
+  }, [pedidos, selectedIndex, cambiarEstado])
+
+  // Navegación por teclado (numpad + flechas)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const cols = 3 // columnas del grid en pantalla grande
+      const total = pedidos.length
+      if (total === 0) return
+
+      switch (e.key) {
+        case '8':
+        case 'ArrowUp':
+          e.preventDefault()
+          setSelectedIndex(i => Math.max(0, i - cols))
+          break
+        case '2':
+        case 'ArrowDown':
+          e.preventDefault()
+          setSelectedIndex(i => Math.min(total - 1, i + cols))
+          break
+        case '4':
+        case 'ArrowLeft':
+          e.preventDefault()
+          setSelectedIndex(i => Math.max(0, i - 1))
+          break
+        case '6':
+        case 'ArrowRight':
+          e.preventDefault()
+          setSelectedIndex(i => Math.min(total - 1, i + 1))
+          break
+        case '5':
+        case 'Enter':
+          e.preventDefault()
+          confirmarPedidoSeleccionado()
+          break
+        case '0':
+          e.preventDefault()
+          toggleSound()
+          break
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [pedidos.length, confirmarPedidoSeleccionado, toggleSound])
+
+  // Mantener selección válida cuando cambia la lista
+  useEffect(() => {
+    if (selectedIndex >= pedidos.length && pedidos.length > 0) {
+      setSelectedIndex(pedidos.length - 1)
+    }
+  }, [pedidos.length, selectedIndex])
 
   const getTiempoTranscurrido = (fecha) => {
     const minutos = Math.floor((Date.now() - new Date(fecha)) / 60000)
@@ -208,13 +272,17 @@ export default function Cocina() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {pedidos.map((pedido) => (
+          {pedidos.map((pedido, index) => (
             <div
               key={pedido.id}
-              className={`card ${
+              className={`card transition-all ${
                 pedido.estado === 'PENDIENTE'
                   ? 'border border-warning-200 bg-warning-50/50'
                   : 'border border-info-200 bg-info-50/50'
+              } ${
+                index === selectedIndex
+                  ? 'ring-4 ring-primary-500 ring-offset-2'
+                  : ''
               }`}
             >
               <div className="flex justify-between items-start mb-4">
@@ -308,6 +376,13 @@ export default function Cocina() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Indicador de controles de teclado */}
+      {pedidos.length > 0 && (
+        <div className="text-xs text-text-tertiary mt-4 text-center">
+          ⌨️ Flechas o Numpad: ←→↑↓ Navegar | Enter=Confirmar | 0=Sonido
         </div>
       )}
     </div>

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const reportesController = require('../controllers/reportes.controller');
 const { verificarToken, esAdmin, esAdminOCajero } = require('../middlewares/auth.middleware');
-const { setTenantFromAuth } = require('../middlewares/tenant.middleware');
+const { setAuthContext } = require('../middlewares/tenant.middleware');
 const { validate } = require('../middlewares/validate.middleware');
 const { asyncHandler } = require('../utils/async-handler');
 const {
@@ -15,7 +15,7 @@ const {
 } = require('../schemas/reportes.schemas');
 
 router.use(verificarToken);
-router.use(setTenantFromAuth);
+router.use(setAuthContext);
 
 router.get('/dashboard', asyncHandler(reportesController.dashboard));
 router.get('/ventas', esAdminOCajero, validate({ query: ventasReporteQuerySchema }), asyncHandler(reportesController.ventasReporte));

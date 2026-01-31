@@ -5,7 +5,7 @@
  * escanean para ver productos y hacer pedidos desde sus dispositivos.
  *
  * IMPORTANTE: Este servicio NO requiere autenticación JWT.
- * El tenant se resuelve por el slug en la URL (/menu/:slug).
+ * Sistema single-tenant: usa Negocio singleton (ID=1).
  *
  * Funcionalidades:
  * - Obtener configuración pública del restaurante
@@ -18,6 +18,7 @@
  */
 
 const { createHttpError } = require('../utils/http-error');
+const { logger } = require('../utils/logger');
 const {
   isMercadoPagoConfigured,
   createPreference,
@@ -43,12 +44,10 @@ const buildConfigMap = (configs) => {
  * Retorna solo datos seguros para mostrar públicamente (sin tokens ni credenciales).
  * Verifica si MercadoPago está realmente configurado antes de habilitarlo.
  *
- * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma con scoping
- * @param {number} tenantId - ID del tenant
- * @param {Object} tenant - Objeto tenant con datos básicos
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
  *
  * @returns {Promise<Object>} Configuración pública
- * @returns {Object} returns.tenant - Datos del restaurante (nombre, logo, colores)
+ * @returns {Object} returns.negocio - Datos del restaurante (nombre, logo, colores)
  * @returns {Object} returns.config - Configuración operativa
  * @returns {boolean} returns.config.tienda_abierta - Si está abierta
  * @returns {string} returns.config.horario_apertura - Hora de apertura
@@ -58,25 +57,25 @@ const buildConfigMap = (configs) => {
  * @returns {boolean} returns.config.mercadopago_enabled - Si MP está habilitado
  * @returns {boolean} returns.config.efectivo_enabled - Si acepta efectivo
  */
-const getPublicConfig = async (prisma, tenantId, tenant) => {
+const getPublicConfig = async (prisma) => {
+  const negocio = await prisma.negocio.findUnique({ where: { id: 1 } });
   const configs = await prisma.configuracion.findMany();
   const configMap = buildConfigMap(configs);
 
-  const mpRealmenteConfigurado = await isMercadoPagoConfigured(tenantId);
+  const mpRealmenteConfigurado = await isMercadoPagoConfigured();
   const mpHabilitado = configMap.mercadopago_enabled === 'true' && mpRealmenteConfigurado;
 
   const efectivoHabilitado = configMap.efectivo_enabled !== 'false';
 
   return {
-    tenant: {
-      nombre: tenant.nombre,
-      slug: tenant.slug,
-      logo: tenant.logo,
-      bannerUrl: tenant.bannerUrl,
-      colorPrimario: tenant.colorPrimario,
-      colorSecundario: tenant.colorSecundario,
-      telefono: tenant.telefono,
-      direccion: tenant.direccion
+    negocio: {
+      nombre: negocio?.nombre || 'Mi Negocio',
+      logo: negocio?.logo,
+      bannerUrl: negocio?.bannerUrl,
+      colorPrimario: negocio?.colorPrimario || '#3B82F6',
+      colorSecundario: negocio?.colorSecundario || '#1E40AF',
+      telefono: negocio?.telefono,
+      direccion: negocio?.direccion
     },
     config: {
       tienda_abierta: configMap.tienda_abierta !== 'false',
@@ -84,13 +83,13 @@ const getPublicConfig = async (prisma, tenantId, tenant) => {
       horario_cierre: configMap.horario_cierre || '23:00',
       costo_delivery: parseFloat(configMap.costo_delivery || '0'),
       delivery_habilitado: configMap.delivery_habilitado !== 'false',
-      direccion_retiro: configMap.direccion_retiro || tenant.direccion,
+      direccion_retiro: configMap.direccion_retiro || negocio?.direccion,
       mercadopago_enabled: mpHabilitado,
       efectivo_enabled: efectivoHabilitado,
       whatsapp_numero: configMap.whatsapp_numero || null,
-      nombre_negocio: configMap.nombre_negocio || tenant.nombre,
+      nombre_negocio: configMap.nombre_negocio || negocio?.nombre,
       tagline_negocio: configMap.tagline_negocio || '',
-      banner_imagen: configMap.banner_imagen || tenant.bannerUrl
+      banner_imagen: configMap.banner_imagen || negocio?.bannerUrl
     }
   };
 };
@@ -146,16 +145,14 @@ const getPublicMenu = async (prisma) => {
  *
  * @private
  * @param {Object} params - Parámetros
- * @param {number} params.tenantId - ID del tenant
  * @param {number} params.pedidoId - ID del pedido
- * @param {string} params.tenantSlug - Slug del restaurante
- * @param {string} params.tenantNombre - Nombre para el descriptor de pago
+ * @param {string} params.negocioNombre - Nombre para el descriptor de pago
  * @param {Array} params.items - Items del pedido
  * @param {number} params.costoEnvio - Costo de envío
  *
  * @returns {Object} Datos para MercadoPago createPreference
  */
-const buildPreferenceData = ({ tenantId, pedidoId, tenantSlug, tenantNombre, items, costoEnvio }) => {
+const buildPreferenceData = ({ pedidoId, negocioNombre, items, costoEnvio }) => {
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
   const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
   const isLocalhost = frontendUrl.includes('localhost') || frontendUrl.includes('127.0.0.1');
@@ -181,13 +178,13 @@ const buildPreferenceData = ({ tenantId, pedidoId, tenantSlug, tenantNombre, ite
   const preferenceData = {
     items: mpItems,
     back_urls: {
-      success: `${frontendUrl}/menu/${tenantSlug}?pago=exito&pedido=${pedidoId}`,
-      failure: `${frontendUrl}/menu/${tenantSlug}?pago=error&pedido=${pedidoId}`,
-      pending: `${frontendUrl}/menu/${tenantSlug}?pago=pendiente&pedido=${pedidoId}`
+      success: `${frontendUrl}/menu?pago=exito&pedido=${pedidoId}`,
+      failure: `${frontendUrl}/menu?pago=error&pedido=${pedidoId}`,
+      pending: `${frontendUrl}/menu?pago=pendiente&pedido=${pedidoId}`
     },
-    external_reference: `${tenantId}-${pedidoId}`,
+    external_reference: `pedido-${pedidoId}`,
     notification_url: `${backendUrl}/api/pagos/webhook/mercadopago`,
-    statement_descriptor: tenantNombre.substring(0, 22).toUpperCase()
+    statement_descriptor: negocioNombre.substring(0, 22).toUpperCase()
   };
 
   if (!isLocalhost) {
@@ -209,9 +206,6 @@ const buildPreferenceData = ({ tenantId, pedidoId, tenantSlug, tenantNombre, ite
  *
  * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
  * @param {Object} params - Parámetros
- * @param {number} params.tenantId - ID del tenant
- * @param {string} params.tenantSlug - Slug del restaurante
- * @param {Object} params.tenant - Objeto tenant
  * @param {Object} params.body - Datos del pedido
  * @param {Array<Object>} params.body.items - Items del pedido
  * @param {string} params.body.clienteNombre - Nombre del cliente
@@ -234,7 +228,7 @@ const buildPreferenceData = ({ tenantId, pedidoId, tenantSlug, tenantNombre, ite
  * @throws {HttpError} 400 - Validaciones: items vacíos, datos faltantes, tienda cerrada, etc.
  * @throws {HttpError} 500 - Error al conectar con MercadoPago
  */
-const createPublicOrder = async (prisma, { tenantId, tenantSlug, tenant, body }) => {
+const createPublicOrder = async (prisma, { body }) => {
   const {
     items,
     clienteNombre,
@@ -288,7 +282,7 @@ const createPublicOrder = async (prisma, { tenantId, tenantSlug, tenant, body })
     if (!mercadopagoHabilitado) {
       throw createHttpError.badRequest('MercadoPago no está disponible en este momento');
     }
-    const mpConfigurado = await isMercadoPagoConfigured(tenantId);
+    const mpConfigurado = await isMercadoPagoConfigured();
     if (!mpConfigurado) {
       throw createHttpError.badRequest(
         'MercadoPago no está configurado para este negocio. Solo se acepta pago en efectivo.'
@@ -323,7 +317,6 @@ const createPublicOrder = async (prisma, { tenantId, tenantSlug, tenant, body })
     subtotal += itemSubtotal;
 
     return {
-      tenantId,
       productoId: producto.id,
       cantidad,
       precioUnitario,
@@ -336,7 +329,6 @@ const createPublicOrder = async (prisma, { tenantId, tenantSlug, tenant, body })
 
   const pedido = await prisma.pedido.create({
     data: {
-      tenantId,
       tipo: 'ONLINE',
       tipoEntrega,
       clienteNombre,
@@ -364,21 +356,19 @@ const createPublicOrder = async (prisma, { tenantId, tenantSlug, tenant, body })
 
   if (metodoPago === 'MERCADOPAGO') {
     try {
+      const negocio = await prisma.negocio.findUnique({ where: { id: 1 } });
       const preferenceData = buildPreferenceData({
-        tenantId,
         pedidoId: pedido.id,
-        tenantSlug,
-        tenantNombre: tenant.nombre,
+        negocioNombre: negocio?.nombre || 'Mi Negocio',
         items: pedido.items,
         costoEnvio
       });
 
-      const mpResponse = await createPreference(tenantId, preferenceData);
+      const mpResponse = await createPreference(preferenceData);
 
-      const idempotencyKey = `mp-${tenantId}-${pedido.id}-${Date.now()}`;
+      const idempotencyKey = `mp-${pedido.id}-${Date.now()}`;
       await prisma.pago.create({
         data: {
-          tenantId,
           pedidoId: pedido.id,
           monto: total,
           metodo: 'MERCADOPAGO',
@@ -402,7 +392,6 @@ const createPublicOrder = async (prisma, { tenantId, tenantSlug, tenant, body })
     const vuelto = parseFloat(montoAbonado) - total;
     await prisma.pago.create({
       data: {
-        tenantId,
         pedidoId: pedido.id,
         monto: total,
         metodo: 'EFECTIVO',
@@ -419,7 +408,6 @@ const createPublicOrder = async (prisma, { tenantId, tenantSlug, tenant, body })
     {
       topic: 'pedido.updated',
       payload: {
-        tenantId,
         id: pedido.id,
         estado: pedido.estado,
         tipo: pedido.tipo,
@@ -447,9 +435,6 @@ const createPublicOrder = async (prisma, { tenantId, tenantSlug, tenant, body })
  *
  * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
  * @param {Object} params - Parámetros
- * @param {number} params.tenantId - ID del tenant
- * @param {string} params.tenantSlug - Slug del restaurante
- * @param {Object} params.tenant - Objeto tenant
  * @param {number} params.pedidoId - ID del pedido
  *
  * @returns {Promise<Object>} Datos de la preferencia creada
@@ -460,12 +445,9 @@ const createPublicOrder = async (prisma, { tenantId, tenantSlug, tenant, body })
  * @throws {HttpError} 404 - Pedido no encontrado
  * @throws {HttpError} 400 - Pedido ya pagado o MercadoPago no configurado
  */
-const startMercadoPagoPaymentForOrder = async (prisma, { tenantId, tenantSlug, tenant, pedidoId }) => {
-  const pedido = await prisma.pedido.findFirst({
-    where: {
-      id: pedidoId,
-      tenantId: tenantId
-    },
+const startMercadoPagoPaymentForOrder = async (prisma, { pedidoId }) => {
+  const pedido = await prisma.pedido.findUnique({
+    where: { id: pedidoId },
     include: {
       items: { include: { producto: true } }
     }
@@ -486,25 +468,24 @@ const startMercadoPagoPaymentForOrder = async (prisma, { tenantId, tenantSlug, t
     throw createHttpError.badRequest('MercadoPago no está disponible en este momento');
   }
 
-  const mpConfigurado = await isMercadoPagoConfigured(tenantId);
+  const mpConfigurado = await isMercadoPagoConfigured();
   if (!mpConfigurado) {
     throw createHttpError.badRequest(
       'MercadoPago no está configurado para este negocio. Solo se acepta pago en efectivo.'
     );
   }
 
+  const negocio = await prisma.negocio.findUnique({ where: { id: 1 } });
   const preferenceData = buildPreferenceData({
-    tenantId,
     pedidoId,
-    tenantSlug,
-    tenantNombre: tenant.nombre,
+    negocioNombre: negocio?.nombre || 'Mi Negocio',
     items: pedido.items,
     costoEnvio: parseFloat(pedido.costoEnvio)
   });
 
   let response;
   try {
-    response = await createPreference(tenantId, preferenceData);
+    response = await createPreference(preferenceData);
   } catch (error) {
     if (error.message?.includes('no está configurado')) {
       throw createHttpError.badRequest(error.message);
@@ -512,10 +493,9 @@ const startMercadoPagoPaymentForOrder = async (prisma, { tenantId, tenantSlug, t
     throw error;
   }
 
-  const idempotencyKey = `mp-${tenantId}-${pedidoId}-${Date.now()}`;
+  const idempotencyKey = `mp-${pedidoId}-${Date.now()}`;
   await prisma.pago.create({
     data: {
-      tenantId,
       pedidoId,
       monto: parseFloat(pedido.total),
       metodo: 'MERCADOPAGO',
@@ -541,7 +521,6 @@ const startMercadoPagoPaymentForOrder = async (prisma, { tenantId, tenantSlug, t
  *
  * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
  * @param {Object} params - Parámetros
- * @param {number} params.tenantId - ID del tenant
  * @param {number} params.pedidoId - ID del pedido
  *
  * @returns {Promise<Object>} Estado del pedido
@@ -550,12 +529,9 @@ const startMercadoPagoPaymentForOrder = async (prisma, { tenantId, tenantSlug, t
  *
  * @throws {HttpError} 404 - Pedido no encontrado
  */
-const getPublicOrderStatus = async (prisma, { tenantId, pedidoId }) => {
-  let pedido = await prisma.pedido.findFirst({
-    where: {
-      id: pedidoId,
-      tenantId: tenantId
-    },
+const getPublicOrderStatus = async (prisma, { pedidoId }) => {
+  let pedido = await prisma.pedido.findUnique({
+    where: { id: pedidoId },
     include: {
       items: { include: { producto: true } },
       pagos: true
@@ -572,8 +548,8 @@ const getPublicOrderStatus = async (prisma, { tenantId, pedidoId }) => {
     const pagoMP = pedido.pagos.find(p => p.metodo === 'MERCADOPAGO' && p.estado === 'PENDIENTE');
 
     if (pagoMP) {
-      const externalReference = `${tenantId}-${pedidoId}`;
-      const pagoAprobado = await searchPaymentByReference(tenantId, externalReference);
+      const externalReference = `pedido-${pedidoId}`;
+      const pagoAprobado = await searchPaymentByReference(externalReference);
 
       if (pagoAprobado) {
         await prisma.pago.update({
@@ -589,12 +565,11 @@ const getPublicOrderStatus = async (prisma, { tenantId, pedidoId }) => {
           data: { estadoPago: 'APROBADO' }
         });
 
-        await saveTransaction(tenantId, pagoAprobado, pagoMP.id);
+        await saveTransaction(pagoAprobado, pagoMP.id);
 
         events.push({
           topic: 'pedido.updated',
           payload: {
-            tenantId,
             id: pedidoId,
             estado: pedido.estado,
             estadoPago: 'APROBADO',

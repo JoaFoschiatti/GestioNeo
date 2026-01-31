@@ -1,10 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 import useAsync from '../hooks/useAsync'
 import {
-  BuildingStorefrontIcon,
   EnvelopeIcon,
   LockClosedIcon,
   EyeIcon,
@@ -12,24 +11,16 @@ import {
 } from '@heroicons/react/24/outline'
 
 export default function Login() {
-  const { slug: urlSlug } = useParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [slug, setSlug] = useState(urlSlug || '')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState(null)
   const { login } = useAuth()
   const navigate = useNavigate()
 
-  useEffect(() => {
-    if (urlSlug) {
-      setSlug(urlSlug)
-    }
-  }, [urlSlug])
-
   const loginRequest = useCallback(async (_ctx, credentials) => {
-    const { email, password, slug } = credentials
-    await login(email, password, slug, { skipToast: true })
+    const { email, password } = credentials
+    await login(email, password, { skipToast: true })
     return true
   }, [login])
 
@@ -47,7 +38,7 @@ export default function Login() {
     e.preventDefault()
     setError(null)
 
-    const result = await loginAsync({ email, password, slug: slug || undefined })
+    const result = await loginAsync({ email, password })
     if (result) {
       toast.success('Bienvenido!')
       navigate('/dashboard')
@@ -79,29 +70,6 @@ export default function Login() {
               role="alert"
             >
               <span className="text-sm">{error}</span>
-            </div>
-          )}
-
-          {/* Restaurant input */}
-          {!urlSlug && (
-            <div className="input-group">
-              <label className="label">Restaurante</label>
-              <div className="relative">
-                <BuildingStorefrontIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-text-tertiary" />
-                <input
-                  type="text"
-                  className="glass-input"
-                  value={slug}
-                  onChange={(e) => {
-                    setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))
-                    setError(null)
-                  }}
-                  placeholder="mi-restaurante"
-                />
-              </div>
-              <p className="input-hint">
-                Deja vacio para login general
-              </p>
             </div>
           )}
 
@@ -173,23 +141,12 @@ export default function Login() {
           </button>
         </form>
 
-        {/* Register link */}
-        <div className="mt-6 text-center text-sm">
-          <p className="text-text-secondary">
-            No tienes cuenta?{' '}
-            <Link to="/registro" className="glass-link font-medium">
-              Registra tu restaurante
-            </Link>
-          </p>
-        </div>
-
         {/* Test credentials info */}
         <div className="mt-6 glass-info-box">
           <p className="font-medium text-text-primary mb-2">Usuarios de prueba:</p>
           <div className="space-y-0.5 text-text-tertiary">
-            <p>Restaurante: restaurante-demo</p>
-            <p>Admin: admin@demo.com / demo123</p>
-            <p>Mozo: mozo1@demo.com / demo123</p>
+            <p>Admin: admin@comanda.app / admin123</p>
+            <p>Mozo: mozo@comanda.app / mozo123</p>
           </div>
         </div>
       </div>

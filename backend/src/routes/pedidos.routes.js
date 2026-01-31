@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pedidosController = require('../controllers/pedidos.controller');
 const { verificarToken, esMozo, esAdminOCajero, verificarRol } = require('../middlewares/auth.middleware');
-const { setTenantFromAuth, bloquearSiSoloLectura } = require('../middlewares/tenant.middleware');
+const { setAuthContext, bloquearSiSoloLectura } = require('../middlewares/tenant.middleware');
 const { validate } = require('../middlewares/validate.middleware');
 const { asyncHandler } = require('../utils/async-handler');
 const {
@@ -15,7 +15,7 @@ const {
 } = require('../schemas/pedidos.schemas');
 
 router.use(verificarToken);
-router.use(setTenantFromAuth);
+router.use(setAuthContext);
 
 router.get('/', validate({ query: listarQuerySchema }), asyncHandler(pedidosController.listar));
 router.get('/cocina', verificarRol('ADMIN', 'COCINERO'), asyncHandler(pedidosController.pedidosCocina));

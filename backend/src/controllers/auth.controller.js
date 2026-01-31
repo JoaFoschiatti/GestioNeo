@@ -1,105 +1,51 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { prisma, getTenantBySlug } = require('../db/prisma');
+const { prisma } = require('../db/prisma');
 const { createHttpError } = require('../utils/http-error');
 
 /**
  * Registrar nuevo usuario (solo admin puede hacerlo)
- * Requires tenant context from middleware
  */
 const registrar = async (req, res) => {
   const { email, password, nombre, rol } = req.body;
-  const tenantId = req.tenantId;
 
-  if (!tenantId) {
-    throw createHttpError.badRequest('Contexto de tenant requerido');
-  }
-
-  // Verificar si el email ya existe en este tenant
-  const existente = await prisma.usuario.findFirst({
-    where: { tenantId, email }
+  // Verificar si el email ya existe
+  const existente = await prisma.usuario.findUnique({
+    where: { email }
   });
 
   if (existente) {
-    throw createHttpError.badRequest('El email ya está registrado en este restaurante');
+    throw createHttpError.badRequest('El email ya está registrado');
   }
 
   // Hashear password
   const salt = await bcrypt.genSalt(10);
   const passwordHash = await bcrypt.hash(password, salt);
 
-  // Crear usuario con tenantId
+  // Crear usuario
   const usuario = await prisma.usuario.create({
     data: {
-      tenantId,
       email,
       password: passwordHash,
       nombre,
       rol: rol || 'MOZO'
     },
-    select: { id: true, email: true, nombre: true, rol: true, activo: true, tenantId: true }
+    select: { id: true, email: true, nombre: true, rol: true, activo: true }
   });
 
   res.status(201).json(usuario);
 };
 
 /**
- * Login con slug de tenant
- * Supports both tenant-specific login and SUPER_ADMIN login
+ * Login
  */
 const login = async (req, res) => {
-  const { email, password, slug } = req.body;
+  const { email, password } = req.body;
 
-  let usuario;
-  let tenant = null;
-
-  // If slug provided, find user within that tenant
-  if (slug) {
-    tenant = await getTenantBySlug(slug);
-
-    if (!tenant) {
-      throw createHttpError.notFound('Restaurante no encontrado');
-    }
-
-    if (!tenant.activo) {
-      throw createHttpError.forbidden('Este restaurante no está activo');
-    }
-
-    // Find user in this specific tenant
-    usuario = await prisma.usuario.findFirst({
-      where: { tenantId: tenant.id, email }
-    });
-  } else {
-    // No slug - try to find SUPER_ADMIN (tenantId is null)
-    usuario = await prisma.usuario.findFirst({
-      where: {
-        email,
-        tenantId: null,
-        rol: 'SUPER_ADMIN'
-      }
-    });
-
-    // If not found as SUPER_ADMIN, check if it's a unique email across all tenants
-    // This is for backwards compatibility during migration
-    if (!usuario) {
-      const usuarios = await prisma.usuario.findMany({
-        where: { email },
-        include: { tenant: true }
-      });
-
-      if (usuarios.length === 1) {
-        usuario = usuarios[0];
-        tenant = usuario.tenant;
-
-        // Check if tenant is active
-        if (tenant && !tenant.activo) {
-          throw createHttpError.forbidden('El restaurante asociado no está activo');
-        }
-      } else if (usuarios.length > 1) {
-        throw createHttpError.badRequest('Múltiples cuentas encontradas. Por favor especifica el restaurante (slug)');
-      }
-    }
-  }
+  // Buscar usuario por email
+  const usuario = await prisma.usuario.findUnique({
+    where: { email }
+  });
 
   if (!usuario) {
     throw createHttpError.unauthorized('Credenciales inválidas');
@@ -116,12 +62,11 @@ const login = async (req, res) => {
     throw createHttpError.unauthorized('Credenciales inválidas');
   }
 
-  // Generar token con tenantId
+  // Generar token
   const tokenPayload = {
     id: usuario.id,
     email: usuario.email,
-    rol: usuario.rol,
-    tenantId: usuario.tenantId
+    rol: usuario.rol
   };
 
   const token = jwt.sign(
@@ -138,96 +83,79 @@ const login = async (req, res) => {
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
   });
 
-  // Build response (without token in body for security)
-  const response = {
+  // Obtener datos del negocio
+  const negocio = await prisma.negocio.findUnique({
+    where: { id: 1 },
+    select: {
+      id: true,
+      nombre: true,
+      email: true,
+      logo: true,
+      colorPrimario: true,
+      colorSecundario: true
+    }
+  });
+
+  // Obtener estado de suscripción
+  const suscripcion = await prisma.suscripcion.findUnique({
+    where: { id: 1 },
+    select: { id: true, estado: true, fechaVencimiento: true, precioMensual: true }
+  });
+
+  const ahora = new Date();
+  const tieneAcceso = suscripcion &&
+    suscripcion.estado === 'ACTIVA' &&
+    suscripcion.fechaVencimiento &&
+    suscripcion.fechaVencimiento > ahora;
+
+  res.json({
     usuario: {
       id: usuario.id,
       email: usuario.email,
       nombre: usuario.nombre,
-      rol: usuario.rol,
-      tenantId: usuario.tenantId
-    }
-  };
-
-  // Include tenant info if available
-  if (tenant) {
-    response.tenant = {
-      id: tenant.id,
-      slug: tenant.slug,
-      nombre: tenant.nombre,
-      logo: tenant.logo,
-      colorPrimario: tenant.colorPrimario,
-      colorSecundario: tenant.colorSecundario
-    };
-
-    // Incluir info de suscripción
-    const suscripcion = await prisma.suscripcion.findUnique({
-      where: { tenantId: tenant.id },
-      select: { id: true, estado: true, fechaVencimiento: true, precioMensual: true }
-    });
-
-    const ahora = new Date();
-    const tieneAcceso = suscripcion &&
-      suscripcion.estado === 'ACTIVA' &&
-      suscripcion.fechaVencimiento &&
-      suscripcion.fechaVencimiento > ahora;
-
-    response.suscripcion = suscripcion || { estado: 'SIN_SUSCRIPCION' };
-    response.modoSoloLectura = !tieneAcceso;
-  } else {
-    // SUPER_ADMIN sin tenant
-    response.suscripcion = null;
-    response.modoSoloLectura = false;
-  }
-
-  res.json(response);
+      rol: usuario.rol
+    },
+    negocio: negocio || null,
+    suscripcion: suscripcion || { estado: 'SIN_SUSCRIPCION' },
+    modoSoloLectura: !tieneAcceso
+  });
 };
 
 /**
- * Obtener perfil actual con info de tenant y suscripción
+ * Obtener perfil actual con info de negocio y suscripción
  */
 const perfil = async (req, res) => {
-  const response = { ...req.usuario };
-
-  // Include tenant info if user has one
-  if (req.usuario.tenantId) {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: req.usuario.tenantId },
-      select: {
-        id: true,
-        slug: true,
-        nombre: true,
-        logo: true,
-        colorPrimario: true,
-        colorSecundario: true
-      }
-    });
-
-    if (tenant) {
-      response.tenant = tenant;
-
-      // Incluir info de suscripción
-      const suscripcion = await prisma.suscripcion.findUnique({
-        where: { tenantId: tenant.id },
-        select: { id: true, estado: true, fechaVencimiento: true, precioMensual: true }
-      });
-
-      const ahora = new Date();
-      const tieneAcceso = suscripcion &&
-        suscripcion.estado === 'ACTIVA' &&
-        suscripcion.fechaVencimiento &&
-        suscripcion.fechaVencimiento > ahora;
-
-      response.suscripcion = suscripcion || { estado: 'SIN_SUSCRIPCION' };
-      response.modoSoloLectura = !tieneAcceso;
+  // Obtener datos del negocio
+  const negocio = await prisma.negocio.findUnique({
+    where: { id: 1 },
+    select: {
+      id: true,
+      nombre: true,
+      email: true,
+      logo: true,
+      colorPrimario: true,
+      colorSecundario: true
     }
-  } else {
-    // SUPER_ADMIN sin tenant
-    response.suscripcion = null;
-    response.modoSoloLectura = false;
-  }
+  });
 
-  res.json(response);
+  // Obtener estado de suscripción
+  const suscripcion = await prisma.suscripcion.findUnique({
+    where: { id: 1 },
+    select: { id: true, estado: true, fechaVencimiento: true, precioMensual: true }
+  });
+
+  const ahora = new Date();
+  const tieneAcceso = suscripcion &&
+    suscripcion.estado === 'ACTIVA' &&
+    suscripcion.fechaVencimiento &&
+    suscripcion.fechaVencimiento > ahora;
+
+  res.json({
+    ...req.usuario,
+    negocio: negocio || null,
+    suscripcion: suscripcion || { estado: 'SIN_SUSCRIPCION' },
+    modoSoloLectura: !tieneAcceso
+  });
 };
 
 /**

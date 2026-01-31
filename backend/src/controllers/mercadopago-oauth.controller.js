@@ -1,22 +1,15 @@
 /**
- * Controlador de OAuth y configuración de MercadoPago por Tenant
+ * Controlador de OAuth y configuración de MercadoPago
  */
 
-const { prisma } = require('../db/prisma');
 const mercadoPagoConfigService = require('../services/mercadopago-config.service');
-const { createHttpError } = require('../utils/http-error');
 
 /**
  * GET /api/mercadopago/oauth/authorize
  * Genera URL de autorización OAuth de MercadoPago
  */
 const iniciarOAuth = async (req, res) => {
-  const tenantId = req.tenantId;
-  if (!tenantId) {
-    throw createHttpError.badRequest('Contexto de tenant requerido');
-  }
-
-  const authUrl = mercadoPagoConfigService.buildOAuthAuthorizationUrl(tenantId);
+  const authUrl = mercadoPagoConfigService.buildOAuthAuthorizationUrl();
   res.json({ authUrl });
 };
 
@@ -33,31 +26,11 @@ const callbackOAuth = async (req, res) => {
     // Si hubo error en OAuth
     if (oauthError) {
       console.error('Error en OAuth de MercadoPago:', oauthError);
-      return res.redirect(`${frontendUrl}/admin/configuracion?mp=error&reason=${oauthError}`);
+      return res.redirect(`${frontendUrl}/configuracion?mp=error&reason=${oauthError}`);
     }
 
-    if (!code || !state) {
-      return res.redirect(`${frontendUrl}/admin/configuracion?mp=error&reason=missing_params`);
-    }
-
-    // Decodificar state
-    let stateData;
-    try {
-      stateData = JSON.parse(Buffer.from(state, 'base64url').toString());
-    } catch {
-      return res.redirect(`${frontendUrl}/admin/configuracion?mp=error&reason=invalid_state`);
-    }
-
-    const { tenantId } = stateData;
-
-    if (!tenantId) {
-      return res.redirect(`${frontendUrl}/admin/configuracion?mp=error&reason=invalid_tenant`);
-    }
-
-    // Verificar que el tenant existe
-    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-    if (!tenant) {
-      return res.redirect(`${frontendUrl}/admin/configuracion?mp=error&reason=tenant_not_found`);
+    if (!code) {
+      return res.redirect(`${frontendUrl}/configuracion?mp=error&reason=missing_params`);
     }
 
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
@@ -79,7 +52,7 @@ const callbackOAuth = async (req, res) => {
 
     if (!tokenResponse.ok || tokenData.error) {
       console.error('Error al obtener tokens de MP:', tokenData);
-      return res.redirect(`${frontendUrl}/admin/configuracion?mp=error&reason=token_exchange_failed`);
+      return res.redirect(`${frontendUrl}/configuracion?mp=error&reason=token_exchange_failed`);
     }
 
     // Obtener info del usuario de MercadoPago
@@ -94,42 +67,32 @@ const callbackOAuth = async (req, res) => {
       console.warn('No se pudo obtener email del usuario MP:', e);
     }
 
-    await mercadoPagoConfigService.guardarOAuthConfig(tenantId, tokenData, userEmail);
+    await mercadoPagoConfigService.guardarOAuthConfig(tokenData, userEmail);
 
     // Redirigir al frontend con éxito
-    res.redirect(`${frontendUrl}/admin/configuracion?mp=connected`);
+    res.redirect(`${frontendUrl}/configuracion?mp=connected`);
   } catch (error) {
     console.error('Error en callback de OAuth:', error);
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    res.redirect(`${frontendUrl}/admin/configuracion?mp=error&reason=server_error`);
+    res.redirect(`${frontendUrl}/configuracion?mp=error&reason=server_error`);
   }
 };
 
 /**
  * DELETE /api/mercadopago/oauth/disconnect
- * Desconecta la cuenta de MercadoPago del tenant
+ * Desconecta la cuenta de MercadoPago
  */
 const desconectarOAuth = async (req, res) => {
-  const tenantId = req.tenantId;
-  if (!tenantId) {
-    throw createHttpError.badRequest('Contexto de tenant requerido');
-  }
-
-  await mercadoPagoConfigService.desconectar(tenantId);
+  await mercadoPagoConfigService.desconectar();
   res.json({ message: 'MercadoPago desconectado correctamente' });
 };
 
 /**
  * GET /api/mercadopago/status
- * Obtiene estado de conexión de MercadoPago del tenant
+ * Obtiene estado de conexión de MercadoPago
  */
 const obtenerEstado = async (req, res) => {
-  const tenantId = req.tenantId;
-  if (!tenantId) {
-    throw createHttpError.badRequest('Contexto de tenant requerido');
-  }
-
-  res.json(await mercadoPagoConfigService.obtenerEstado(tenantId));
+  res.json(await mercadoPagoConfigService.obtenerEstado());
 };
 
 /**
@@ -137,27 +100,17 @@ const obtenerEstado = async (req, res) => {
  * Configura MercadoPago manualmente con Access Token
  */
 const configurarManual = async (req, res) => {
-  const tenantId = req.tenantId;
-  if (!tenantId) {
-    throw createHttpError.badRequest('Contexto de tenant requerido');
-  }
-
   const { accessToken, publicKey } = req.body;
-  res.json(await mercadoPagoConfigService.configurarManual(tenantId, { accessToken, publicKey }));
+  res.json(await mercadoPagoConfigService.configurarManual({ accessToken, publicKey }));
 };
 
 /**
  * GET /api/mercadopago/transacciones
- * Obtiene historial de transacciones del tenant
+ * Obtiene historial de transacciones
  */
 const listarTransacciones = async (req, res) => {
-  const tenantId = req.tenantId;
-  if (!tenantId) {
-    throw createHttpError.badRequest('Contexto de tenant requerido');
-  }
-
   const { page, limit, desde, hasta, status } = req.query;
-  res.json(await mercadoPagoConfigService.listarTransacciones(tenantId, { page, limit, desde, hasta, status }));
+  res.json(await mercadoPagoConfigService.listarTransacciones({ page, limit, desde, hasta, status }));
 };
 
 module.exports = {

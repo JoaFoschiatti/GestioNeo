@@ -4,7 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const configuracionController = require('../controllers/configuracion.controller');
 const { verificarToken, verificarRol } = require('../middlewares/auth.middleware');
-const { setTenantFromAuth, bloquearSiSoloLectura } = require('../middlewares/tenant.middleware');
+const { setAuthContext, bloquearSiSoloLectura } = require('../middlewares/tenant.middleware');
 const { validate } = require('../middlewares/validate.middleware');
 const { asyncHandler } = require('../utils/async-handler');
 const { createHttpError } = require('../utils/http-error');
@@ -40,9 +40,9 @@ const upload = multer({
   }
 });
 
-// Rutas (todas requieren rol ADMIN + tenant context)
+// Rutas (todas requieren rol ADMIN)
 router.use(verificarToken);
-router.use(setTenantFromAuth);
+router.use(setAuthContext);
 router.use(verificarRol('ADMIN'));
 
 router.get('/', asyncHandler(configuracionController.obtenerTodas));

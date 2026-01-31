@@ -1,12 +1,12 @@
 /**
  * Rutas de Suscripciones SaaS
- * Maneja las suscripciones de tenants para el uso del sistema
+ * Maneja las suscripciones para el uso del sistema
  */
 
 const express = require('express');
 const router = express.Router();
 const { verificarToken, verificarRol } = require('../middlewares/auth.middleware');
-const { setTenantFromAuth } = require('../middlewares/tenant.middleware');
+const { setAuthContext } = require('../middlewares/tenant.middleware');
 const controller = require('../controllers/suscripcion.controller');
 const { asyncHandler } = require('../utils/async-handler');
 
@@ -18,14 +18,14 @@ const { asyncHandler } = require('../utils/async-handler');
 router.post('/webhook', controller.webhookSuscripcion);
 
 // ============================================
-// RUTAS PROTEGIDAS (requieren auth + admin + tenant)
+// RUTAS PROTEGIDAS (requieren auth + admin)
 // ============================================
 
 // POST /api/suscripcion/crear - Crear nueva suscripción
 router.post(
   '/crear',
   verificarToken,
-  setTenantFromAuth,
+  setAuthContext,
   verificarRol('ADMIN'),
   asyncHandler(controller.crearSuscripcion)
 );
@@ -34,7 +34,7 @@ router.post(
 router.get(
   '/estado',
   verificarToken,
-  setTenantFromAuth,
+  setAuthContext,
   verificarRol('ADMIN'),
   asyncHandler(controller.obtenerEstado)
 );
@@ -43,7 +43,7 @@ router.get(
 router.post(
   '/cancelar',
   verificarToken,
-  setTenantFromAuth,
+  setAuthContext,
   verificarRol('ADMIN'),
   asyncHandler(controller.cancelarSuscripcion)
 );
@@ -52,7 +52,7 @@ router.post(
 router.get(
   '/pagos',
   verificarToken,
-  setTenantFromAuth,
+  setAuthContext,
   verificarRol('ADMIN'),
   asyncHandler(controller.obtenerPagos)
 );

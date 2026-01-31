@@ -13,7 +13,6 @@ router.get('/', (req, res, next) => {
   return verificarToken(req, res, next);
 }, (req, res) => {
   const userTenantId = req.usuario?.tenantId;
-  const isSuperAdmin = req.usuario?.rol === 'SUPER_ADMIN';
   logger.info(`[SSE] Cliente conectado - Usuario: ${req.usuario?.email}, Tenant: ${userTenantId}`);
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -22,15 +21,13 @@ router.get('/', (req, res, next) => {
   res.flushHeaders();
 
   const sendEvent = (event) => {
-    // Filtrar eventos por tenant - solo enviar eventos del mismo tenant
+    // En single-tenant mode, enviamos todos los eventos con tenantId
     const eventTenantId = event.payload?.tenantId;
-    if (!isSuperAdmin) {
-      if (!eventTenantId) {
-        return; // Nunca enviar eventos sin tenantId (evita leaks multi-tenant)
-      }
-      if (eventTenantId !== userTenantId) {
-        return; // No enviar eventos de otros tenants
-      }
+    if (!eventTenantId) {
+      return; // Nunca enviar eventos sin tenantId
+    }
+    if (eventTenantId !== userTenantId) {
+      return; // No enviar eventos de otros tenants (por seguridad)
     }
 
     logger.info(`[SSE] Enviando evento: ${event.type} a tenant: ${userTenantId}`);

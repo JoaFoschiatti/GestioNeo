@@ -4,7 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const productosController = require('../controllers/productos.controller');
 const { verificarToken, esAdmin } = require('../middlewares/auth.middleware');
-const { setTenantFromAuth, bloquearSiSoloLectura } = require('../middlewares/tenant.middleware');
+const { setAuthContext, bloquearSiSoloLectura } = require('../middlewares/tenant.middleware');
 const { validate } = require('../middlewares/validate.middleware');
 const { asyncHandler } = require('../utils/async-handler');
 const {
@@ -46,7 +46,7 @@ const upload = multer({
 });
 
 router.use(verificarToken);
-router.use(setTenantFromAuth);
+router.use(setAuthContext);
 
 // Rutas para productos
 router.get('/', validate({ query: listarQuerySchema }), asyncHandler(productosController.listar));

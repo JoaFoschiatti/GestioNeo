@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const liquidacionesController = require('../controllers/liquidaciones.controller');
 const { verificarToken, esAdmin } = require('../middlewares/auth.middleware');
-const { setTenantFromAuth, bloquearSiSoloLectura } = require('../middlewares/tenant.middleware');
+const { setAuthContext, bloquearSiSoloLectura } = require('../middlewares/tenant.middleware');
 const { validate } = require('../middlewares/validate.middleware');
 const { asyncHandler } = require('../utils/async-handler');
 const {
@@ -13,7 +13,7 @@ const {
 } = require('../schemas/liquidaciones.schemas');
 
 router.use(verificarToken);
-router.use(setTenantFromAuth);
+router.use(setAuthContext);
 router.use(esAdmin);
 
 router.get('/', validate({ query: listarQuerySchema }), asyncHandler(liquidacionesController.listar));

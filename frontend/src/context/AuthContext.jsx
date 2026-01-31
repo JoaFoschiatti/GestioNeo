@@ -3,7 +3,7 @@
  *
  * Provee estado de autenticación a toda la aplicación:
  * - Usuario actual (datos del JWT decodificado)
- * - Tenant (restaurante) al que pertenece
+ * - Negocio (datos de la empresa)
  * - Funciones de login/logout
  * - Roles y permisos derivados (esAdmin, esMozo, etc.)
  *
@@ -11,20 +11,6 @@
  * automáticamente con todas las requests mediante withCredentials: true.
  *
  * @module AuthContext
- *
- * @example
- * // En App.jsx - Envolver la aplicación
- * import { AuthProvider } from './context/AuthContext';
- *
- * function App() {
- *   return (
- *     <AuthProvider>
- *       <Router>
- *         <Routes>...</Routes>
- *       </Router>
- *     </AuthProvider>
- *   );
- * }
  */
 
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
@@ -44,23 +30,23 @@ const AuthContext = createContext(null)
  */
 export function AuthProvider({ children }) {
   const [usuario, setUsuario] = useState(null)
-  const [tenant, setTenant] = useState(null)
+  const [negocio, setNegocio] = useState(null)
   const [suscripcion, setSuscripcion] = useState(null)
   const [modoSoloLectura, setModoSoloLectura] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Restore user/tenant/suscripcion from localStorage (not token - that's in httpOnly cookie)
+    // Restore user/negocio/suscripcion from localStorage (not token - that's in httpOnly cookie)
     const usuarioGuardado = localStorage.getItem('usuario')
-    const tenantGuardado = localStorage.getItem('tenant')
+    const negocioGuardado = localStorage.getItem('negocio')
     const suscripcionGuardada = localStorage.getItem('suscripcion')
     const modoSoloLecturaGuardado = localStorage.getItem('modoSoloLectura')
 
     if (usuarioGuardado) {
       setUsuario(JSON.parse(usuarioGuardado))
     }
-    if (tenantGuardado) {
-      setTenant(JSON.parse(tenantGuardado))
+    if (negocioGuardado) {
+      setNegocio(JSON.parse(negocioGuardado))
     }
     if (suscripcionGuardada) {
       setSuscripcion(JSON.parse(suscripcionGuardada))
@@ -71,16 +57,16 @@ export function AuthProvider({ children }) {
     setLoading(false)
   }, [])
 
-  const login = useCallback(async (email, password, slug = undefined, options = {}) => {
-    const response = await api.post('/auth/login', { email, password, slug }, options)
-    const { usuario, tenant, suscripcion: suscripcionData, modoSoloLectura: soloLectura } = response.data
+  const login = useCallback(async (email, password, options = {}) => {
+    const response = await api.post('/auth/login', { email, password }, options)
+    const { usuario, negocio: negocioData, suscripcion: suscripcionData, modoSoloLectura: soloLectura } = response.data
 
     // Token is automatically set as httpOnly cookie by the backend
-    // Store only user/tenant/suscripcion info in localStorage for quick access
+    // Store only user/negocio/suscripcion info in localStorage for quick access
     localStorage.setItem('usuario', JSON.stringify(usuario))
-    if (tenant) {
-      localStorage.setItem('tenant', JSON.stringify(tenant))
-      setTenant(tenant)
+    if (negocioData) {
+      localStorage.setItem('negocio', JSON.stringify(negocioData))
+      setNegocio(negocioData)
     }
     if (suscripcionData) {
       localStorage.setItem('suscripcion', JSON.stringify(suscripcionData))
@@ -104,11 +90,11 @@ export function AuthProvider({ children }) {
 
     // Clear localStorage and state
     localStorage.removeItem('usuario')
-    localStorage.removeItem('tenant')
+    localStorage.removeItem('negocio')
     localStorage.removeItem('suscripcion')
     localStorage.removeItem('modoSoloLectura')
     setUsuario(null)
-    setTenant(null)
+    setNegocio(null)
     setSuscripcion(null)
     setModoSoloLectura(false)
   }, [])
@@ -139,7 +125,6 @@ export function AuthProvider({ children }) {
     const esCocinero = usuario?.rol === 'COCINERO' || esAdmin
     const esCajero = usuario?.rol === 'CAJERO' || esAdmin
     const esDelivery = usuario?.rol === 'DELIVERY' || esAdmin
-    const esSuperAdmin = usuario?.rol === 'SUPER_ADMIN'
 
     // Determine subscription status
     const suscripcionActiva = suscripcion?.estado === 'ACTIVA'
@@ -148,7 +133,7 @@ export function AuthProvider({ children }) {
 
     return {
       usuario,
-      tenant,
+      negocio,
       suscripcion,
       modoSoloLectura,
       suscripcionActiva,
@@ -162,10 +147,9 @@ export function AuthProvider({ children }) {
       esMozo,
       esCocinero,
       esCajero,
-      esDelivery,
-      esSuperAdmin
+      esDelivery
     }
-  }, [usuario, tenant, suscripcion, modoSoloLectura, login, logout, refrescarSuscripcion, loading])
+  }, [usuario, negocio, suscripcion, modoSoloLectura, login, logout, refrescarSuscripcion, loading])
 
   return (
     <AuthContext.Provider value={value}>
@@ -181,16 +165,8 @@ export function AuthProvider({ children }) {
  *
  * @returns {Object} Contexto de autenticación
  * @returns {Object|null} returns.usuario - Usuario autenticado o null
- * @returns {number} returns.usuario.id - ID del usuario
- * @returns {string} returns.usuario.email - Email
- * @returns {string} returns.usuario.nombre - Nombre completo
- * @returns {string} returns.usuario.rol - Rol: 'ADMIN', 'MOZO', 'COCINERO', etc.
- * @returns {number} returns.usuario.tenantId - ID del tenant
- * @returns {Object|null} returns.tenant - Restaurante actual o null
- * @returns {number} returns.tenant.id - ID del tenant
- * @returns {string} returns.tenant.nombre - Nombre del restaurante
- * @returns {string} returns.tenant.slug - Slug único (ej: 'mi-restaurante')
- * @returns {Function} returns.login - Función de login (email, password, slug?)
+ * @returns {Object|null} returns.negocio - Datos del negocio o null
+ * @returns {Function} returns.login - Función de login (email, password)
  * @returns {Function} returns.logout - Función de logout
  * @returns {boolean} returns.loading - True mientras verifica el token inicial
  * @returns {boolean} returns.esAdmin - True si rol es ADMIN
@@ -198,52 +174,8 @@ export function AuthProvider({ children }) {
  * @returns {boolean} returns.esCocinero - True si rol es COCINERO o ADMIN
  * @returns {boolean} returns.esCajero - True si rol es CAJERO o ADMIN
  * @returns {boolean} returns.esDelivery - True si rol es DELIVERY o ADMIN
- * @returns {boolean} returns.esSuperAdmin - True si rol es SUPER_ADMIN
  *
  * @throws {Error} Si se usa fuera de AuthProvider
- *
- * @example
- * import { useAuth } from '../context/AuthContext';
- *
- * function NavBar() {
- *   const { usuario, logout, esAdmin } = useAuth();
- *
- *   return (
- *     <nav>
- *       <span>Hola, {usuario?.nombre}</span>
- *       {esAdmin && <Link to="/reportes">Reportes</Link>}
- *       <button onClick={logout}>Cerrar sesión</button>
- *     </nav>
- *   );
- * }
- *
- * @example
- * // Proteger contenido por rol
- * function Dashboard() {
- *   const { esAdmin, loading } = useAuth();
- *
- *   if (loading) return <Spinner />;
- *   if (!esAdmin) return <Navigate to="/mesas" />;
- *
- *   return <AdminDashboard />;
- * }
- *
- * @example
- * // Login
- * function LoginForm() {
- *   const { login } = useAuth();
- *   const navigate = useNavigate();
- *
- *   const handleSubmit = async (e) => {
- *     e.preventDefault();
- *     try {
- *       await login(email, password, slug);
- *       navigate('/');
- *     } catch (error) {
- *       setError('Credenciales inválidas');
- *     }
- *   };
- * }
  */
 export function useAuth() {
   const context = useContext(AuthContext)

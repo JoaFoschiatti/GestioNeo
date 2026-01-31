@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const router = express.Router();
 const impresionController = require('../controllers/impresion.controller');
 const { verificarToken } = require('../middlewares/auth.middleware');
-const { setTenantFromAuth, setTenantFromSlugHeader } = require('../middlewares/tenant.middleware');
+const { setAuthContext, setPublicContext } = require('../middlewares/tenant.middleware');
 const { validate } = require('../middlewares/validate.middleware');
 const { asyncHandler } = require('../utils/async-handler');
 const {
@@ -48,28 +48,28 @@ const requireBridgeToken = (req, res, next) => {
 router.post(
   '/jobs/claim',
   requireBridgeToken,
-  asyncHandler(setTenantFromSlugHeader),
+  asyncHandler(setPublicContext),
   validate({ body: bridgeClaimBodySchema }),
   asyncHandler(impresionController.claimJobs)
 );
 router.post(
   '/jobs/:id/ack',
   requireBridgeToken,
-  asyncHandler(setTenantFromSlugHeader),
+  asyncHandler(setPublicContext),
   validate({ params: jobIdParamSchema, body: bridgeAckBodySchema }),
   asyncHandler(impresionController.ackJob)
 );
 router.post(
   '/jobs/:id/fail',
   requireBridgeToken,
-  asyncHandler(setTenantFromSlugHeader),
+  asyncHandler(setPublicContext),
   validate({ params: jobIdParamSchema, body: bridgeFailBodySchema }),
   asyncHandler(impresionController.failJob)
 );
 
 // Endpoints protegidos para usuarios autenticados
 router.use(verificarToken);
-router.use(setTenantFromAuth);
+router.use(setAuthContext);
 
 router.post(
   '/comanda/:pedidoId',

@@ -7,26 +7,46 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('Iniciando seed de la base de datos...');
 
-  const tenantSlug = process.env.SEED_TENANT_SLUG || 'default';
-  const tenantNombre = process.env.SEED_TENANT_NOMBRE || 'Comanda Demo';
-  const tenantEmail = process.env.SEED_TENANT_EMAIL || 'admin@comanda.app';
-
-  const tenant = await prisma.tenant.upsert({
-    where: { slug: tenantSlug },
-    update: { nombre: tenantNombre, email: tenantEmail, activo: true },
-    create: { slug: tenantSlug, nombre: tenantNombre, email: tenantEmail, activo: true }
+  // Crear negocio (singleton ID=1)
+  const negocio = await prisma.negocio.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      id: 1,
+      nombre: process.env.SEED_NEGOCIO_NOMBRE || 'Comanda Demo',
+      email: process.env.SEED_NEGOCIO_EMAIL || 'contacto@comanda.app',
+      telefono: '11-5555-0000',
+      direccion: 'Av. Principal 123',
+      colorPrimario: '#3B82F6',
+      colorSecundario: '#1E40AF'
+    }
   });
+  console.log('Negocio creado:', negocio.nombre);
 
-  const tenantId = tenant.id;
+  // Crear suscripcion (singleton ID=1) - activa por 30 dias
+  const fechaVencimiento = new Date();
+  fechaVencimiento.setDate(fechaVencimiento.getDate() + 30);
+
+  await prisma.suscripcion.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      id: 1,
+      estado: 'ACTIVA',
+      fechaInicio: new Date(),
+      fechaVencimiento: fechaVencimiento,
+      precioMensual: 37000
+    }
+  });
+  console.log('Suscripcion creada (activa por 30 dias)');
 
   // Crear usuario admin
   const passwordHash = await bcrypt.hash('admin123', 10);
 
   const admin = await prisma.usuario.upsert({
-    where: { tenantId_email: { tenantId, email: 'admin@comanda.app' } },
+    where: { email: 'admin@comanda.app' },
     update: {},
     create: {
-      tenantId,
       email: 'admin@comanda.app',
       password: passwordHash,
       nombre: 'Administrador',
@@ -37,10 +57,9 @@ async function main() {
 
   // Crear usuario mozo de prueba
   const mozo = await prisma.usuario.upsert({
-    where: { tenantId_email: { tenantId, email: 'mozo@comanda.app' } },
+    where: { email: 'mozo@comanda.app' },
     update: {},
     create: {
-      tenantId,
       email: 'mozo@comanda.app',
       password: await bcrypt.hash('mozo123', 10),
       nombre: 'Juan Mozo',
@@ -51,10 +70,9 @@ async function main() {
 
   // Crear usuario cocinero de prueba
   const cocinero = await prisma.usuario.upsert({
-    where: { tenantId_email: { tenantId, email: 'cocinero@comanda.app' } },
+    where: { email: 'cocinero@comanda.app' },
     update: {},
     create: {
-      tenantId,
       email: 'cocinero@comanda.app',
       password: await bcrypt.hash('cocinero123', 10),
       nombre: 'Pedro Cocinero',
@@ -73,9 +91,9 @@ async function main() {
 
   for (const emp of empleados) {
     await prisma.empleado.upsert({
-      where: { tenantId_dni: { tenantId, dni: emp.dni } },
+      where: { dni: emp.dni },
       update: {},
-      create: { tenantId, ...emp }
+      create: emp
     });
   }
   console.log('Empleados creados:', empleados.length);
@@ -94,9 +112,9 @@ async function main() {
 
   for (const mesa of mesas) {
     await prisma.mesa.upsert({
-      where: { tenantId_numero: { tenantId, numero: mesa.numero } },
+      where: { numero: mesa.numero },
       update: {},
-      create: { tenantId, ...mesa }
+      create: mesa
     });
   }
   console.log('Mesas creadas:', mesas.length);
@@ -113,9 +131,9 @@ async function main() {
   const categoriasCreadas = {};
   for (const cat of categorias) {
     const created = await prisma.categoria.upsert({
-      where: { tenantId_nombre: { tenantId, nombre: cat.nombre } },
+      where: { nombre: cat.nombre },
       update: {},
-      create: { tenantId, ...cat }
+      create: cat
     });
     categoriasCreadas[cat.nombre] = created.id;
   }
@@ -139,9 +157,9 @@ async function main() {
   const ingredientesCreados = {};
   for (const ing of ingredientes) {
     const created = await prisma.ingrediente.upsert({
-      where: { tenantId_nombre: { tenantId, nombre: ing.nombre } },
+      where: { nombre: ing.nombre },
       update: {},
-      create: { tenantId, ...ing }
+      create: ing
     });
     ingredientesCreados[ing.nombre] = created.id;
   }
@@ -236,7 +254,7 @@ async function main() {
 
   for (const prod of productos) {
     const existente = await prisma.producto.findFirst({
-      where: { tenantId, nombre: prod.nombre }
+      where: { nombre: prod.nombre }
     });
 
     if (existente) {
@@ -248,7 +266,7 @@ async function main() {
     }
 
     await prisma.producto.create({
-      data: { tenantId, ...prod }
+      data: prod
     });
   }
   console.log('Productos creados:', productos.length);
@@ -263,9 +281,9 @@ async function main() {
 
   for (const config of configs) {
     await prisma.configuracion.upsert({
-      where: { tenantId_clave: { tenantId, clave: config.clave } },
+      where: { clave: config.clave },
       update: { valor: config.valor },
-      create: { tenantId, ...config }
+      create: config
     });
   }
   console.log('Configuraciones creadas:', configs.length);

@@ -12,14 +12,7 @@ datasource db {
 // ENUMS
 // ============================================
 
-enum PlanTenant {
-  FREE
-  PRO
-  ENTERPRISE
-}
-
 enum Rol {
-  SUPER_ADMIN
   ADMIN
   MOZO
   COCINERO
@@ -116,71 +109,23 @@ enum EstadoSuscripcion {
 }
 
 // ============================================
-// MULTI-TENANCY: Tenant Model
+// NEGOCIO (Singleton - reemplaza Tenant)
 // ============================================
 
-model Tenant {
-  id              Int         @id @default(autoincrement())
-  slug            String      @unique
+model Negocio {
+  id              Int      @id @default(1)
   nombre          String
   email           String
   telefono        String?
   direccion       String?
   logo            String?
   bannerUrl       String?
-  colorPrimario   String?     @default("#3B82F6")
-  colorSecundario String?     @default("#1E40AF")
-  plan            PlanTenant  @default(FREE)
-  activo          Boolean     @default(false)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  colorPrimario   String   @default("#3B82F6")
+  colorSecundario String   @default("#1E40AF")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  // Relaciones
-  usuarios          Usuario[]
-  empleados         Empleado[]
-  mesas             Mesa[]
-  categorias        Categoria[]
-  productos         Producto[]
-  ingredientes      Ingrediente[]
-  pedidos           Pedido[]
-  pedidoItems       PedidoItem[]
-  pagos             Pago[]
-  fichajes          Fichaje[]
-  liquidaciones     Liquidacion[]
-  movimientos       MovimientoStock[]
-  reservas          Reserva[]
-  cierres           CierreCaja[]
-  printJobs         PrintJob[]
-  modificadores     Modificador[]
-  configuraciones   Configuracion[]
-  productoIngredientes    ProductoIngrediente[]
-  productoModificadores   ProductoModificador[]
-  pedidoItemModificadores PedidoItemModificador[]
-  emailVerificaciones     EmailVerificacion[]
-  mercadoPagoConfig       MercadoPagoConfig?
-  transaccionesMercadoPago TransaccionMercadoPago[]
-  suscripcion             Suscripcion?
-
-  @@map("tenants")
-}
-
-// Verificacion de email para onboarding
-model EmailVerificacion {
-  id        Int       @id @default(autoincrement())
-  tenantId  Int
-  usuarioId Int
-  token     String    @unique
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
-
-  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId, usuarioId])
-  @@index([token])
-  @@index([usedAt, expiresAt])
-  @@map("email_verificaciones")
+  @@map("negocio")
 }
 
 // ============================================
@@ -190,8 +135,7 @@ model EmailVerificacion {
 // Usuarios del sistema (login)
 model Usuario {
   id        Int      @id @default(autoincrement())
-  tenantId  Int?     // Nullable para SUPER_ADMIN (no pertenece a ningún tenant)
-  email     String
+  email     String   @unique
   password  String
   nombre    String
   rol       Rol      @default(MOZO)
@@ -200,15 +144,11 @@ model Usuario {
   updatedAt DateTime @updatedAt
 
   // Relaciones
-  tenant    Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   pedidos   Pedido[]
   cierres   CierreCaja[]
   emailVerificaciones EmailVerificacion[]
   refreshTokens RefreshToken[]
 
-  @@unique([tenantId, email])
-  @@unique([tenantId, id])
-  @@index([tenantId])
   @@map("usuarios")
 }
 
@@ -217,7 +157,6 @@ model RefreshToken {
   id        String   @id @default(uuid())
   token     String   @unique
   usuarioId Int
-  tenantId  Int?
   expiresAt DateTime
   createdAt DateTime @default(now())
   revokedAt DateTime?
@@ -232,13 +171,29 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
+// Verificacion de email
+model EmailVerificacion {
+  id        Int       @id @default(autoincrement())
+  usuarioId Int
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@index([token])
+  @@index([usedAt, expiresAt])
+  @@map("email_verificaciones")
+}
+
 // Empleados (para fichaje y liquidacion)
 model Empleado {
   id          Int      @id @default(autoincrement())
-  tenantId    Int
   nombre      String
   apellido    String
-  dni         String
+  dni         String   @unique
   telefono    String?
   direccion   String?
   rol         Rol
@@ -248,20 +203,15 @@ model Empleado {
   updatedAt   DateTime @updatedAt
 
   // Relaciones
-  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   fichajes      Fichaje[]
   liquidaciones Liquidacion[]
 
-  @@unique([tenantId, dni])
-  @@unique([tenantId, id])
-  @@index([tenantId])
   @@map("empleados")
 }
 
 // Control de fichaje (entrada/salida)
 model Fichaje {
   id         Int       @id @default(autoincrement())
-  tenantId   Int
   empleadoId Int
   entrada    DateTime
   salida     DateTime?
@@ -269,11 +219,9 @@ model Fichaje {
   createdAt  DateTime  @default(now())
 
   // Relaciones
-  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   empleado Empleado @relation(fields: [empleadoId], references: [id])
 
-  @@index([tenantId])
-  @@index([tenantId, empleadoId, fecha])
+  @@index([empleadoId, fecha])
   @@index([empleadoId])
   @@map("fichajes")
 }
@@ -281,7 +229,6 @@ model Fichaje {
 // Liquidacion de sueldos
 model Liquidacion {
   id           Int       @id @default(autoincrement())
-  tenantId     Int
   empleadoId   Int
   periodoDesde DateTime  @db.Date
   periodoHasta DateTime  @db.Date
@@ -297,10 +244,8 @@ model Liquidacion {
   createdAt    DateTime  @default(now())
 
   // Relaciones
-  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   empleado Empleado @relation(fields: [empleadoId], references: [id])
 
-  @@index([tenantId])
   @@index([empleadoId])
   @@map("liquidaciones")
 }
@@ -312,8 +257,7 @@ model Liquidacion {
 // Mesas del local
 model Mesa {
   id        Int         @id @default(autoincrement())
-  tenantId  Int
-  numero    Int
+  numero    Int         @unique
   zona      String?
   capacidad Int         @default(4)
   estado    EstadoMesa  @default(LIBRE)
@@ -325,21 +269,16 @@ model Mesa {
   updatedAt DateTime    @updatedAt
 
   // Relaciones
-  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   pedidos   Pedido[]
   reservas  Reserva[]
 
-  @@unique([tenantId, numero])
-  @@unique([tenantId, id])
-  @@index([tenantId])
-  @@index([tenantId, estado])
+  @@index([estado])
   @@map("mesas")
 }
 
 // Reservas de mesa
 model Reserva {
   id                Int           @id @default(autoincrement())
-  tenantId          Int
   mesaId            Int
   clienteNombre     String
   clienteTelefono   String?
@@ -351,13 +290,11 @@ model Reserva {
   updatedAt         DateTime      @updatedAt
 
   // Relaciones
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   mesa   Mesa   @relation(fields: [mesaId], references: [id])
 
-  @@index([tenantId])
-  @@index([tenantId, fechaHora])
-  @@index([tenantId, mesaId, fechaHora])
-  @@index([tenantId, estado])
+  @@index([fechaHora])
+  @@index([mesaId, fechaHora])
+  @@index([estado])
   @@index([mesaId])
   @@map("reservas")
 }
@@ -369,8 +306,7 @@ model Reserva {
 // Categorias de productos
 model Categoria {
   id          Int      @id @default(autoincrement())
-  tenantId    Int
-  nombre      String
+  nombre      String   @unique
   descripcion String?
   orden       Int      @default(0)
   activa      Boolean  @default(true)
@@ -378,19 +314,14 @@ model Categoria {
   updatedAt   DateTime @updatedAt
 
   // Relaciones
-  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   productos Producto[]
 
-  @@unique([tenantId, nombre])
-  @@unique([tenantId, id])
-  @@index([tenantId])
   @@map("categorias")
 }
 
 // Productos (carta)
 model Producto {
   id           Int      @id @default(autoincrement())
-  tenantId     Int
   nombre       String
   descripcion  String?
   precio       Decimal  @db.Decimal(10, 2)
@@ -409,7 +340,6 @@ model Producto {
   esVariantePredeterminada Boolean    @default(false)
 
   // Relaciones
-  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   categoria    Categoria           @relation(fields: [categoriaId], references: [id])
   ingredientes ProductoIngrediente[]
   pedidoItems  PedidoItem[]
@@ -419,20 +349,16 @@ model Producto {
   productoBase Producto?  @relation("ProductoVariantes", fields: [productoBaseId], references: [id], onDelete: SetNull)
   variantes    Producto[] @relation("ProductoVariantes")
 
-  @@index([tenantId])
-  @@index([tenantId, categoriaId])
-  @@index([tenantId, productoBaseId])
-  @@index([tenantId, disponible])
   @@index([categoriaId])
-  @@unique([tenantId, id])
+  @@index([productoBaseId])
+  @@index([disponible])
   @@map("productos")
 }
 
 // Modificadores (extras y exclusiones)
 model Modificador {
   id        Int             @id @default(autoincrement())
-  tenantId  Int
-  nombre    String
+  nombre    String          @unique
   precio    Decimal         @default(0) @db.Decimal(10, 2)
   tipo      TipoModificador
   activo    Boolean         @default(true)
@@ -440,30 +366,23 @@ model Modificador {
   updatedAt DateTime        @updatedAt
 
   // Relaciones
-  tenant    Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   productos ProductoModificador[]
   items     PedidoItemModificador[]
 
-  @@unique([tenantId, nombre])
-  @@unique([tenantId, id])
-  @@index([tenantId])
   @@map("modificadores")
 }
 
 // Relacion producto-modificador (que modificadores acepta cada producto)
 model ProductoModificador {
   id            Int @id @default(autoincrement())
-  tenantId      Int
   productoId    Int
   modificadorId Int
 
   // Relaciones
-  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   producto    Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
   modificador Modificador @relation(fields: [modificadorId], references: [id], onDelete: Cascade)
 
-  @@unique([tenantId, productoId, modificadorId])
-  @@index([tenantId])
+  @@unique([productoId, modificadorId])
   @@index([productoId])
   @@index([modificadorId])
   @@map("producto_modificadores")
@@ -476,8 +395,7 @@ model ProductoModificador {
 // Ingredientes/Insumos para stock
 model Ingrediente {
   id           Int      @id @default(autoincrement())
-  tenantId     Int
-  nombre       String
+  nombre       String   @unique
   unidad       String   // kg, litros, unidades, etc.
   stockActual  Decimal  @db.Decimal(10, 3)
   stockMinimo  Decimal  @db.Decimal(10, 3)
@@ -487,31 +405,24 @@ model Ingrediente {
   updatedAt    DateTime @updatedAt
 
   // Relaciones
-  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   productos   ProductoIngrediente[]
   movimientos MovimientoStock[]
 
-  @@unique([tenantId, nombre])
-  @@unique([tenantId, id])
-  @@index([tenantId])
   @@map("ingredientes")
 }
 
 // Relacion producto-ingrediente (cuanto de cada ingrediente lleva un producto)
 model ProductoIngrediente {
   id            Int     @id @default(autoincrement())
-  tenantId      Int
   productoId    Int
   ingredienteId Int
   cantidad      Decimal @db.Decimal(10, 3)
 
   // Relaciones
-  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   producto    Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
   ingrediente Ingrediente @relation(fields: [ingredienteId], references: [id])
 
-  @@unique([tenantId, productoId, ingredienteId])
-  @@index([tenantId])
+  @@unique([productoId, ingredienteId])
   @@index([productoId])
   @@index([ingredienteId])
   @@map("producto_ingredientes")
@@ -520,7 +431,6 @@ model ProductoIngrediente {
 // Movimientos de stock
 model MovimientoStock {
   id            Int                  @id @default(autoincrement())
-  tenantId      Int
   ingredienteId Int
   tipo          TipoMovimientoStock
   cantidad      Decimal              @db.Decimal(10, 3)
@@ -529,13 +439,11 @@ model MovimientoStock {
   createdAt     DateTime             @default(now())
 
   // Relaciones
-  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   ingrediente Ingrediente @relation(fields: [ingredienteId], references: [id])
   pedido      Pedido?     @relation(fields: [pedidoId], references: [id])
 
-  @@index([tenantId])
-  @@index([tenantId, ingredienteId])
-  @@index([tenantId, createdAt])
+  @@index([ingredienteId])
+  @@index([createdAt])
   @@index([pedidoId])
   @@map("movimientos_stock")
 }
@@ -547,7 +455,6 @@ model MovimientoStock {
 // Pedidos
 model Pedido {
   id              Int          @id @default(autoincrement())
-  tenantId        Int
   tipo            TipoPedido
   estado          EstadoPedido @default(PENDIENTE)
   mesaId          Int?
@@ -580,7 +487,6 @@ model Pedido {
   updatedAt       DateTime     @updatedAt
 
   // Relaciones
-  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   mesa        Mesa?             @relation(fields: [mesaId], references: [id])
   usuario     Usuario?          @relation(fields: [usuarioId], references: [id])
   items       PedidoItem[]
@@ -588,21 +494,18 @@ model Pedido {
   movimientos MovimientoStock[]
   printJobs   PrintJob[]
 
-  @@index([tenantId])
-  @@index([tenantId, estado])
-  @@index([tenantId, tipo])
-  @@index([tenantId, createdAt])
+  @@index([estado])
+  @@index([tipo])
+  @@index([createdAt])
   @@index([estadoPago, createdAt])
   @@index([mesaId])
   @@index([usuarioId])
-  @@unique([tenantId, id])
   @@map("pedidos")
 }
 
 // Items del pedido
 model PedidoItem {
   id             Int      @id @default(autoincrement())
-  tenantId       Int
   pedidoId       Int
   productoId     Int
   cantidad       Int
@@ -612,33 +515,26 @@ model PedidoItem {
   createdAt      DateTime @default(now())
 
   // Relaciones
-  tenant        Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   pedido        Pedido                  @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
   producto      Producto                @relation(fields: [productoId], references: [id])
   modificadores PedidoItemModificador[]
 
-  @@index([tenantId])
-  @@index([tenantId, pedidoId])
   @@index([pedidoId])
   @@index([productoId])
-  @@unique([tenantId, id])
   @@map("pedido_items")
 }
 
 // Modificadores aplicados a items de pedido
 model PedidoItemModificador {
   id            Int     @id @default(autoincrement())
-  tenantId      Int
   pedidoItemId  Int
   modificadorId Int
   precio        Decimal @db.Decimal(10, 2)
 
   // Relaciones
-  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   pedidoItem  PedidoItem  @relation(fields: [pedidoItemId], references: [id], onDelete: Cascade)
   modificador Modificador @relation(fields: [modificadorId], references: [id])
 
-  @@index([tenantId])
   @@index([pedidoItemId])
   @@index([modificadorId])
   @@map("pedido_item_modificadores")
@@ -647,7 +543,6 @@ model PedidoItemModificador {
 // Pagos
 model Pago {
   id               Int         @id @default(autoincrement())
-  tenantId         Int
   pedidoId         Int
   monto            Decimal     @db.Decimal(10, 2)
   metodo           MetodoPago
@@ -670,18 +565,14 @@ model Pago {
   updatedAt        DateTime    @default(now()) @updatedAt
 
   // Relaciones
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   pedido Pedido @relation(fields: [pedidoId], references: [id])
   transaccionesMercadoPago TransaccionMercadoPago[]
 
-  @@index([tenantId])
-  @@index([tenantId, pedidoId])
-  @@index([tenantId, estado])
-  @@index([tenantId, estado, createdAt])
-  @@index([tenantId, pedidoId, createdAt])
   @@index([pedidoId])
+  @@index([estado])
+  @@index([estado, createdAt])
+  @@index([pedidoId, createdAt])
   @@index([mpPaymentId])
-  @@unique([tenantId, id])
   @@map("pagos")
 }
 
@@ -692,7 +583,6 @@ model Pago {
 // Cierre de caja / Arqueo
 model CierreCaja {
   id              Int         @id @default(autoincrement())
-  tenantId        Int
   usuarioId       Int
   fecha           DateTime    @db.Date
   horaApertura    DateTime
@@ -709,13 +599,11 @@ model CierreCaja {
   updatedAt       DateTime    @updatedAt
 
   // Relaciones
-  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   usuario Usuario @relation(fields: [usuarioId], references: [id])
 
-  @@index([tenantId])
-  @@index([tenantId, fecha])
-  @@index([tenantId, usuarioId, fecha])
-  @@index([tenantId, estado, createdAt])
+  @@index([fecha])
+  @@index([usuarioId, fecha])
+  @@index([estado, createdAt])
   @@map("cierres_caja")
 }
 
@@ -726,7 +614,6 @@ model CierreCaja {
 // Jobs de impresion (cola persistente)
 model PrintJob {
   id            Int             @id @default(autoincrement())
-  tenantId      Int
   pedidoId      Int
   tipo          TipoComanda
   status        EstadoPrintJob  @default(PENDIENTE)
@@ -743,15 +630,13 @@ model PrintJob {
   updatedAt     DateTime        @updatedAt
 
   // Relaciones
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   pedido Pedido @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
 
-  @@index([tenantId])
-  @@index([tenantId, status, nextAttemptAt])
-  @@index([tenantId, status, claimedAt])
-  @@index([tenantId, pedidoId, batchId])
+  @@index([status, nextAttemptAt])
+  @@index([status, claimedAt])
+  @@index([pedidoId, batchId])
   @@index([pedidoId])
-  @@unique([tenantId, pedidoId, tipo, batchId])
+  @@unique([pedidoId, tipo, batchId])
   @@map("print_jobs")
 }
 
@@ -759,30 +644,23 @@ model PrintJob {
 // CONFIGURACION
 // ============================================
 
-// Configuracion del sistema (por tenant)
+// Configuracion del sistema
 model Configuracion {
   id        Int      @id @default(autoincrement())
-  tenantId  Int
-  clave     String
+  clave     String   @unique
   valor     String
   updatedAt DateTime @updatedAt
 
-  // Relaciones
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  @@unique([tenantId, clave])
-  @@index([tenantId])
   @@map("configuraciones")
 }
 
 // ============================================
-// MERCADOPAGO (por tenant)
+// MERCADOPAGO
 // ============================================
 
-// Configuracion de MercadoPago por tenant (credenciales encriptadas)
+// Configuracion de MercadoPago (singleton)
 model MercadoPagoConfig {
-  id              Int       @id @default(autoincrement())
-  tenantId        Int       @unique
+  id              Int       @id @default(1)
   accessToken     String    // Encriptado con AES-256
   refreshToken    String?   // Encriptado (para OAuth)
   publicKey       String?
@@ -794,16 +672,12 @@ model MercadoPagoConfig {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  // Relaciones
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  @@map("mercadopago_configs")
+  @@map("mercadopago_config")
 }
 
 // Historial de transacciones de MercadoPago
 model TransaccionMercadoPago {
   id                Int       @id @default(autoincrement())
-  tenantId          Int
   pagoId            Int?
   mpPaymentId       String    @unique // ID único del pago en MercadoPago
   mpPreferenceId    String?   // ID de la preferencia que originó el pago
@@ -817,17 +691,15 @@ model TransaccionMercadoPago {
   installments      Int?      // Cantidad de cuotas
   fee               Decimal?  @db.Decimal(10, 2) // Comisión de MercadoPago
   netAmount         Decimal?  @db.Decimal(10, 2) // Monto neto recibido
-  externalReference String?   // Referencia externa (tenantId-pedidoId)
+  externalReference String?   // Referencia externa
   rawData           Json?     // Respuesta completa de MercadoPago para debugging
   createdAt         DateTime  @default(now())
 
   // Relaciones
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   pago   Pago?  @relation(fields: [pagoId], references: [id])
 
-  @@index([tenantId])
-  @@index([tenantId, createdAt])
-  @@index([tenantId, status])
+  @@index([createdAt])
+  @@index([status])
   @@index([pagoId])
   @@map("transacciones_mercadopago")
 }
@@ -836,10 +708,9 @@ model TransaccionMercadoPago {
 // SUSCRIPCIONES (SaaS)
 // ============================================
 
-// Suscripcion del tenant al SaaS
+// Suscripcion del negocio al SaaS (singleton)
 model Suscripcion {
-  id                  Int               @id @default(autoincrement())
-  tenantId            Int               @unique
+  id                  Int               @id @default(1)
 
   // MercadoPago Preapproval
   mpPreapprovalId     String?           @unique
@@ -865,11 +736,9 @@ model Suscripcion {
   updatedAt           DateTime          @updatedAt
 
   // Relaciones
-  tenant              Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   pagos               PagoSuscripcion[]
 
   @@index([estado])
-  @@unique([tenantId, id])
   @@map("suscripciones")
 }
 
@@ -877,7 +746,6 @@ model Suscripcion {
 model PagoSuscripcion {
   id              Int         @id @default(autoincrement())
   suscripcionId   Int
-  tenantId        Int
 
   // MercadoPago
   mpPaymentId     String      @unique
@@ -902,7 +770,6 @@ model PagoSuscripcion {
   // Relaciones
   suscripcion     Suscripcion @relation(fields: [suscripcionId], references: [id], onDelete: Cascade)
 
-  @@index([tenantId])
   @@index([suscripcionId])
   @@index([suscripcionId, createdAt])
   @@map("pagos_suscripcion")

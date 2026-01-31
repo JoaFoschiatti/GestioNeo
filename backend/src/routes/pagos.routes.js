@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pagosController = require('../controllers/pagos.controller');
 const { verificarToken, esAdminOCajero } = require('../middlewares/auth.middleware');
-const { setTenantFromAuth, bloquearSiSoloLectura } = require('../middlewares/tenant.middleware');
+const { setAuthContext, bloquearSiSoloLectura } = require('../middlewares/tenant.middleware');
 const { validate } = require('../middlewares/validate.middleware');
 const { asyncHandler } = require('../utils/async-handler');
 const {
@@ -16,7 +16,7 @@ router.post('/webhook/mercadopago', asyncHandler(pagosController.webhookMercadoP
 
 // Rutas protegidas
 router.use(verificarToken);
-router.use(setTenantFromAuth);
+router.use(setAuthContext);
 
 router.post('/', bloquearSiSoloLectura, esAdminOCajero, validate({ body: registrarPagoBodySchema }), asyncHandler(pagosController.registrarPago));
 router.post('/mercadopago/preferencia', bloquearSiSoloLectura, validate({ body: crearPreferenciaBodySchema }), asyncHandler(pagosController.crearPreferenciaMercadoPago));

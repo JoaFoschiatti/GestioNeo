@@ -24,10 +24,7 @@ const publicoRoutes = require('./routes/publico.routes');
 const cierresRoutes = require('./routes/cierres.routes');
 const reservasRoutes = require('./routes/reservas.routes');
 const modificadoresRoutes = require('./routes/modificadores.routes');
-const registroRoutes = require('./routes/registro.routes');
-const superadminRoutes = require('./routes/superadmin.routes');
 const mercadopagoRoutes = require('./routes/mercadopago.routes');
-const tenantRoutes = require('./routes/tenant.routes');
 const suscripcionRoutes = require('./routes/suscripcion.routes');
 
 const { errorMiddleware } = require('./middlewares/error.middleware');
@@ -115,10 +112,7 @@ app.use('/api/publico', publicoRoutes);
 app.use('/api/cierres', cierresRoutes);
 app.use('/api/reservas', reservasRoutes);
 app.use('/api/modificadores', modificadoresRoutes);
-app.use('/api/registro', registroRoutes);
-app.use('/api/super-admin', superadminRoutes);
 app.use('/api/mercadopago', mercadopagoRoutes);
-app.use('/api/tenant', tenantRoutes);
 app.use('/api/suscripcion', suscripcionRoutes);
 
 // Ruta de salud
