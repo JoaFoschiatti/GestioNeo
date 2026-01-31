@@ -11,8 +11,9 @@ const {
   crearPreferenciaBodySchema
 } = require('../schemas/pagos.schemas');
 
-// Webhook público de MercadoPago (sin auth)
+// Webhooks públicos de MercadoPago (sin auth)
 router.post('/webhook/mercadopago', asyncHandler(pagosController.webhookMercadoPago));
+router.post('/webhook/mercadopago/movements', asyncHandler(pagosController.webhookMercadoPagoMovements));
 
 // Rutas protegidas
 router.use(verificarToken);

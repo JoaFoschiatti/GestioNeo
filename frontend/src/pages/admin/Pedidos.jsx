@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
 import { useAuth } from '../../context/AuthContext'
-import { EyeIcon, PrinterIcon, CurrencyDollarIcon, PlusIcon } from '@heroicons/react/24/outline'
+import { EyeIcon, PrinterIcon, CurrencyDollarIcon, PlusIcon, BuildingLibraryIcon, ClipboardDocumentIcon } from '@heroicons/react/24/outline'
 import useEventSource from '../../hooks/useEventSource'
 import NuevoPedidoModal from '../../components/pedidos/NuevoPedidoModal'
 import useAsync from '../../hooks/useAsync'
@@ -28,6 +28,7 @@ export default function Pedidos() {
   const [showPagoModal, setShowPagoModal] = useState(false)
   const [pagoForm, setPagoForm] = useState({ monto: '', metodo: 'EFECTIVO', referencia: '' })
   const [showNuevoPedidoModal, setShowNuevoPedidoModal] = useState(false)
+  const [datosBancarios, setDatosBancarios] = useState(null)
 
   const cargarPedidos = useCallback(async () => {
     const params = filtroEstado ? `?estado=${filtroEstado}` : ''
@@ -54,6 +55,13 @@ export default function Pedidos() {
     cargarPedidosAsync()
       .catch(() => {})
   }, [cargarPedidosAsync])
+
+  // Cargar datos bancarios para transferencias
+  useEffect(() => {
+    api.get('/transferencias/config/datos-bancarios')
+      .then(res => setDatosBancarios(res.data))
+      .catch(() => setDatosBancarios(null))
+  }, [])
 
   const handleSseUpdate = useCallback((event) => {
     console.log('[SSE] Evento recibido:', event.type)
@@ -407,9 +415,78 @@ export default function Pedidos() {
                   <option value="EFECTIVO">Efectivo</option>
                   <option value="MERCADOPAGO">MercadoPago</option>
                   <option value="TARJETA">Tarjeta</option>
+                  <option value="TRANSFERENCIA">Transferencia</option>
                 </select>
               </div>
-              {pagoForm.metodo !== 'EFECTIVO' && (
+
+              {/* Datos bancarios para transferencia */}
+              {pagoForm.metodo === 'TRANSFERENCIA' && datosBancarios && (
+                <div className="bg-primary-50 border border-primary-200 rounded-xl p-4">
+                  <h4 className="font-semibold text-primary-800 mb-3 flex items-center gap-2">
+                    <BuildingLibraryIcon className="w-5 h-5" />
+                    Datos para Transferencia
+                  </h4>
+                  <div className="space-y-2">
+                    {datosBancarios.cvu && (
+                      <div className="flex items-center justify-between bg-white rounded-lg p-2">
+                        <div>
+                          <p className="text-xs text-text-tertiary">CVU</p>
+                          <p className="font-mono text-sm text-text-primary">{datosBancarios.cvu}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(datosBancarios.cvu)
+                            toast.success('CVU copiado')
+                          }}
+                          className="p-2 hover:bg-primary-100 rounded-lg transition-colors"
+                          title="Copiar CVU"
+                        >
+                          <ClipboardDocumentIcon className="w-4 h-4 text-primary-600" />
+                        </button>
+                      </div>
+                    )}
+                    {datosBancarios.alias && (
+                      <div className="flex items-center justify-between bg-white rounded-lg p-2">
+                        <div>
+                          <p className="text-xs text-text-tertiary">Alias</p>
+                          <p className="font-semibold text-text-primary">{datosBancarios.alias}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(datosBancarios.alias)
+                            toast.success('Alias copiado')
+                          }}
+                          className="p-2 hover:bg-primary-100 rounded-lg transition-colors"
+                          title="Copiar Alias"
+                        >
+                          <ClipboardDocumentIcon className="w-4 h-4 text-primary-600" />
+                        </button>
+                      </div>
+                    )}
+                    {datosBancarios.titular && (
+                      <div className="bg-white rounded-lg p-2">
+                        <p className="text-xs text-text-tertiary">Titular</p>
+                        <p className="text-sm text-text-primary">{datosBancarios.titular}</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="bg-warning-50 border border-warning-200 rounded-lg p-2 mt-3">
+                    <p className="text-xs text-warning-700">
+                      El pago se confirmara automaticamente cuando llegue la transferencia
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {pagoForm.metodo === 'TRANSFERENCIA' && !datosBancarios && (
+                <div className="bg-warning-50 text-warning-700 p-3 rounded-xl text-sm">
+                  Transferencias no configuradas. Configure CVU/Alias en Configuracion.
+                </div>
+              )}
+
+              {pagoForm.metodo !== 'EFECTIVO' && pagoForm.metodo !== 'TRANSFERENCIA' && (
                 <div>
                   <label className="label" htmlFor="pago-referencia">Referencia</label>
                   <input
@@ -427,7 +504,7 @@ export default function Pedidos() {
                   Cancelar
                 </button>
                 <button type="submit" className="btn btn-success flex-1">
-                  Registrar Pago
+                  {pagoForm.metodo === 'TRANSFERENCIA' ? 'Registrar (Esperar Transferencia)' : 'Registrar Pago'}
                 </button>
               </div>
             </form>

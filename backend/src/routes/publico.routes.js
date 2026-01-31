@@ -61,7 +61,7 @@ router.post('/pedido', publicOrderLimiter, setPublicContext, asyncHandler(async 
     pedido: result.pedido,
     costoEnvio: result.costoEnvio,
     total: result.total,
-    initPoint: result.initPoint, // Incluir initPoint para MercadoPago
+    initPoint: result.initPoint,
     message: 'Pedido creado correctamente'
   });
 }));

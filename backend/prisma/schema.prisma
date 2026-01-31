@@ -46,6 +46,7 @@ enum MetodoPago {
   EFECTIVO
   MERCADOPAGO
   TARJETA
+  TRANSFERENCIA
 }
 
 enum TipoMovimientoStock {
@@ -487,12 +488,13 @@ model Pedido {
   updatedAt       DateTime     @updatedAt
 
   // Relaciones
-  mesa        Mesa?             @relation(fields: [mesaId], references: [id])
-  usuario     Usuario?          @relation(fields: [usuarioId], references: [id])
-  items       PedidoItem[]
-  pagos       Pago[]
-  movimientos MovimientoStock[]
-  printJobs   PrintJob[]
+  mesa          Mesa?             @relation(fields: [mesaId], references: [id])
+  usuario       Usuario?          @relation(fields: [usuarioId], references: [id])
+  items         PedidoItem[]
+  pagos         Pago[]
+  movimientos   MovimientoStock[]
+  printJobs     PrintJob[]
+  transferencias TransferenciaEntrante[]
 
   @@index([estado])
   @@index([tipo])
@@ -669,6 +671,13 @@ model MercadoPagoConfig {
   expiresAt       DateTime? // Fecha de expiración del token
   isOAuth         Boolean   @default(false) // true si se conectó via OAuth, false si manual
   isActive        Boolean   @default(true)
+
+  // Datos de cuenta para transferencias
+  cvu                   String?   // CVU de la cuenta
+  alias                 String?   // Alias de la cuenta
+  cbuHolder             String?   // Titular de la cuenta
+  transferenciasEnabled Boolean   @default(false) // Si acepta transferencias
+
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -702,6 +711,59 @@ model TransaccionMercadoPago {
   @@index([status])
   @@index([pagoId])
   @@map("transacciones_mercadopago")
+}
+
+// Transferencias entrantes de MercadoPago (CVU/Alias)
+model TransferenciaEntrante {
+  id                Int       @id @default(autoincrement())
+
+  // Datos de MercadoPago
+  mpMovementId      String    @unique  // ID único del movimiento en MP
+  amount            Decimal   @db.Decimal(10, 2)
+  fee               Decimal?  @db.Decimal(10, 2)
+  netAmount         Decimal?  @db.Decimal(10, 2)
+
+  // Datos del pagador
+  payerName         String?   // Nombre del que transfiere
+  payerEmail        String?
+  payerCuit         String?
+
+  // Concepto/descripcion de la transferencia
+  concept           String?   // Puede contener número de pedido (#123)
+  reference         String?   // Referencia externa si existe
+
+  // Estado del match
+  estado            String    @default("PENDIENTE")  // PENDIENTE, MATCHED, MANUAL, RECHAZADA
+  pedidoId          Int?      // Pedido asociado (si hay match)
+  pagoId            Int?      // Pago creado al matchear
+
+  // Sugerencias de match
+  matchScore        Float?    // Confianza del match (0-1)
+  matchReason       String?   // Razón del match sugerido
+
+  // Metadata
+  rawData           Json?     // Respuesta completa de MP
+  createdAt         DateTime  @default(now())
+  matchedAt         DateTime? // Cuando se hizo el match
+
+  // Relaciones
+  pedido            Pedido?   @relation(fields: [pedidoId], references: [id])
+
+  @@index([estado])
+  @@index([amount])
+  @@index([createdAt])
+  @@index([pedidoId])
+  @@map("transferencias_entrantes")
+}
+
+// Control de última sincronización con MP
+model SyncTransferencias {
+  id              Int       @id @default(1)
+  lastSyncAt      DateTime  @default(now())
+  lastMovementId  String?   // Último movimiento procesado
+  updatedAt       DateTime  @updatedAt
+
+  @@map("sync_transferencias")
 }
 
 // ============================================

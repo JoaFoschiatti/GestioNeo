@@ -691,9 +691,11 @@ export default function MenuPublico() {
               Pago aprobado
             </div>
           )}
+
           <p className="text-sm text-text-tertiary mb-6">
             Enviamos un comprobante a tu email. Te contactaremos para coordinar la entrega.
           </p>
+
           <button
             onClick={() => { setPedidoExitoso(null); navigate('/menu') }}
             className="btn btn-primary w-full py-3"
@@ -1286,7 +1288,11 @@ export default function MenuPublico() {
                   </div>
                 ) : (
                   <>
-                    <div className={`grid gap-3 ${config?.mercadopago_enabled && config?.efectivo_enabled ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                    <div className={`grid gap-3 ${
+                      config?.mercadopago_enabled && config?.efectivo_enabled
+                        ? 'grid-cols-2'
+                        : 'grid-cols-1'
+                    }`}>
                       {config?.mercadopago_enabled && (
                         <button
                           type="button"

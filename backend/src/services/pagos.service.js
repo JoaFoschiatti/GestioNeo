@@ -18,20 +18,36 @@ const registrarPago = async (prisma, payload) => {
       throw createHttpError.badRequest('No se puede pagar un pedido cancelado');
     }
 
-    const totalPagado = pedido.pagos.reduce((sum, p) => sum + parseFloat(p.monto), 0);
+    // Para pagos normales, solo contamos los APROBADOS
+    // Para calcular pendiente, ignoramos pagos de TRANSFERENCIA que están PENDIENTES
+    const pagosAprobados = pedido.pagos.filter(p => p.estado === 'APROBADO');
+    const totalPagado = pagosAprobados.reduce((sum, p) => sum + parseFloat(p.monto), 0);
     const pendiente = parseFloat(pedido.total) - totalPagado;
 
     if (parseFloat(monto) > pendiente + 0.01) {
       throw createHttpError.badRequest(`El monto excede el pendiente ($${pendiente.toFixed(2)})`);
     }
 
+    // Si es TRANSFERENCIA, el pago queda PENDIENTE esperando la transferencia
+    const esTransferencia = metodo === 'TRANSFERENCIA';
+    const estadoPago = esTransferencia ? 'PENDIENTE' : 'APROBADO';
+
     const pago = await tx.pago.create({
-      data: { pedidoId, monto, metodo, referencia, comprobante }
+      data: {
+        pedidoId,
+        monto,
+        metodo,
+        referencia: esTransferencia ? `ESPERANDO-TRANSF-${pedidoId}` : referencia,
+        comprobante,
+        estado: estadoPago
+      }
     });
 
-    const nuevoTotalPagado = totalPagado + parseFloat(monto);
+    // Solo contar como pagado si el pago está APROBADO
+    const nuevoTotalPagado = esTransferencia ? totalPagado : totalPagado + parseFloat(monto);
 
-    if (nuevoTotalPagado >= parseFloat(pedido.total) - 0.01) {
+    // Solo marcar como cobrado si no es transferencia y el total está cubierto
+    if (!esTransferencia && nuevoTotalPagado >= parseFloat(pedido.total) - 0.01) {
       await tx.pedido.update({
         where: { id: pedidoId },
         data: { estado: 'COBRADO' }
@@ -54,7 +70,8 @@ const registrarPago = async (prisma, payload) => {
       pago,
       pedido: pedidoActualizado,
       totalPagado: nuevoTotalPagado,
-      pendiente: Math.max(0, parseFloat(pedidoActualizado?.total || 0) - nuevoTotalPagado)
+      pendiente: Math.max(0, parseFloat(pedidoActualizado?.total || 0) - nuevoTotalPagado),
+      esperandoTransferencia: esTransferencia
     };
   }, {
     isolationLevel: 'Serializable'

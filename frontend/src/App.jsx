@@ -25,6 +25,7 @@ import CierreCaja from './pages/admin/CierreCaja'
 import Reservas from './pages/admin/Reservas'
 import Modificadores from './pages/admin/Modificadores'
 import TransaccionesMercadoPago from './pages/admin/TransaccionesMercadoPago'
+import Transferencias from './pages/admin/Transferencias'
 import Suscripcion from './pages/admin/Suscripcion'
 import MesasUnificado from './pages/admin/MesasUnificado'
 
@@ -145,6 +146,11 @@ export default function App() {
         <Route path="transacciones-mp" element={
           <ProtectedRoute roles={['ADMIN']}>
             <TransaccionesMercadoPago />
+          </ProtectedRoute>
+        } />
+        <Route path="transferencias" element={
+          <ProtectedRoute roles={['ADMIN', 'CAJERO']}>
+            <Transferencias />
           </ProtectedRoute>
         } />
         <Route path="suscripcion" element={

@@ -26,6 +26,7 @@ const reservasRoutes = require('./routes/reservas.routes');
 const modificadoresRoutes = require('./routes/modificadores.routes');
 const mercadopagoRoutes = require('./routes/mercadopago.routes');
 const suscripcionRoutes = require('./routes/suscripcion.routes');
+const transferenciasRoutes = require('./routes/transferencias.routes');
 
 const { errorMiddleware } = require('./middlewares/error.middleware');
 const { createHttpError } = require('./utils/http-error');
@@ -114,6 +115,7 @@ app.use('/api/reservas', reservasRoutes);
 app.use('/api/modificadores', modificadoresRoutes);
 app.use('/api/mercadopago', mercadopagoRoutes);
 app.use('/api/suscripcion', suscripcionRoutes);
+app.use('/api/transferencias', transferenciasRoutes);
 
 // Ruta de salud
 app.get('/api/health', (req, res) => {

@@ -2,6 +2,7 @@ const app = require('./app');
 const { prisma } = require('./db/prisma');
 const { logger } = require('./utils/logger');
 const { iniciarJobReservas, detenerJobReservas } = require('./jobs/reservas.job');
+const { iniciarJobTransferencias, detenerJobTransferencias } = require('./jobs/transferencias.job');
 
 const PORT = process.env.PORT || 3001;
 
@@ -16,6 +17,7 @@ const start = () => {
     });
 
     iniciarJobReservas();
+    iniciarJobTransferencias();
   });
 };
 
@@ -29,6 +31,12 @@ const shutdown = async (signal) => {
     detenerJobReservas();
   } catch (e) {
     logger.error('Error deteniendo job de reservas', e);
+  }
+
+  try {
+    detenerJobTransferencias();
+  } catch (e) {
+    logger.error('Error deteniendo job de transferencias', e);
   }
 
   await new Promise((resolve) => {

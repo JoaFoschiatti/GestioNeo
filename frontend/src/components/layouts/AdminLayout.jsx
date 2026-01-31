@@ -21,6 +21,7 @@ import {
   CalendarDaysIcon,
   AdjustmentsHorizontalIcon,
   CreditCardIcon,
+  BuildingLibraryIcon,
   SparklesIcon
 } from '@heroicons/react/24/outline'
 
@@ -40,6 +41,7 @@ const navigation = [
   { divider: true, roles: ['ADMIN'] },
   { name: 'Liquidaciones', href: '/liquidaciones', icon: BanknotesIcon, roles: ['ADMIN'] },
   { name: 'Transacciones MP', href: '/transacciones-mp', icon: CreditCardIcon, roles: ['ADMIN'] },
+  { name: 'Transferencias', href: '/transferencias', icon: BuildingLibraryIcon, roles: ['ADMIN', 'CAJERO'] },
   { name: 'Reportes', href: '/reportes', icon: ChartBarIcon, roles: ['ADMIN', 'CAJERO'] },
   { name: 'Cierre de Caja', href: '/cierre-caja', icon: BanknotesIcon, roles: ['ADMIN', 'CAJERO'] },
   { name: 'Configuración', href: '/configuracion', icon: Cog6ToothIcon, roles: ['ADMIN'] },

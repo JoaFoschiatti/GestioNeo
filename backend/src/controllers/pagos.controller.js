@@ -3,6 +3,7 @@ const eventBus = require('../services/event-bus');
 const { getPrisma } = require('../utils/get-prisma');
 const emailService = require('../services/email.service');
 const { getPayment, saveTransaction } = require('../services/mercadopago.service');
+const transferenciasService = require('../services/transferencias.service');
 const pagosService = require('../services/pagos.service');
 const { logger } = require('../utils/logger');
 
@@ -426,9 +427,80 @@ const listarPagosPedido = async (req, res) => {
   res.json(result);
 };
 
+// Webhook de MercadoPago para movimientos de cuenta (transferencias)
+const webhookMercadoPagoMovements = async (req, res) => {
+  try {
+    logger.info('Webhook MercadoPago Movements recibido:', {
+      type: req.body.type,
+      topic: req.body.topic,
+      action: req.body.action,
+      dataId: req.query['data.id']
+    });
+
+    // Verificar firma (igual que pagos)
+    const shouldVerify = process.env.SKIP_WEBHOOK_VERIFICATION !== 'true';
+    if (shouldVerify && !verifyWebhookSignature(req)) {
+      logger.error('Webhook Movements: firma inválida o WEBHOOK_SECRET no configurado');
+      return res.sendStatus(401);
+    }
+
+    const { type, topic, action, data } = req.body;
+
+    // Procesar notificaciones de transferencias/movimientos
+    // Topics: money_transfer_received, account_money_received
+    // Types: account.movement, transfer
+    const isTransferEvent =
+      topic === 'money_transfer_received' ||
+      topic === 'account_money_received' ||
+      type === 'account.movement' ||
+      type === 'transfer' ||
+      action === 'money_transfer.received';
+
+    if (!isTransferEvent) {
+      logger.info('Webhook Movements: evento no es transferencia, ignorando');
+      return res.sendStatus(200);
+    }
+
+    const movementId = data?.id || req.query['data.id'];
+
+    if (!movementId) {
+      logger.info('Webhook Movements: sin movement ID');
+      return res.sendStatus(200);
+    }
+
+    // Obtener detalles del movimiento desde MercadoPago
+    let movementData;
+    try {
+      movementData = await transferenciasService.getMovementDetails(movementId.toString());
+    } catch (error) {
+      logger.error('Error obteniendo detalles del movimiento:', error);
+      // No podemos procesar sin los datos, pero respondemos 200 para evitar reintentos
+      return res.sendStatus(200);
+    }
+
+    // Procesar la transferencia entrante
+    const transferencia = await transferenciasService.processIncomingTransfer(movementData);
+
+    logger.info('Transferencia procesada:', {
+      id: transferencia.id,
+      mpMovementId: transferencia.mpMovementId,
+      amount: transferencia.amount,
+      estado: transferencia.estado,
+      pedidoId: transferencia.pedidoId
+    });
+
+    res.sendStatus(200);
+  } catch (error) {
+    logger.error('Error en webhook MercadoPago Movements:', error);
+    // Siempre responder 200 para evitar reintentos infinitos
+    res.sendStatus(200);
+  }
+};
+
 module.exports = {
   registrarPago,
   crearPreferenciaMercadoPago,
   webhookMercadoPago,
+  webhookMercadoPagoMovements,
   listarPagosPedido
 };
