@@ -18,8 +18,7 @@ const { createHttpError } = require('../utils/http-error');
  * Verifica si el tenant tiene suscripción activa.
  * Agrega req.modoSoloLectura = true|false según estado de suscripción.
  *
- * NOTA: Este middleware DEBE ejecutarse después de setTenantFromAuth
- * para tener acceso a req.tenantId.
+ * NOTA: Este middleware DEBE ejecutarse después de setAuthContext.
  *
  * SUPER_ADMIN siempre tiene acceso completo.
  */
@@ -32,16 +31,9 @@ const verificarSuscripcion = async (req, res, next) => {
       return next();
     }
 
-    // Sin tenantId = sin acceso
-    if (!req.tenantId) {
-      req.modoSoloLectura = true;
-      req.suscripcion = null;
-      return next();
-    }
-
-    // Buscar suscripción del tenant
+    // Buscar suscripción (singleton, id = 1)
     const suscripcion = await prisma.suscripcion.findUnique({
-      where: { tenantId: req.tenantId },
+      where: { id: 1 },
       select: {
         id: true,
         estado: true,

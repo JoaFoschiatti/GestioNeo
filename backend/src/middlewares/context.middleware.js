@@ -6,10 +6,11 @@
  * - Verificar el estado de la suscripción
  * - Bloquear operaciones de escritura si no hay suscripción activa
  *
- * @module tenant.middleware
+ * @module context.middleware
  */
 
 const { prisma } = require('../db/prisma');
+const { subscriptionCache } = require('../utils/cache');
 
 /**
  * Establece el contexto de la aplicación.
@@ -40,10 +41,16 @@ const setAuthContext = async (req, res, next) => {
 
     // Verificar estado de suscripción
     try {
-      const suscripcion = await prisma.suscripcion.findUnique({
-        where: { id: 1 }, // Singleton
-        select: { id: true, estado: true, fechaVencimiento: true, precioMensual: true }
-      });
+      let suscripcion = subscriptionCache.get('suscripcion');
+      if (!suscripcion) {
+        suscripcion = await prisma.suscripcion.findUnique({
+          where: { id: 1 }, // Singleton
+          select: { id: true, estado: true, fechaVencimiento: true, precioMensual: true }
+        });
+        if (suscripcion) {
+          subscriptionCache.set('suscripcion', suscripcion);
+        }
+      }
 
       const ahora = new Date();
       const tieneAcceso = suscripcion &&

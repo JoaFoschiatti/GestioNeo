@@ -1,4 +1,5 @@
 const { createHttpError } = require('../utils/http-error');
+const { toNumber, sumMoney, subtractMoney, roundMoney } = require('../utils/decimal');
 
 const registrarPago = async (prisma, payload) => {
   const { pedidoId, monto, metodo, referencia, comprobante } = payload;
@@ -21,10 +22,10 @@ const registrarPago = async (prisma, payload) => {
     // Para pagos normales, solo contamos los APROBADOS
     // Para calcular pendiente, ignoramos pagos de TRANSFERENCIA que están PENDIENTES
     const pagosAprobados = pedido.pagos.filter(p => p.estado === 'APROBADO');
-    const totalPagado = pagosAprobados.reduce((sum, p) => sum + parseFloat(p.monto), 0);
-    const pendiente = parseFloat(pedido.total) - totalPagado;
+    const totalPagado = sumMoney(...pagosAprobados.map(p => p.monto));
+    const pendiente = subtractMoney(pedido.total, totalPagado);
 
-    if (parseFloat(monto) > pendiente + 0.01) {
+    if (toNumber(monto) > pendiente + 0.01) {
       throw createHttpError.badRequest(`El monto excede el pendiente ($${pendiente.toFixed(2)})`);
     }
 
@@ -44,10 +45,10 @@ const registrarPago = async (prisma, payload) => {
     });
 
     // Solo contar como pagado si el pago está APROBADO
-    const nuevoTotalPagado = esTransferencia ? totalPagado : totalPagado + parseFloat(monto);
+    const nuevoTotalPagado = esTransferencia ? totalPagado : sumMoney(totalPagado, monto);
 
     // Solo marcar como cobrado si no es transferencia y el total está cubierto
-    if (!esTransferencia && nuevoTotalPagado >= parseFloat(pedido.total) - 0.01) {
+    if (!esTransferencia && nuevoTotalPagado >= subtractMoney(pedido.total, 0.01)) {
       await tx.pedido.update({
         where: { id: pedidoId },
         data: { estado: 'COBRADO' }
@@ -70,7 +71,7 @@ const registrarPago = async (prisma, payload) => {
       pago,
       pedido: pedidoActualizado,
       totalPagado: nuevoTotalPagado,
-      pendiente: Math.max(0, parseFloat(pedidoActualizado?.total || 0) - nuevoTotalPagado),
+      pendiente: Math.max(0, subtractMoney(pedidoActualizado?.total || 0, nuevoTotalPagado)),
       esperandoTransferencia: esTransferencia
     };
   }, {
@@ -92,14 +93,14 @@ const listarPagosPedido = async (prisma, pedidoId) => {
     })
   ]);
 
-  const totalPagado = pagos.reduce((sum, p) => sum + parseFloat(p.monto), 0);
-  const totalPedido = parseFloat(pedido?.total || 0);
+  const totalPagado = sumMoney(...pagos.map(p => p.monto));
+  const totalPedido = toNumber(pedido?.total || 0);
 
   return {
     pagos,
     totalPedido,
     totalPagado,
-    pendiente: Math.max(0, totalPedido - totalPagado)
+    pendiente: Math.max(0, subtractMoney(totalPedido, totalPagado))
   };
 };
 

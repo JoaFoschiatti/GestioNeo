@@ -46,12 +46,7 @@ import {
   CubeIcon,
   PhotoIcon
 } from '@heroicons/react/24/outline'
-
-// ----------------------------------------------------------
-// CONFIGURACIÓN
-// ----------------------------------------------------------
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
-const BACKEND_URL = API_URL.replace('/api', '') // Para URLs de imágenes
+import { BACKEND_URL } from '../../config/constants'
 
 export default function Productos() {
   // ----------------------------------------------------------

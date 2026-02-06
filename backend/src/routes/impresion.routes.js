@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const router = express.Router();
 const impresionController = require('../controllers/impresion.controller');
 const { verificarToken } = require('../middlewares/auth.middleware');
-const { setAuthContext, setPublicContext } = require('../middlewares/tenant.middleware');
+const { setAuthContext, setPublicContext } = require('../middlewares/context.middleware');
 const { validate } = require('../middlewares/validate.middleware');
 const { asyncHandler } = require('../utils/async-handler');
 const {

@@ -9,6 +9,7 @@
 const { MercadoPagoConfig, PreApproval } = require('mercadopago');
 const { prisma } = require('../db/prisma');
 const { createHttpError } = require('../utils/http-error');
+const { subscriptionCache } = require('../utils/cache');
 
 const SUBSCRIPTION_PRICE = parseInt(process.env.SUBSCRIPTION_PRICE_ARS || '37000');
 
@@ -96,6 +97,8 @@ async function crearSuscripcion(tenantId) {
       precioMensual: SUBSCRIPTION_PRICE
     }
   });
+
+  subscriptionCache.clear();
 
   return {
     initPoint: response.init_point,
@@ -194,6 +197,8 @@ async function cancelarSuscripcion(tenantId) {
       updatedAt: new Date()
     }
   });
+
+  subscriptionCache.clear();
 
   return suscripcionActualizada;
 }
@@ -297,6 +302,7 @@ async function procesarPreapprovalWebhook(client, preapprovalId) {
             precioMensual: SUBSCRIPTION_PRICE
           }
         });
+        subscriptionCache.clear();
       }
     }
     return;
@@ -311,6 +317,8 @@ async function procesarPreapprovalWebhook(client, preapprovalId) {
       updatedAt: new Date()
     }
   });
+
+  subscriptionCache.clear();
 }
 
 /**
@@ -395,6 +403,7 @@ async function procesarPagoWebhook(client, paymentId) {
         updatedAt: new Date()
       }
     });
+    subscriptionCache.clear();
   } else if (data.status === 'rejected') {
     const nuevoIntentos = suscripcion.intentosFallidos + 1;
 
@@ -406,6 +415,7 @@ async function procesarPagoWebhook(client, paymentId) {
         updatedAt: new Date()
       }
     });
+    subscriptionCache.clear();
   }
 }
 

@@ -12,7 +12,7 @@ const { createHttpError } = require('../utils/http-error');
  * Crea una nueva suscripción en MercadoPago
  */
 const crearSuscripcion = async (req, res) => {
-  const tenantId = req.tenantId;
+  const tenantId = 1;
   if (!tenantId) {
     throw createHttpError.badRequest('Contexto de tenant requerido');
   }
@@ -35,7 +35,7 @@ const crearSuscripcion = async (req, res) => {
  * Obtiene el estado actual de la suscripción
  */
 const obtenerEstado = async (req, res) => {
-  const tenantId = req.tenantId;
+  const tenantId = 1;
   if (!tenantId) {
     throw createHttpError.badRequest('Contexto de tenant requerido');
   }
@@ -49,7 +49,7 @@ const obtenerEstado = async (req, res) => {
  * Cancela la suscripción activa
  */
 const cancelarSuscripcion = async (req, res) => {
-  const tenantId = req.tenantId;
+  const tenantId = 1;
   if (!tenantId) {
     throw createHttpError.badRequest('Contexto de tenant requerido');
   }
@@ -71,7 +71,7 @@ const cancelarSuscripcion = async (req, res) => {
  * Obtiene el historial de pagos de la suscripción
  */
 const obtenerPagos = async (req, res) => {
-  const tenantId = req.tenantId;
+  const tenantId = 1;
   if (!tenantId) {
     throw createHttpError.badRequest('Contexto de tenant requerido');
   }

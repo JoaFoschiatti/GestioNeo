@@ -58,7 +58,7 @@ const crear = async (req, res) => {
   });
 
   if (mesaUpdated) {
-    emitMesaUpdated(req.tenantId, mesaUpdated.mesaId, mesaUpdated.estado);
+    emitMesaUpdated(1, mesaUpdated.mesaId, mesaUpdated.estado);
   }
 
   emitPedidoUpdated(pedido);
@@ -81,12 +81,12 @@ const cambiarEstado = async (req, res) => {
     await pedidosService.cambiarEstadoPedido(prisma, { pedidoId: id, estado });
 
   for (const update of mesaUpdates) {
-    emitMesaUpdated(req.tenantId, update.mesaId, update.estado);
+    emitMesaUpdated(1, update.mesaId, update.estado);
   }
 
   for (const producto of productosAgotados) {
     eventBus.publish('producto.agotado', {
-      tenantId: req.tenantId,
+      tenantId: 1,
       id: producto.id,
       nombre: producto.nombre,
       motivo: 'Ingrediente agotado',
@@ -99,7 +99,7 @@ const cambiarEstado = async (req, res) => {
     try {
       impresion = await printService.enqueuePrintJobs(prisma, pedidoAntes.id);
       eventBus.publish('impresion.updated', {
-        tenantId: req.tenantId,
+        tenantId: 1,
         pedidoId: pedidoAntes.id,
         ok: 0,
         total: impresion.total
@@ -141,7 +141,7 @@ const cancelar = async (req, res) => {
   });
 
   if (mesaUpdated) {
-    emitMesaUpdated(req.tenantId, mesaUpdated.mesaId, mesaUpdated.estado);
+    emitMesaUpdated(1, mesaUpdated.mesaId, mesaUpdated.estado);
   }
 
   emitPedidoUpdated(pedidoCancelado);

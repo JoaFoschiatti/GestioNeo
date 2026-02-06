@@ -23,6 +23,7 @@
 
 const jwt = require('jsonwebtoken');
 const { prisma } = require('../db/prisma');
+const { userCache } = require('../utils/cache');
 
 /**
  * Verifica el token JWT y agrega el usuario al request.
@@ -72,16 +73,22 @@ const verificarToken = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    const usuario = await prisma.usuario.findUnique({
-      where: { id: decoded.id },
-      select: {
-        id: true,
-        email: true,
-        nombre: true,
-        rol: true,
-        activo: true
+    let usuario = userCache.get(decoded.id);
+    if (!usuario) {
+      usuario = await prisma.usuario.findUnique({
+        where: { id: decoded.id },
+        select: {
+          id: true,
+          email: true,
+          nombre: true,
+          rol: true,
+          activo: true
+        }
+      });
+      if (usuario) {
+        userCache.set(decoded.id, usuario);
       }
-    });
+    }
 
     if (!usuario || !usuario.activo) {
       return res.status(401).json({ error: { message: 'Usuario no válido o inactivo' } });

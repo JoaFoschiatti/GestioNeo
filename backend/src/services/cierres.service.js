@@ -1,4 +1,5 @@
 const { createHttpError } = require('../utils/http-error');
+const { toNumber, sumMoney, subtractMoney } = require('../utils/decimal');
 
 const calcularVentasDesdeFecha = async (prisma, desde) => {
   const pagos = await prisma.pago.findMany({
@@ -16,18 +17,18 @@ const calcularVentasDesdeFecha = async (prisma, desde) => {
   };
 
   for (const pago of pagos) {
-    const monto = parseFloat(pago.monto);
-    totales.total += monto;
+    const monto = toNumber(pago.monto);
+    totales.total = sumMoney(totales.total, monto);
 
     switch (pago.metodo) {
       case 'EFECTIVO':
-        totales.efectivo += monto;
+        totales.efectivo = sumMoney(totales.efectivo, monto);
         break;
       case 'TARJETA':
-        totales.tarjeta += monto;
+        totales.tarjeta = sumMoney(totales.tarjeta, monto);
         break;
       case 'MERCADOPAGO':
-        totales.mercadopago += monto;
+        totales.mercadopago = sumMoney(totales.mercadopago, monto);
         break;
     }
   }
@@ -79,7 +80,7 @@ const abrirCaja = async (prisma, usuarioId, fondoInicial) => {
       usuarioId,
       fecha: hoy,
       horaApertura: ahora,
-      fondoInicial: parseFloat(fondoInicial) || 0,
+      fondoInicial: toNumber(fondoInicial),
       estado: 'ABIERTO'
     },
     include: {
@@ -103,9 +104,9 @@ const cerrarCaja = async (prisma, id, efectivoFisico, observaciones) => {
 
   const ventas = await calcularVentasDesdeFecha(prisma, caja.horaApertura);
 
-  const efectivoEsperado = parseFloat(caja.fondoInicial) + ventas.efectivo;
-  const efectivoContado = parseFloat(efectivoFisico) || 0;
-  const diferencia = efectivoContado - efectivoEsperado;
+  const efectivoEsperado = sumMoney(caja.fondoInicial, ventas.efectivo);
+  const efectivoContado = toNumber(efectivoFisico);
+  const diferencia = subtractMoney(efectivoContado, efectivoEsperado);
 
   const cajaCerrada = await prisma.cierreCaja.update({
     where: { id },
@@ -127,7 +128,7 @@ const cerrarCaja = async (prisma, id, efectivoFisico, observaciones) => {
   return {
     caja: cajaCerrada,
     resumen: {
-      fondoInicial: parseFloat(caja.fondoInicial),
+      fondoInicial: toNumber(caja.fondoInicial),
       ventasEfectivo: ventas.efectivo,
       ventasTarjeta: ventas.tarjeta,
       ventasMercadoPago: ventas.mercadopago,
@@ -172,10 +173,10 @@ const resumenActual = async (prisma) => {
   }
 
   const ventas = await calcularVentasDesdeFecha(prisma, cajaAbierta.horaApertura);
-  const efectivoEsperado = parseFloat(cajaAbierta.fondoInicial) + ventas.efectivo;
+  const efectivoEsperado = sumMoney(cajaAbierta.fondoInicial, ventas.efectivo);
 
   return {
-    fondoInicial: parseFloat(cajaAbierta.fondoInicial),
+    fondoInicial: toNumber(cajaAbierta.fondoInicial),
     ventasEfectivo: ventas.efectivo,
     ventasTarjeta: ventas.tarjeta,
     ventasMercadoPago: ventas.mercadopago,

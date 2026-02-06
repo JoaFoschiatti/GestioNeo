@@ -29,14 +29,14 @@ const actualizar = async (req, res) => {
 const registrarMovimiento = async (req, res) => {
   const prisma = getPrisma(req);
   const { ingrediente, events } = await ingredientesService.registrarMovimiento(prisma, req.params.id, req.body);
-  events.forEach(event => eventBus.publish(event.topic, { tenantId: req.tenantId, ...event.payload }));
+  events.forEach(event => eventBus.publish(event.topic, { tenantId: 1, ...event.payload }));
   res.json(ingrediente);
 };
 
 const ajustarStock = async (req, res) => {
   const prisma = getPrisma(req);
   const { ingrediente, events } = await ingredientesService.ajustarStock(prisma, req.params.id, req.body);
-  events.forEach(event => eventBus.publish(event.topic, { tenantId: req.tenantId, ...event.payload }));
+  events.forEach(event => eventBus.publish(event.topic, { tenantId: 1, ...event.payload }));
   res.json(ingrediente);
 };
 

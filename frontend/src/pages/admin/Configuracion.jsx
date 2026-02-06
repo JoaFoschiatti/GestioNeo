@@ -16,6 +16,7 @@ import {
 import MercadoPagoConfig from '../../components/configuracion/MercadoPagoConfig'
 import useTimeout from '../../hooks/useTimeout'
 import useAsync from '../../hooks/useAsync'
+import { BACKEND_URL } from '../../config/constants'
 
 export default function Configuracion() {
   // Estado del tenant (datos del negocio)
@@ -241,7 +242,6 @@ export default function Configuracion() {
     )
   }
 
-  const backendUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3001'
   const frontendUrl = import.meta.env.VITE_FRONTEND_URL || window.location.origin
 
   return (
@@ -554,7 +554,7 @@ export default function Configuracion() {
               {config.banner_imagen && (
                 <div className="flex items-center gap-2">
                   <img
-                    src={`${backendUrl}${config.banner_imagen}`}
+                    src={`${BACKEND_URL}${config.banner_imagen}`}
                     alt="Banner preview"
                     className="h-16 w-32 object-cover rounded-xl border border-border-default"
                   />

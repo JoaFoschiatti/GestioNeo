@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pagosController = require('../controllers/pagos.controller');
 const { verificarToken, esAdminOCajero } = require('../middlewares/auth.middleware');
-const { setAuthContext, bloquearSiSoloLectura } = require('../middlewares/tenant.middleware');
+const { setAuthContext, bloquearSiSoloLectura } = require('../middlewares/context.middleware');
 const { validate } = require('../middlewares/validate.middleware');
 const { asyncHandler } = require('../utils/async-handler');
 const {

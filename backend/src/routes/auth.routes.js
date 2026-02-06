@@ -3,7 +3,7 @@ const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const authController = require('../controllers/auth.controller');
 const { verificarToken, esAdmin } = require('../middlewares/auth.middleware');
-const { setAuthContext } = require('../middlewares/tenant.middleware');
+const { setAuthContext } = require('../middlewares/context.middleware');
 const { validate } = require('../middlewares/validate.middleware');
 const { asyncHandler } = require('../utils/async-handler');
 const { loginBodySchema, registrarBodySchema, cambiarPasswordBodySchema } = require('../schemas/auth.schemas');
@@ -50,5 +50,6 @@ router.post('/logout', asyncHandler(authController.logout));
 router.post('/registrar', registroLimiter, verificarToken, setAuthContext, esAdmin, validate({ body: registrarBodySchema }), asyncHandler(authController.registrar));
 router.get('/perfil', verificarToken, setAuthContext, asyncHandler(authController.perfil));
 router.put('/cambiar-password', passwordChangeLimiter, verificarToken, setAuthContext, validate({ body: cambiarPasswordBodySchema }), asyncHandler(authController.cambiarPassword));
+router.post('/sse-token', verificarToken, asyncHandler(authController.generarSseToken));
 
 module.exports = router;

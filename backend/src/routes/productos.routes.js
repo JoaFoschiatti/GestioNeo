@@ -2,9 +2,11 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
+const { fromFile } = require('file-type');
 const productosController = require('../controllers/productos.controller');
 const { verificarToken, esAdmin } = require('../middlewares/auth.middleware');
-const { setAuthContext, bloquearSiSoloLectura } = require('../middlewares/tenant.middleware');
+const { setAuthContext, bloquearSiSoloLectura } = require('../middlewares/context.middleware');
 const { validate } = require('../middlewares/validate.middleware');
 const { asyncHandler } = require('../utils/async-handler');
 const {
@@ -45,6 +47,38 @@ const upload = multer({
   }
 });
 
+// Middleware to validate file content via magic bytes (runs after multer)
+const validateMagicBytes = async (req, res, next) => {
+  if (!req.file) {
+    return next();
+  }
+
+  try {
+    const detectedType = await fromFile(req.file.path);
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
+
+    if (!detectedType || !allowedMimes.includes(detectedType.mime)) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({
+        error: 'El archivo no es una imagen válida. Solo se permiten imágenes reales (jpeg, png, webp).'
+      });
+    }
+
+    next();
+  } catch (err) {
+    if (req.file && req.file.path) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (_) {
+        // File may already be removed; ignore cleanup error
+      }
+    }
+    return res.status(500).json({
+      error: 'Error al validar el archivo subido.'
+    });
+  }
+};
+
 router.use(verificarToken);
 router.use(setAuthContext);
 
@@ -57,6 +91,7 @@ router.post(
   bloquearSiSoloLectura,
   esAdmin,
   upload.single('imagen'),
+  validateMagicBytes,
   validate({ body: crearProductoBodySchema }),
   asyncHandler(productosController.crear)
 );
@@ -65,6 +100,7 @@ router.put(
   bloquearSiSoloLectura,
   esAdmin,
   upload.single('imagen'),
+  validateMagicBytes,
   validate({ params: idParamSchema, body: actualizarProductoBodySchema }),
   asyncHandler(productosController.actualizar)
 );

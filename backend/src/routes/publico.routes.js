@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
-const { setPublicContext } = require('../middlewares/tenant.middleware');
+const { setPublicContext } = require('../middlewares/context.middleware');
 const emailService = require('../services/email.service');
 const eventBus = require('../services/event-bus');
 const { asyncHandler } = require('../utils/async-handler');

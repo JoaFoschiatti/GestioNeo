@@ -6,6 +6,24 @@ const { iniciarJobTransferencias, detenerJobTransferencias } = require('./jobs/t
 
 const PORT = process.env.PORT || 3001;
 
+// Validar secrets críticos en producción
+if (process.env.NODE_ENV === 'production') {
+  const PLACEHOLDER_SECRETS = {
+    JWT_SECRET: 'CHANGE_THIS_SECRET_IN_PRODUCTION_MIN_32_CHARS',
+    ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000',
+    BRIDGE_TOKEN: 'CHANGE_THIS_BRIDGE_TOKEN_IN_PRODUCTION'
+  };
+
+  const insecure = Object.entries(PLACEHOLDER_SECRETS)
+    .filter(([key, placeholder]) => process.env[key] === placeholder || !process.env[key])
+    .map(([key]) => key);
+
+  if (insecure.length > 0) {
+    logger.error(`FATAL: Los siguientes secrets tienen valores placeholder o no están configurados: ${insecure.join(', ')}. No se puede arrancar en producción.`);
+    process.exit(1);
+  }
+}
+
 let server;
 let shuttingDown = false;
 

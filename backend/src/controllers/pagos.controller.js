@@ -21,7 +21,7 @@ const registrarPago = async (req, res) => {
   });
 
   eventBus.publish('pago.updated', {
-    tenantId: req.tenantId,
+    tenantId: 1,
     pedidoId,
     totalPagado,
     pendiente,
@@ -30,7 +30,7 @@ const registrarPago = async (req, res) => {
 
   if (pedido.estado === 'COBRADO') {
     eventBus.publish('pedido.updated', {
-      tenantId: req.tenantId,
+      tenantId: 1,
       id: pedido.id,
       estado: pedido.estado,
       tipo: pedido.tipo,
@@ -124,7 +124,7 @@ const getPaymentFromGlobalToken = async (paymentId) => {
   }
 };
 
-// Webhook de MercadoPago (multi-tenant)
+// Webhook de MercadoPago
 const webhookMercadoPago = async (req, res) => {
   try {
     const prisma = getPrisma(req);
@@ -136,7 +136,7 @@ const webhookMercadoPago = async (req, res) => {
 
     // Verificar firma (SIEMPRE - crítico para seguridad)
     // En desarrollo se puede deshabilitar con SKIP_WEBHOOK_VERIFICATION=true
-    const shouldVerify = process.env.SKIP_WEBHOOK_VERIFICATION !== 'true';
+    const shouldVerify = process.env.NODE_ENV === 'production' || process.env.SKIP_WEBHOOK_VERIFICATION !== 'true';
     if (shouldVerify && !verifyWebhookSignature(req)) {
       logger.error('Webhook MercadoPago: firma inválida o WEBHOOK_SECRET no configurado');
       return res.sendStatus(401);
@@ -438,7 +438,7 @@ const webhookMercadoPagoMovements = async (req, res) => {
     });
 
     // Verificar firma (igual que pagos)
-    const shouldVerify = process.env.SKIP_WEBHOOK_VERIFICATION !== 'true';
+    const shouldVerify = process.env.NODE_ENV === 'production' || process.env.SKIP_WEBHOOK_VERIFICATION !== 'true';
     if (shouldVerify && !verifyWebhookSignature(req)) {
       logger.error('Webhook Movements: firma inválida o WEBHOOK_SECRET no configurado');
       return res.sendStatus(401);

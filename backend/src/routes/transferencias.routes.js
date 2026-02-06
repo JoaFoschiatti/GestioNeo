@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { verificarToken, esAdminOCajero } = require('../middlewares/auth.middleware');
-const { setAuthContext } = require('../middlewares/tenant.middleware');
+const { setAuthContext } = require('../middlewares/context.middleware');
 const { asyncHandler } = require('../utils/async-handler');
 const transferenciasService = require('../services/transferencias.service');
 const { logger } = require('../utils/logger');

@@ -22,7 +22,7 @@ describe('Eventos SSE', () => {
       email: `${uniqueId('admin')}@example.com`,
       rol: 'ADMIN'
     });
-    token = signTokenForUser(admin);
+    token = signTokenForUser(admin, { payload: { purpose: 'sse' }, expiresIn: '30s' });
   });
 
   afterAll(async () => {

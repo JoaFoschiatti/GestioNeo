@@ -85,36 +85,39 @@ export default function useEventSource({ enabled = true, events = {}, onOpen, on
 
   useEffect(() => {
     if (!enabled) return undefined
-    const source = createEventSource()
-    if (!source) return undefined
+    let cancelled = false
+    let source = null
 
-    const listeners = {}
-    Object.keys(eventsRef.current).forEach((eventName) => {
-      const handler = (event) => {
-        const currentHandler = eventsRef.current[eventName]
-        if (currentHandler) currentHandler(event)
+    createEventSource().then((es) => {
+      if (cancelled || !es) return
+      source = es
+
+      Object.keys(eventsRef.current).forEach((eventName) => {
+        const handler = (event) => {
+          const currentHandler = eventsRef.current[eventName]
+          if (currentHandler) currentHandler(event)
+        }
+        source.addEventListener(eventName, handler)
+      })
+
+      if (onErrorRef.current) {
+        source.onerror = (err) => {
+          onErrorRef.current?.(err)
+        }
       }
-      listeners[eventName] = handler
-      source.addEventListener(eventName, handler)
+
+      if (onOpenRef.current) {
+        source.onopen = () => {
+          onOpenRef.current?.()
+        }
+      }
     })
 
-    if (onErrorRef.current) {
-      source.onerror = (err) => {
-        onErrorRef.current?.(err)
-      }
-    }
-
-    if (onOpenRef.current) {
-      source.onopen = () => {
-        onOpenRef.current?.()
-      }
-    }
-
     return () => {
-      Object.entries(listeners).forEach(([eventName, handler]) => {
-        source.removeEventListener(eventName, handler)
-      })
-      source.close()
+      cancelled = true
+      if (source) {
+        source.close()
+      }
     }
   }, [enabled, eventNamesKey])
 }

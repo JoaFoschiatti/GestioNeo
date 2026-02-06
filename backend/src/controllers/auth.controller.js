@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { prisma } = require('../db/prisma');
 const { createHttpError } = require('../utils/http-error');
+const { userCache } = require('../utils/cache');
 
 /**
  * Registrar nuevo usuario (solo admin puede hacerlo)
@@ -182,7 +183,23 @@ const cambiarPassword = async (req, res) => {
     data: { password: passwordHash }
   });
 
+  userCache.delete(req.usuario.id);
+
   res.json({ message: 'Contraseña actualizada correctamente' });
+};
+
+/**
+ * Generar token SSE de corta duración (30 segundos).
+ * Se usa para autenticar conexiones EventSource sin exponer el JWT principal en la URL.
+ */
+const generarSseToken = async (req, res) => {
+  const sseToken = jwt.sign(
+    { id: req.usuario.id, purpose: 'sse' },
+    process.env.JWT_SECRET,
+    { expiresIn: '30s' }
+  );
+
+  res.json({ sseToken });
 };
 
 /**
@@ -202,5 +219,6 @@ module.exports = {
   login,
   logout,
   perfil,
-  cambiarPassword
+  cambiarPassword,
+  generarSseToken
 };

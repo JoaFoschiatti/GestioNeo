@@ -5,7 +5,7 @@
 const express = require('express');
 const router = express.Router();
 const { verificarToken, verificarRol } = require('../middlewares/auth.middleware');
-const { setAuthContext } = require('../middlewares/tenant.middleware');
+const { setAuthContext } = require('../middlewares/context.middleware');
 const controller = require('../controllers/mercadopago-oauth.controller');
 const { validate } = require('../middlewares/validate.middleware');
 const { asyncHandler } = require('../utils/async-handler');

@@ -141,14 +141,16 @@ export default function Login() {
           </button>
         </form>
 
-        {/* Test credentials info */}
-        <div className="mt-6 glass-info-box">
-          <p className="font-medium text-text-primary mb-2">Usuarios de prueba:</p>
-          <div className="space-y-0.5 text-text-tertiary">
-            <p>Admin: admin@comanda.app / admin123</p>
-            <p>Mozo: mozo@comanda.app / mozo123</p>
+        {/* Test credentials info - solo visible en desarrollo */}
+        {import.meta.env.DEV && (
+          <div className="mt-6 glass-info-box">
+            <p className="font-medium text-text-primary mb-2">Usuarios de prueba:</p>
+            <div className="space-y-0.5 text-text-tertiary">
+              <p>Admin: admin@comanda.app / admin123</p>
+              <p>Mozo: mozo@comanda.app / mozo123</p>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   )

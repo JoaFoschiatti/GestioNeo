@@ -10,7 +10,7 @@ const imprimirComanda = async (req, res) => {
   const result = await impresionService.imprimirComanda(prisma, pedidoId, { anchoMm });
 
   eventBus.publish('impresion.updated', {
-    tenantId: req.tenantId,
+    tenantId: 1,
     pedidoId: parseInt(pedidoId, 10),
     ok: 0,
     total: result.total
@@ -58,7 +58,7 @@ const ackJob = async (req, res) => {
 
   if (result.resumen) {
     eventBus.publish('impresion.updated', {
-      tenantId: req.tenantId,
+      tenantId: 1,
       pedidoId: result.pedidoId,
       ok: result.resumen.ok,
       total: result.resumen.total
@@ -75,7 +75,7 @@ const failJob = async (req, res) => {
 
   if (result.resumen) {
     eventBus.publish('impresion.updated', {
-      tenantId: req.tenantId,
+      tenantId: 1,
       pedidoId: result.pedidoId,
       ok: result.resumen.ok,
       total: result.resumen.total

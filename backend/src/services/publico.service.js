@@ -18,6 +18,7 @@
  */
 
 const { createHttpError } = require('../utils/http-error');
+const { toNumber, sumMoney, multiplyMoney, subtractMoney } = require('../utils/decimal');
 const { logger } = require('../utils/logger');
 const {
   isMercadoPagoConfigured,
@@ -81,7 +82,7 @@ const getPublicConfig = async (prisma) => {
       tienda_abierta: configMap.tienda_abierta !== 'false',
       horario_apertura: configMap.horario_apertura || '11:00',
       horario_cierre: configMap.horario_cierre || '23:00',
-      costo_delivery: parseFloat(configMap.costo_delivery || '0'),
+      costo_delivery: toNumber(configMap.costo_delivery || '0'),
       delivery_habilitado: configMap.delivery_habilitado !== 'false',
       direccion_retiro: configMap.direccion_retiro || negocio?.direccion,
       mercadopago_enabled: mpHabilitado,
@@ -161,7 +162,7 @@ const buildPreferenceData = ({ pedidoId, negocioNombre, items, costoEnvio }) => 
     id: item.productoId.toString(),
     title: item.producto.nombre,
     quantity: item.cantidad,
-    unit_price: parseFloat(item.precioUnitario),
+    unit_price: toNumber(item.precioUnitario),
     currency_id: 'ARS'
   }));
 
@@ -292,7 +293,7 @@ const createPublicOrder = async (prisma, { body }) => {
 
   let costoEnvio = 0;
   if (tipoEntrega === 'DELIVERY') {
-    costoEnvio = configMap.costo_delivery ? parseFloat(configMap.costo_delivery) : 0;
+    costoEnvio = configMap.costo_delivery ? toNumber(configMap.costo_delivery) : 0;
   }
 
   const productoIds = items.map(item => item.productoId);
@@ -312,9 +313,9 @@ const createPublicOrder = async (prisma, { body }) => {
   const itemsData = items.map(item => {
     const producto = productos.find(p => p.id === item.productoId);
     const cantidad = parseInt(item.cantidad);
-    const precioUnitario = parseFloat(producto.precio);
-    const itemSubtotal = precioUnitario * cantidad;
-    subtotal += itemSubtotal;
+    const precioUnitario = toNumber(producto.precio);
+    const itemSubtotal = multiplyMoney(precioUnitario, cantidad);
+    subtotal = sumMoney(subtotal, itemSubtotal);
 
     return {
       productoId: producto.id,
@@ -325,7 +326,7 @@ const createPublicOrder = async (prisma, { body }) => {
     };
   });
 
-  const total = subtotal + costoEnvio;
+  const total = sumMoney(subtotal, costoEnvio);
 
   const pedido = await prisma.pedido.create({
     data: {
@@ -389,14 +390,14 @@ const createPublicOrder = async (prisma, { body }) => {
   }
 
   if (metodoPago === 'EFECTIVO' && montoAbonado) {
-    const vuelto = parseFloat(montoAbonado) - total;
+    const vuelto = subtractMoney(montoAbonado, total);
     await prisma.pago.create({
       data: {
         pedidoId: pedido.id,
         monto: total,
         metodo: 'EFECTIVO',
         estado: 'PENDIENTE',
-        montoAbonado: parseFloat(montoAbonado),
+        montoAbonado: toNumber(montoAbonado),
         vuelto: vuelto > 0 ? vuelto : 0
       }
     });
@@ -480,7 +481,7 @@ const startMercadoPagoPaymentForOrder = async (prisma, { pedidoId }) => {
     pedidoId,
     negocioNombre: negocio?.nombre || 'Mi Negocio',
     items: pedido.items,
-    costoEnvio: parseFloat(pedido.costoEnvio)
+    costoEnvio: toNumber(pedido.costoEnvio)
   });
 
   let response;
@@ -497,7 +498,7 @@ const startMercadoPagoPaymentForOrder = async (prisma, { pedidoId }) => {
   await prisma.pago.create({
     data: {
       pedidoId,
-      monto: parseFloat(pedido.total),
+      monto: toNumber(pedido.total),
       metodo: 'MERCADOPAGO',
       estado: 'PENDIENTE',
       mpPreferenceId: response.id,

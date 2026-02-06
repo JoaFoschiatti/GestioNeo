@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const reportesController = require('../controllers/reportes.controller');
 const { verificarToken, esAdmin, esAdminOCajero } = require('../middlewares/auth.middleware');
-const { setAuthContext } = require('../middlewares/tenant.middleware');
+const { setAuthContext } = require('../middlewares/context.middleware');
 const { validate } = require('../middlewares/validate.middleware');
 const { asyncHandler } = require('../utils/async-handler');
 const {

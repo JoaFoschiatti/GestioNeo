@@ -12,6 +12,7 @@
  */
 
 const { createHttpError } = require('../utils/http-error');
+const { toNumber, sumMoney, multiplyMoney } = require('../utils/decimal');
 const printService = require('./print.service');
 
 /**
@@ -88,13 +89,13 @@ const buildPedidoItems = async (prisma, items) => {
       if (!mod.activo) {
         throw createHttpError.badRequest(`Modificador "${mod.nombre}" no está activo`);
       }
-      precioModificadores += parseFloat(mod.precio);
+      precioModificadores = sumMoney(precioModificadores, mod.precio);
       return mod;
     });
 
-    const precioUnitario = parseFloat(producto.precio) + precioModificadores;
-    const itemSubtotal = precioUnitario * item.cantidad;
-    subtotal += itemSubtotal;
+    const precioUnitario = sumMoney(producto.precio, precioModificadores);
+    const itemSubtotal = multiplyMoney(precioUnitario, item.cantidad);
+    subtotal = sumMoney(subtotal, itemSubtotal);
 
     itemsConPrecio.push({
       productoId: item.productoId,
@@ -324,7 +325,7 @@ const cambiarEstadoPedido = async (prisma, payload) => {
 
       for (const item of pedido.items) {
         for (const prodIng of item.producto.ingredientes) {
-          const cantidadDescontar = parseFloat(prodIng.cantidad) * item.cantidad;
+          const cantidadDescontar = multiplyMoney(prodIng.cantidad, item.cantidad);
           const ingredienteId = prodIng.ingredienteId;
 
           // Accumulate total cantidad for this ingrediente
@@ -348,7 +349,7 @@ const cambiarEstadoPedido = async (prisma, payload) => {
           select: { id: true, nombre: true, stockActual: true }
         });
 
-        const stockActual = parseFloat(ingrediente?.stockActual || 0);
+        const stockActual = toNumber(ingrediente?.stockActual || 0);
 
         if (stockActual < cantidadTotal) {
           throw createHttpError.badRequest(
@@ -477,8 +478,8 @@ const agregarItemsPedido = async (prisma, payload) => {
         throw createHttpError.badRequest('Producto no disponible');
       }
 
-      const itemSubtotal = parseFloat(producto.precio) * item.cantidad;
-      subtotalNuevo += itemSubtotal;
+      const itemSubtotal = multiplyMoney(producto.precio, item.cantidad);
+      subtotalNuevo = sumMoney(subtotalNuevo, itemSubtotal);
 
       itemsConPrecio.push({
         pedidoId,
@@ -557,7 +558,7 @@ const cancelarPedido = async (prisma, payload) => {
           ...salidaMovements.map(mov =>
             tx.ingrediente.update({
               where: { id: mov.ingredienteId },
-              data: { stockActual: { increment: parseFloat(mov.cantidad) } }
+              data: { stockActual: { increment: toNumber(mov.cantidad) } }
             })
           ),
           // Create reversal movements in batch
