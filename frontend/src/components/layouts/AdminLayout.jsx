@@ -171,7 +171,7 @@ export default function AdminLayout() {
         </div>
 
         {/* Page content */}
-        <main className="p-4 lg:p-8">
+        <main className="p-4 lg:p-8 max-w-screen-2xl mx-auto page-enter">
           <Outlet />
         </main>
       </div>

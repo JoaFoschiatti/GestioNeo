@@ -83,13 +83,15 @@ export default function Dashboard() {
       name: 'Ventas de Hoy',
       value: `$${data?.ventasHoy?.toLocaleString('es-AR') || 0}`,
       icon: CurrencyDollarIcon,
-      link: null
+      link: null,
+      featured: true
     },
     {
       name: 'Pedidos Hoy',
       value: data?.pedidosHoy || 0,
       icon: ShoppingCartIcon,
-      link: null
+      link: null,
+      featured: true
     },
     {
       name: 'Pedidos Pendientes',
@@ -141,23 +143,23 @@ export default function Dashboard() {
       )}
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat) => {
           const Card = stat.link ? Link : 'div'
           return (
             <Card
               key={stat.name}
               to={stat.link}
-              className={`stat-card card-hover flex items-center gap-4 ${stat.link ? 'cursor-pointer' : ''}`}
+              className={`stat-card card-hover flex items-center gap-4 ${stat.link ? 'cursor-pointer' : ''} ${stat.featured ? 'lg:col-span-2' : ''}`}
             >
-              <div className={`p-3 rounded-xl ${
+              <div className={`${stat.featured ? 'p-4' : 'p-3'} rounded-xl ${
                 stat.isWarning
                   ? 'bg-warning-100'
                   : stat.highlight
                     ? 'bg-primary-100'
                     : 'bg-primary-50'
               }`}>
-                <stat.icon className={`w-6 h-6 ${
+                <stat.icon className={`${stat.featured ? 'w-8 h-8' : 'w-6 h-6'} ${
                   stat.isWarning
                     ? 'text-warning-600'
                     : 'text-primary-500'
@@ -165,7 +167,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <p className="stat-label">{stat.name}</p>
-                <p className="stat-value">{stat.value}</p>
+                <p className={stat.featured ? 'stat-value-lg' : 'stat-value'}>{stat.value}</p>
               </div>
             </Card>
           )
