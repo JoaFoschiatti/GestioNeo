@@ -149,11 +149,18 @@ const cancelar = async (req, res) => {
 };
 
 // Pedidos pendientes para cocina
+// Excluye pedidos online con pago MercadoPago pendiente (no confirmado)
 const pedidosCocina = async (req, res) => {
   const prisma = getPrisma(req);
   const pedidos = await prisma.pedido.findMany({
     where: {
-      estado: { in: ['PENDIENTE', 'EN_PREPARACION'] }
+      estado: { in: ['PENDIENTE', 'EN_PREPARACION'] },
+      // Excluir pedidos online con pago MP no confirmado
+      NOT: {
+        origen: 'MENU_PUBLICO',
+        estadoPago: 'PENDIENTE',
+        pagos: { some: { metodo: 'MERCADOPAGO', estado: 'PENDIENTE' } }
+      }
     },
     include: {
       mesa: { select: { numero: true } },

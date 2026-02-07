@@ -183,7 +183,7 @@ const buildPreferenceData = ({ pedidoId, negocioNombre, items, costoEnvio }) => 
       failure: `${frontendUrl}/menu?pago=error&pedido=${pedidoId}`,
       pending: `${frontendUrl}/menu?pago=pendiente&pedido=${pedidoId}`
     },
-    external_reference: `pedido-${pedidoId}`,
+    external_reference: `1-${pedidoId}`,
     notification_url: `${backendUrl}/api/pagos/webhook/mercadopago`,
     statement_descriptor: negocioNombre.substring(0, 22).toUpperCase()
   };
@@ -462,6 +462,16 @@ const startMercadoPagoPaymentForOrder = async (prisma, { pedidoId }) => {
     throw createHttpError.badRequest('El pedido ya está pagado');
   }
 
+  // Buscar pago MP pendiente existente para reutilizar (evita registros huérfanos)
+  const pagoExistente = await prisma.pago.findFirst({
+    where: {
+      pedidoId,
+      metodo: 'MERCADOPAGO',
+      estado: 'PENDIENTE'
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+
   const config = await prisma.configuracion.findFirst({
     where: { clave: 'mercadopago_enabled' }
   });
@@ -494,17 +504,25 @@ const startMercadoPagoPaymentForOrder = async (prisma, { pedidoId }) => {
     throw error;
   }
 
-  const idempotencyKey = `mp-${pedidoId}-${Date.now()}`;
-  await prisma.pago.create({
-    data: {
-      pedidoId,
-      monto: toNumber(pedido.total),
-      metodo: 'MERCADOPAGO',
-      estado: 'PENDIENTE',
-      mpPreferenceId: response.id,
-      idempotencyKey
-    }
-  });
+  if (pagoExistente) {
+    // Actualizar pago existente con nueva preferencia (evita registros huérfanos)
+    await prisma.pago.update({
+      where: { id: pagoExistente.id },
+      data: { mpPreferenceId: response.id }
+    });
+  } else {
+    const idempotencyKey = `mp-${pedidoId}-${Date.now()}`;
+    await prisma.pago.create({
+      data: {
+        pedidoId,
+        monto: toNumber(pedido.total),
+        metodo: 'MERCADOPAGO',
+        estado: 'PENDIENTE',
+        mpPreferenceId: response.id,
+        idempotencyKey
+      }
+    });
+  }
 
   return {
     preferenceId: response.id,
@@ -549,7 +567,7 @@ const getPublicOrderStatus = async (prisma, { pedidoId }) => {
     const pagoMP = pedido.pagos.find(p => p.metodo === 'MERCADOPAGO' && p.estado === 'PENDIENTE');
 
     if (pagoMP) {
-      const externalReference = `pedido-${pedidoId}`;
+      const externalReference = `1-${pedidoId}`;
       const pagoAprobado = await searchPaymentByReference(externalReference);
 
       if (pagoAprobado) {

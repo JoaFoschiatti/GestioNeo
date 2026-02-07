@@ -8,16 +8,39 @@ const { asyncHandler } = require('../utils/async-handler');
 const publicoService = require('../services/publico.service');
 const { logger } = require('../utils/logger');
 
-// Rate limiter para pedidos públicos (10 pedidos por hora por IP)
-// Deshabilitado en entorno de test para permitir E2E tests
-const publicOrderLimiter = process.env.NODE_ENV === 'test'
-  ? (req, res, next) => next() // Skip en test
+// Rate limiters (deshabilitados en entorno de test para E2E)
+const isTest = process.env.NODE_ENV === 'test';
+const skipLimiter = (req, res, next) => next();
+
+// 10 pedidos por hora por IP
+const publicOrderLimiter = isTest
+  ? skipLimiter
   : rateLimit({
-      windowMs: 60 * 60 * 1000, // 1 hora
+      windowMs: 60 * 60 * 1000,
       max: 10,
-      message: {
-        error: { message: 'Demasiados pedidos creados. Intente nuevamente en 1 hora.' }
-      },
+      message: { error: { message: 'Demasiados pedidos creados. Intente nuevamente en 1 hora.' } },
+      standardHeaders: true,
+      legacyHeaders: false
+    });
+
+// 30 consultas por minuto por IP (previene enumeración de pedidos)
+const orderStatusLimiter = isTest
+  ? skipLimiter
+  : rateLimit({
+      windowMs: 60 * 1000,
+      max: 30,
+      message: { error: { message: 'Demasiadas consultas. Intente nuevamente en un momento.' } },
+      standardHeaders: true,
+      legacyHeaders: false
+    });
+
+// 5 intentos de pago por hora por IP
+const paymentLimiter = isTest
+  ? skipLimiter
+  : rateLimit({
+      windowMs: 60 * 60 * 1000,
+      max: 5,
+      message: { error: { message: 'Demasiados intentos de pago. Intente nuevamente más tarde.' } },
       standardHeaders: true,
       legacyHeaders: false
     });
@@ -67,14 +90,14 @@ router.post('/pedido', publicOrderLimiter, setPublicContext, asyncHandler(async 
 }));
 
 // POST /api/publico/pedido/:id/pagar - Iniciar pago MercadoPago
-router.post('/pedido/:id/pagar', setPublicContext, asyncHandler(async (req, res) => {
+router.post('/pedido/:id/pagar', paymentLimiter, setPublicContext, asyncHandler(async (req, res) => {
   const pedidoId = parseInt(req.params.id);
   const result = await publicoService.startMercadoPagoPaymentForOrder(req.prisma, { pedidoId });
   res.json(result);
 }));
 
 // GET /api/publico/pedido/:id - Obtener estado de pedido
-router.get('/pedido/:id', setPublicContext, asyncHandler(async (req, res) => {
+router.get('/pedido/:id', orderStatusLimiter, setPublicContext, asyncHandler(async (req, res) => {
   const pedidoId = parseInt(req.params.id);
   const result = await publicoService.getPublicOrderStatus(req.prisma, { pedidoId });
   result.events.forEach(event => eventBus.publish(event.topic, event.payload));
