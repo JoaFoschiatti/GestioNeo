@@ -6,6 +6,7 @@ module.exports = defineConfig({
   expect: {
     timeout: 10000
   },
+  actionTimeout: 10000,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

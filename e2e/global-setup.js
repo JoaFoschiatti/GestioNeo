@@ -1,45 +1,32 @@
 const path = require('path');
 const fs = require('fs');
-
-// Use Prisma Client from backend (already generated with schema)
 const { PrismaClient } = require(path.join(__dirname, '../backend/node_modules/@prisma/client'));
 const bcrypt = require('bcryptjs');
 
 const prisma = new PrismaClient();
 
-const E2E_TENANT_SLUG = 'e2e-test-tenant';
-const E2E_USER_EMAIL = 'admin@e2e-test.com';
+const E2E_USER_EMAIL = 'e2e-admin@test.com';
 const E2E_USER_PASSWORD = 'password123';
 
 async function globalSetup() {
   console.log('\n[E2E Setup] Creating test data...');
 
-  // Cleanup any previous test data
-  const existingTenant = await prisma.tenant.findUnique({
-    where: { slug: E2E_TENANT_SLUG }
-  });
+  // Cleanup any previous E2E data
+  await cleanupE2eData();
 
-  if (existingTenant) {
-    console.log('[E2E Setup] Cleaning up previous test tenant...');
-    await cleanupTenant(existingTenant.id);
+  // Ensure Negocio singleton exists
+  const negocio = await prisma.negocio.findFirst();
+  if (!negocio) {
+    await prisma.negocio.create({
+      data: { id: 1, nombre: 'E2E Test Restaurant', email: 'e2e@test.com' }
+    });
+    console.log('[E2E Setup] Created Negocio singleton');
   }
 
-  // Create tenant
-  const tenant = await prisma.tenant.create({
-    data: {
-      slug: E2E_TENANT_SLUG,
-      nombre: 'E2E Test Restaurant',
-      email: 'e2e@test.com',
-      activo: true
-    }
-  });
-  console.log(`[E2E Setup] Created tenant: ${tenant.slug}`);
-
-  // Create admin user
+  // Create E2E admin user
   const passwordHash = await bcrypt.hash(E2E_USER_PASSWORD, 4);
   const usuario = await prisma.usuario.create({
     data: {
-      tenantId: tenant.id,
       email: E2E_USER_EMAIL,
       password: passwordHash,
       nombre: 'Admin E2E',
@@ -49,22 +36,20 @@ async function globalSetup() {
   });
   console.log(`[E2E Setup] Created user: ${usuario.email}`);
 
-  // Create category
+  // Create E2E category
   const categoria = await prisma.categoria.create({
     data: {
-      tenantId: tenant.id,
-      nombre: 'Hamburguesas',
-      orden: 1,
+      nombre: 'E2E Hamburguesas',
+      orden: 100,
       activa: true
     }
   });
   console.log(`[E2E Setup] Created category: ${categoria.nombre}`);
 
-  // Create product
+  // Create E2E product
   const producto = await prisma.producto.create({
     data: {
-      tenantId: tenant.id,
-      nombre: 'Hamburguesa Test',
+      nombre: 'E2E Hamburguesa Test',
       descripcion: 'Hamburguesa para E2E testing',
       precio: 5500,
       categoriaId: categoria.id,
@@ -73,11 +58,10 @@ async function globalSetup() {
   });
   console.log(`[E2E Setup] Created product: ${producto.nombre}`);
 
-  // Create table
+  // Create E2E table (high number to avoid collisions)
   const mesa = await prisma.mesa.create({
     data: {
-      tenantId: tenant.id,
-      numero: 1,
+      numero: 99,
       capacidad: 4,
       estado: 'LIBRE',
       activa: true
@@ -85,18 +69,61 @@ async function globalSetup() {
   });
   console.log(`[E2E Setup] Created table: Mesa ${mesa.numero}`);
 
+  // Create E2E employee
+  const empleado = await prisma.empleado.create({
+    data: {
+      nombre: 'Test',
+      apellido: 'E2E',
+      dni: '99999999',
+      telefono: '11-0000-0000',
+      rol: 'MOZO',
+      tarifaHora: 1500
+    }
+  });
+  console.log(`[E2E Setup] Created employee: ${empleado.nombre} ${empleado.apellido}`);
+
+  // Create E2E ingredient
+  const ingrediente = await prisma.ingrediente.create({
+    data: {
+      nombre: 'E2E Ingrediente Test',
+      unidad: 'kg',
+      stockActual: 50,
+      stockMinimo: 10,
+      costo: 500
+    }
+  });
+  console.log(`[E2E Setup] Created ingredient: ${ingrediente.nombre}`);
+
+  // Create E2E modifier
+  const modificador = await prisma.modificador.create({
+    data: {
+      nombre: 'E2E Extra Queso',
+      precio: 500,
+      tipo: 'ADICION',
+      activo: true
+    }
+  });
+  console.log(`[E2E Setup] Created modifier: ${modificador.nombre}`);
+
   // Save test data for tests
   const testData = {
-    tenantId: tenant.id,
-    tenantSlug: E2E_TENANT_SLUG,
     userId: usuario.id,
     userEmail: E2E_USER_EMAIL,
     userPassword: E2E_USER_PASSWORD,
     categoryId: categoria.id,
+    categoryName: categoria.nombre,
     productId: producto.id,
     productName: producto.nombre,
+    productPrice: 5500,
     tableId: mesa.id,
-    tableNumber: mesa.numero
+    tableNumber: mesa.numero,
+    empleadoId: empleado.id,
+    empleadoNombre: `${empleado.nombre} ${empleado.apellido}`,
+    empleadoDni: empleado.dni,
+    ingredienteId: ingrediente.id,
+    ingredienteName: ingrediente.nombre,
+    modificadorId: modificador.id,
+    modificadorName: modificador.nombre
   };
 
   const dataPath = path.join(__dirname, '.e2e-test-data.json');
@@ -107,31 +134,112 @@ async function globalSetup() {
   console.log('[E2E Setup] Complete!\n');
 }
 
-async function cleanupTenant(tenantId) {
-  await prisma.pedidoItemModificador.deleteMany({ where: { tenantId } });
-  await prisma.productoModificador.deleteMany({ where: { tenantId } });
-  await prisma.productoIngrediente.deleteMany({ where: { tenantId } });
-  await prisma.transaccionMercadoPago.deleteMany({ where: { tenantId } });
-  await prisma.printJob.deleteMany({ where: { tenantId } });
-  await prisma.pago.deleteMany({ where: { tenantId } });
-  await prisma.pedidoItem.deleteMany({ where: { tenantId } });
-  await prisma.movimientoStock.deleteMany({ where: { tenantId } });
-  await prisma.pedido.deleteMany({ where: { tenantId } });
-  await prisma.reserva.deleteMany({ where: { tenantId } });
-  await prisma.mesa.deleteMany({ where: { tenantId } });
-  await prisma.cierreCaja.deleteMany({ where: { tenantId } });
-  await prisma.configuracion.deleteMany({ where: { tenantId } });
-  await prisma.mercadoPagoConfig.deleteMany({ where: { tenantId } });
-  await prisma.emailVerificacion.deleteMany({ where: { tenantId } });
-  await prisma.fichaje.deleteMany({ where: { tenantId } });
-  await prisma.liquidacion.deleteMany({ where: { tenantId } });
-  await prisma.empleado.deleteMany({ where: { tenantId } });
-  await prisma.usuario.deleteMany({ where: { tenantId } });
-  await prisma.producto.deleteMany({ where: { tenantId } });
-  await prisma.categoria.deleteMany({ where: { tenantId } });
-  await prisma.modificador.deleteMany({ where: { tenantId } });
-  await prisma.ingrediente.deleteMany({ where: { tenantId } });
-  await prisma.tenant.delete({ where: { id: tenantId } });
+async function cleanupE2eData() {
+  console.log('[E2E Setup] Cleaning up previous E2E data...');
+
+  try {
+    // Find E2E user ID for cascading deletes
+    const e2eUser = await prisma.usuario.findUnique({ where: { email: E2E_USER_EMAIL } });
+    const e2eUserId = e2eUser?.id;
+
+    // Find E2E mesa IDs (numero >= 90)
+    const e2eMesas = await prisma.mesa.findMany({ where: { numero: { gte: 90 } }, select: { id: true } });
+    const e2eMesaIds = e2eMesas.map(m => m.id);
+
+    // Find E2E empleado IDs
+    const e2eEmpleados = await prisma.empleado.findMany({ where: { dni: { startsWith: '999' } }, select: { id: true } });
+    const e2eEmpleadoIds = e2eEmpleados.map(e => e.id);
+
+    // Find E2E ingrediente IDs
+    const e2eIngredientes = await prisma.ingrediente.findMany({ where: { nombre: { startsWith: 'E2E' } }, select: { id: true } });
+    const e2eIngredienteIds = e2eIngredientes.map(i => i.id);
+
+    // Find E2E producto IDs
+    const e2eProductos = await prisma.producto.findMany({ where: { nombre: { startsWith: 'E2E' } }, select: { id: true } });
+    const e2eProductoIds = e2eProductos.map(p => p.id);
+
+    // Build pedido filter (by user or by mesa)
+    const pedidoFilter = { OR: [] };
+    if (e2eUserId) pedidoFilter.OR.push({ usuarioId: e2eUserId });
+    if (e2eMesaIds.length > 0) pedidoFilter.OR.push({ mesaId: { in: e2eMesaIds } });
+
+    // Find E2E pedido IDs
+    let e2ePedidoIds = [];
+    if (pedidoFilter.OR.length > 0) {
+      const e2ePedidos = await prisma.pedido.findMany({ where: pedidoFilter, select: { id: true } });
+      e2ePedidoIds = e2ePedidos.map(p => p.id);
+    }
+
+    // Delete in FK dependency order
+    if (e2ePedidoIds.length > 0) {
+      // PedidoItemModificador via PedidoItem
+      const pedidoItemIds = (await prisma.pedidoItem.findMany({
+        where: { pedidoId: { in: e2ePedidoIds } }, select: { id: true }
+      })).map(pi => pi.id);
+
+      if (pedidoItemIds.length > 0) {
+        await prisma.pedidoItemModificador.deleteMany({ where: { pedidoItemId: { in: pedidoItemIds } } });
+      }
+
+      await prisma.printJob.deleteMany({ where: { pedidoId: { in: e2ePedidoIds } } });
+      await prisma.pago.deleteMany({ where: { pedidoId: { in: e2ePedidoIds } } });
+      await prisma.pedidoItem.deleteMany({ where: { pedidoId: { in: e2ePedidoIds } } });
+      await prisma.movimientoStock.deleteMany({ where: { pedidoId: { in: e2ePedidoIds } } });
+      await prisma.pedido.deleteMany({ where: { id: { in: e2ePedidoIds } } });
+    }
+
+    // Delete stock movements by ingredient
+    if (e2eIngredienteIds.length > 0) {
+      await prisma.movimientoStock.deleteMany({ where: { ingredienteId: { in: e2eIngredienteIds } } });
+    }
+
+    // Delete reservas by mesa OR by E2E client name
+    await prisma.reserva.deleteMany({
+      where: {
+        OR: [
+          ...(e2eMesaIds.length > 0 ? [{ mesaId: { in: e2eMesaIds } }] : []),
+          { clienteNombre: { startsWith: 'Cliente E2E' } },
+          { clienteNombre: { startsWith: 'E2E' } }
+        ]
+      }
+    });
+
+    // Delete fichajes and liquidaciones by empleado
+    if (e2eEmpleadoIds.length > 0) {
+      await prisma.fichaje.deleteMany({ where: { empleadoId: { in: e2eEmpleadoIds } } });
+      await prisma.liquidacion.deleteMany({ where: { empleadoId: { in: e2eEmpleadoIds } } });
+    }
+
+    // Delete cierres by user
+    if (e2eUserId) {
+      await prisma.cierreCaja.deleteMany({ where: { usuarioId: e2eUserId } });
+    }
+
+    // Delete product relations
+    if (e2eProductoIds.length > 0) {
+      await prisma.productoModificador.deleteMany({ where: { productoId: { in: e2eProductoIds } } });
+      await prisma.productoIngrediente.deleteMany({ where: { productoId: { in: e2eProductoIds } } });
+    }
+
+    // Delete entities
+    await prisma.producto.deleteMany({ where: { nombre: { startsWith: 'E2E' } } });
+    await prisma.categoria.deleteMany({ where: { nombre: { startsWith: 'E2E' } } });
+    await prisma.modificador.deleteMany({ where: { nombre: { startsWith: 'E2E' } } });
+    await prisma.mesa.deleteMany({ where: { numero: { gte: 90 } } });
+    await prisma.empleado.deleteMany({ where: { dni: { startsWith: '999' } } });
+    await prisma.ingrediente.deleteMany({ where: { nombre: { startsWith: 'E2E' } } });
+
+    // Delete user last (after all references)
+    if (e2eUserId) {
+      await prisma.refreshToken.deleteMany({ where: { usuarioId: e2eUserId } });
+      await prisma.emailVerificacion.deleteMany({ where: { usuarioId: e2eUserId } });
+      await prisma.usuario.delete({ where: { id: e2eUserId } });
+    }
+
+    console.log('[E2E Setup] Cleanup complete');
+  } catch (error) {
+    console.log(`[E2E Setup] Cleanup note: ${error.message}`);
+  }
 }
 
 module.exports = globalSetup;

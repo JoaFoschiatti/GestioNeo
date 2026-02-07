@@ -61,11 +61,15 @@ export default function Modificadores() {
   const guardarModificador = async (e) => {
     e.preventDefault()
     try {
+      const payload = {
+        ...formData,
+        precio: formData.tipo === 'EXCLUSION' ? 0 : Number(formData.precio) || 0
+      }
       if (editando) {
-        await api.put(`/modificadores/${editando.id}`, formData)
+        await api.put(`/modificadores/${editando.id}`, payload)
         toast.success('Modificador actualizado')
       } else {
-        await api.post('/modificadores', formData)
+        await api.post('/modificadores', payload)
         toast.success('Modificador creado')
       }
       setShowModal(false)
