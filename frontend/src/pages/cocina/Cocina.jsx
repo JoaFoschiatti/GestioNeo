@@ -48,6 +48,7 @@ export default function Cocina() {
   })
   const [selectedIndex, setSelectedIndex] = useState(0)
   const pedidosRef = useRef([])
+  const cardRefs = useRef([])
 
   const toggleSound = useCallback(() => {
     setSoundEnabled(prev => {
@@ -180,6 +181,14 @@ export default function Cocina() {
     }
   }, [pedidos.length, selectedIndex])
 
+  // Scroll suave a la card seleccionada
+  useEffect(() => {
+    cardRefs.current[selectedIndex]?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest'
+    })
+  }, [selectedIndex])
+
   const getTiempoTranscurrido = (fecha) => {
     const minutos = Math.floor((Date.now() - new Date(fecha)) / 60000)
     if (minutos < 60) return `${minutos} min`
@@ -275,16 +284,22 @@ export default function Cocina() {
           {pedidos.map((pedido, index) => (
             <div
               key={pedido.id}
-              className={`card transition-all ${
+              ref={el => cardRefs.current[index] = el}
+              className={`card transition-all duration-200 relative ${
                 pedido.estado === 'PENDIENTE'
                   ? 'border border-warning-200 bg-warning-50/50'
                   : 'border border-info-200 bg-info-50/50'
               } ${
                 index === selectedIndex
-                  ? 'ring-4 ring-primary-500 ring-offset-2'
-                  : ''
+                  ? 'ring-4 ring-primary-500 ring-offset-2 scale-[1.02] shadow-lg shadow-primary-500/20'
+                  : 'opacity-80'
               }`}
             >
+              {index === selectedIndex && pedidos.length > 1 && (
+                <span className="absolute -top-2 -left-2 bg-primary-500 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shadow-md">
+                  {index + 1}
+                </span>
+              )}
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h3 className="text-xl font-bold text-text-primary">#{pedido.id}</h3>

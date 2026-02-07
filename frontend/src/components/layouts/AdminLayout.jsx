@@ -13,7 +13,6 @@ import {
   ChartBarIcon,
   ClipboardDocumentListIcon,
   FireIcon,
-  TruckIcon,
   Bars3Icon,
   XMarkIcon,
   ArrowRightOnRectangleIcon,
@@ -25,13 +24,32 @@ import {
   SparklesIcon
 } from '@heroicons/react/24/outline'
 
+function MotorcycleIcon(props) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="5" cy="17.5" r="2.75" />
+      <circle cx="19" cy="17.5" r="2.75" />
+      <path d="M7.5 16L10 11h4l2.5 3.5" />
+      <path d="M16.5 14.5L19 17.5" />
+      <path d="M14 11l3.5-2" />
+      <rect x="3" y="7.5" width="5" height="3.5" rx=".5" />
+      <path d="M5.5 11v3" />
+      <circle cx="12.5" cy="5.5" r="1.5" />
+      <path d="M12.5 7l-.5 3.5" />
+      <path d="M12 8.5l2.5 2" />
+      <path d="M12 10.5l2 1" />
+      <path d="M14 11.5v3" />
+    </svg>
+  )
+}
+
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, roles: ['ADMIN', 'COCINERO', 'CAJERO'] },
   { name: 'Mesas', href: '/mesas', icon: TableCellsIcon, roles: ['ADMIN', 'MOZO'] },
   { name: 'Reservas', href: '/reservas', icon: CalendarDaysIcon, roles: ['ADMIN'] },
   { name: 'Pedidos', href: '/pedidos', icon: ClipboardDocumentListIcon, roles: ['ADMIN', 'MOZO', 'CAJERO'] },
   { name: 'Cocina', href: '/cocina', icon: FireIcon, roles: ['ADMIN', 'COCINERO'] },
-  { name: 'Mis Entregas', href: '/delivery/pedidos', icon: TruckIcon, roles: ['ADMIN', 'DELIVERY'] },
+  { name: 'Mis Entregas', href: '/delivery/pedidos', icon: MotorcycleIcon, roles: ['ADMIN', 'DELIVERY'] },
   { divider: true, roles: ['ADMIN'] },
   { name: 'Empleados', href: '/empleados', icon: UsersIcon, roles: ['ADMIN'] },
   { name: 'Categorías', href: '/categorias', icon: TagIcon, roles: ['ADMIN'] },
