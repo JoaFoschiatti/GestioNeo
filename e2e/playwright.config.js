@@ -16,9 +16,11 @@ module.exports = defineConfig({
   globalTeardown: './global-teardown.js',
   use: {
     baseURL: 'http://localhost:5173',
-    trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
-    headless: true
+    channel: process.env.PW_CHANNEL || undefined,
+    trace: process.env.PW_TRACE || 'on-first-retry',
+    screenshot: process.env.PW_SCREENSHOT || 'only-on-failure',
+    video: process.env.PW_VIDEO || 'off',
+    headless: process.env.PW_HEADLESS ? process.env.PW_HEADLESS === 'true' : true
   },
   webServer: [
     {

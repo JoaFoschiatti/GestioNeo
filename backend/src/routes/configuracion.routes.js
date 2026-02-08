@@ -3,15 +3,17 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const configuracionController = require('../controllers/configuracion.controller');
-const { verificarToken, verificarRol } = require('../middlewares/auth.middleware');
+const { verificarToken, verificarPermiso } = require('../middlewares/auth.middleware');
 const { setAuthContext, bloquearSiSoloLectura } = require('../middlewares/context.middleware');
 const { validate } = require('../middlewares/validate.middleware');
 const { asyncHandler } = require('../utils/async-handler');
 const { createHttpError } = require('../utils/http-error');
+const { CAPABILITY } = require('../auth/permissions');
 const {
   claveParamSchema,
   actualizarBodySchema,
-  actualizarBulkBodySchema
+  actualizarBulkBodySchema,
+  actualizarNegocioBodySchema
 } = require('../schemas/configuracion.schemas');
 
 // Configurar multer para subir banner
@@ -43,8 +45,10 @@ const upload = multer({
 // Rutas (todas requieren rol ADMIN)
 router.use(verificarToken);
 router.use(setAuthContext);
-router.use(verificarRol('ADMIN'));
+router.use(verificarPermiso(CAPABILITY.SETTINGS_MANAGE));
 
+router.get('/negocio', asyncHandler(configuracionController.obtenerNegocio));
+router.put('/negocio', bloquearSiSoloLectura, validate({ body: actualizarNegocioBodySchema }), asyncHandler(configuracionController.actualizarNegocio));
 router.get('/', asyncHandler(configuracionController.obtenerTodas));
 router.put('/:clave', bloquearSiSoloLectura, validate({ params: claveParamSchema, body: actualizarBodySchema }), asyncHandler(configuracionController.actualizar));
 router.put('/', bloquearSiSoloLectura, validate({ body: actualizarBulkBodySchema }), asyncHandler(configuracionController.actualizarBulk));

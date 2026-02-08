@@ -10,7 +10,7 @@
  * - Liquidaciones y sueldos
  * - Consumo de insumos/ingredientes
  *
- * Todos los reportes están aislados por tenant (multi-tenancy).
+ * Reportes para una instancia única.
  *
  * @module reportes.service
  */
@@ -48,7 +48,6 @@ const buildDateRange = (fechaDesde, fechaHasta) => {
  * el estado actual del restaurante de forma eficiente.
  *
  * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma con scoping
- * @param {number} tenantId - ID del tenant
  *
  * @returns {Promise<Object>} Métricas del dashboard
  * @returns {number} returns.ventasHoy - Total vendido hoy (solo pedidos COBRADO)
@@ -71,7 +70,7 @@ const buildDateRange = (fechaDesde, fechaHasta) => {
  * //   empleadosTrabajando: 5
  * // }
  */
-const dashboard = async (prisma, tenantId) => {
+const dashboard = async (prisma) => {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
   const manana = new Date(hoy);
@@ -79,6 +78,7 @@ const dashboard = async (prisma, tenantId) => {
 
   const [
     pedidosHoyAgg,
+    pedidosHoyDetalle,
     pedidosPendientes,
     mesasOcupadas,
     mesasTotal,
@@ -87,33 +87,77 @@ const dashboard = async (prisma, tenantId) => {
   ] = await prisma.$transaction([
     prisma.pedido.aggregate({
       where: {
-        tenantId,
         createdAt: { gte: hoy, lt: manana },
         estado: { not: 'CANCELADO' }
       },
       _sum: { total: true },
       _count: { id: true }
     }),
+    prisma.pedido.findMany({
+      where: {
+        createdAt: { gte: hoy, lt: manana },
+        estado: { not: 'CANCELADO' }
+      },
+      select: {
+        tipo: true,
+        total: true,
+        estado: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    }),
     prisma.pedido.count({
-      where: { tenantId, estado: { in: ['PENDIENTE', 'EN_PREPARACION'] } }
+      where: { estado: { in: ['PENDIENTE', 'EN_PREPARACION'] } }
     }),
     prisma.mesa.count({
-      where: { tenantId, estado: 'OCUPADA' }
+      where: { estado: 'OCUPADA' }
     }),
     prisma.mesa.count({
-      where: { tenantId, activa: true }
+      where: { activa: true }
     }),
     prisma.ingrediente.findMany({
-      where: { tenantId, activo: true },
+      where: { activo: true },
       select: { stockActual: true, stockMinimo: true }
     }),
     prisma.fichaje.count({
-      where: { tenantId, salida: null }
+      where: { salida: null }
     })
   ]);
 
   const ventasHoy = decimalToNumber(pedidosHoyAgg._sum.total);
   const pedidosHoy = pedidosHoyAgg._count.id;
+
+  const ventasPorCanalHoy = pedidosHoyDetalle.reduce((acc, pedido) => {
+    const bucket = acc[pedido.tipo] || { cantidad: 0, total: 0 };
+    bucket.cantidad += 1;
+    bucket.total += decimalToNumber(pedido.total);
+    acc[pedido.tipo] = bucket;
+    return acc;
+  }, {});
+
+  const minutosTranscurridos = pedidosHoyDetalle.map((pedido) => {
+    const diffMs = new Date(pedido.updatedAt).getTime() - new Date(pedido.createdAt).getTime();
+    return Math.max(0, Math.round(diffMs / 60000));
+  });
+
+  const tiemposPreparacion = pedidosHoyDetalle
+    .filter(pedido => ['EN_PREPARACION', 'LISTO', 'ENTREGADO', 'COBRADO'].includes(pedido.estado))
+    .map((pedido) => {
+      const diffMs = new Date(pedido.updatedAt).getTime() - new Date(pedido.createdAt).getTime();
+      return Math.max(0, Math.round(diffMs / 60000));
+    });
+
+  const tiemposEntrega = pedidosHoyDetalle
+    .filter(pedido => pedido.tipo === 'DELIVERY' && ['ENTREGADO', 'COBRADO'].includes(pedido.estado))
+    .map((pedido) => {
+      const diffMs = new Date(pedido.updatedAt).getTime() - new Date(pedido.createdAt).getTime();
+      return Math.max(0, Math.round(diffMs / 60000));
+    });
+
+  const promedio = (valores) => {
+    if (!valores.length) return 0;
+    return Math.round(valores.reduce((sum, v) => sum + v, 0) / valores.length);
+  };
 
   const alertasStock = ingredientes.filter(
     ing => decimalToNumber(ing.stockActual) <= decimalToNumber(ing.stockMinimo)
@@ -126,7 +170,13 @@ const dashboard = async (prisma, tenantId) => {
     mesasOcupadas,
     mesasTotal,
     alertasStock,
-    empleadosTrabajando
+    empleadosTrabajando,
+    ventasPorCanalHoy,
+    tiemposPromedio: {
+      preparacionMin: promedio(tiemposPreparacion),
+      entregaMin: promedio(tiemposEntrega),
+      cicloCompletoMin: promedio(minutosTranscurridos)
+    }
   };
 };
 
@@ -137,7 +187,6 @@ const dashboard = async (prisma, tenantId) => {
  * Retorna también los pedidos individuales para análisis detallado.
  *
  * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma con scoping
- * @param {number} tenantId - ID del tenant
  * @param {Object} query - Parámetros del reporte
  * @param {string} query.fechaDesde - Fecha inicio formato YYYY-MM-DD (requerido)
  * @param {string} query.fechaHasta - Fecha fin formato YYYY-MM-DD (requerido)
@@ -168,7 +217,7 @@ const dashboard = async (prisma, tenantId) => {
  * //   pedidos: [...]
  * // }
  */
-const ventasReporte = async (prisma, tenantId, query) => {
+const ventasReporte = async (prisma, query) => {
   const { fechaDesde, fechaHasta } = query;
 
   if (!fechaDesde || !fechaHasta) {
@@ -179,7 +228,6 @@ const ventasReporte = async (prisma, tenantId, query) => {
 
   const pedidos = await prisma.pedido.findMany({
     where: {
-      tenantId,
       createdAt: range,
       estado: 'COBRADO'
     },
@@ -229,7 +277,6 @@ const ventasReporte = async (prisma, tenantId, query) => {
  * Solo cuenta items de pedidos COBRADOS.
  *
  * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma con scoping
- * @param {number} tenantId - ID del tenant
  * @param {Object} query - Parámetros del reporte
  * @param {string} [query.fechaDesde] - Fecha inicio formato YYYY-MM-DD
  * @param {string} [query.fechaHasta] - Fecha fin formato YYYY-MM-DD
@@ -267,11 +314,10 @@ const ventasReporte = async (prisma, tenantId, query) => {
  * //   ...
  * // ]
  */
-const productosMasVendidos = async (prisma, tenantId, query) => {
+const productosMasVendidos = async (prisma, query) => {
   const { fechaDesde, fechaHasta, limite, agruparPorBase } = query;
 
   const where = {
-    tenantId,
     pedido: { estado: 'COBRADO' }
   };
 
@@ -360,7 +406,6 @@ const productosMasVendidos = async (prisma, tenantId, query) => {
  * Incluye pedidos sin usuario (Menú Público).
  *
  * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma con scoping
- * @param {number} tenantId - ID del tenant
  * @param {Object} query - Parámetros del reporte
  * @param {string} [query.fechaDesde] - Fecha inicio formato YYYY-MM-DD
  * @param {string} [query.fechaHasta] - Fecha fin formato YYYY-MM-DD
@@ -379,10 +424,10 @@ const productosMasVendidos = async (prisma, tenantId, query) => {
  * //   ...
  * // ]
  */
-const ventasPorMozo = async (prisma, tenantId, query) => {
+const ventasPorMozo = async (prisma, query) => {
   const { fechaDesde, fechaHasta } = query;
 
-  const where = { tenantId, estado: 'COBRADO' };
+  const where = { estado: 'COBRADO' };
 
   const range = buildDateRange(fechaDesde, fechaHasta);
   if (range) {
@@ -422,7 +467,6 @@ const ventasPorMozo = async (prisma, tenantId, query) => {
  * y valor estimado basado en el costo unitario.
  *
  * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma con scoping
- * @param {number} tenantId - ID del tenant
  *
  * @returns {Promise<Object>} Reporte de inventario
  * @returns {Object} returns.resumen - Totales agregados
@@ -444,9 +488,9 @@ const ventasPorMozo = async (prisma, tenantId, query) => {
  * //   ]
  * // }
  */
-const inventarioReporte = async (prisma, tenantId) => {
+const inventarioReporte = async (prisma) => {
   const ingredientes = await prisma.ingrediente.findMany({
-    where: { tenantId, activo: true },
+    where: { activo: true },
     orderBy: { nombre: 'asc' }
   });
 
@@ -481,7 +525,6 @@ const inventarioReporte = async (prisma, tenantId) => {
  * Incluye resumen de totales pagados y pendientes.
  *
  * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma con scoping
- * @param {number} tenantId - ID del tenant
  * @param {Object} query - Parámetros del reporte
  * @param {number} [query.mes] - Mes (1-12)
  * @param {number} [query.anio] - Año (ej: 2024)
@@ -511,10 +554,10 @@ const inventarioReporte = async (prisma, tenantId) => {
  * //   ]
  * // }
  */
-const sueldosReporte = async (prisma, tenantId, query) => {
+const sueldosReporte = async (prisma, query) => {
   const { mes, anio } = query;
 
-  const where = { tenantId };
+  const where = {};
   if (mes && anio) {
     const fechaInicio = new Date(anio, mes - 1, 1);
     const fechaFin = new Date(anio, mes, 0);
@@ -545,7 +588,6 @@ const sueldosReporte = async (prisma, tenantId, query) => {
  * incluye el desglose de variantes con más detalle.
  *
  * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma con scoping
- * @param {number} tenantId - ID del tenant
  * @param {Object} query - Parámetros del reporte
  * @param {string} [query.fechaDesde] - Fecha inicio formato YYYY-MM-DD
  * @param {string} [query.fechaHasta] - Fecha fin formato YYYY-MM-DD
@@ -570,11 +612,10 @@ const sueldosReporte = async (prisma, tenantId, query) => {
  * //   ...
  * // ]
  */
-const ventasPorProductoBase = async (prisma, tenantId, query) => {
+const ventasPorProductoBase = async (prisma, query) => {
   const { fechaDesde, fechaHasta, limite } = query;
 
   const where = {
-    tenantId,
     pedido: { estado: 'COBRADO' }
   };
 
@@ -649,7 +690,6 @@ const ventasPorProductoBase = async (prisma, tenantId, query) => {
  * Considera el multiplicadorInsumos de cada producto.
  *
  * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma con scoping
- * @param {number} tenantId - ID del tenant
  * @param {Object} query - Parámetros del reporte
  * @param {string} [query.fechaDesde] - Fecha inicio formato YYYY-MM-DD
  * @param {string} [query.fechaHasta] - Fecha fin formato YYYY-MM-DD
@@ -692,11 +732,10 @@ const ventasPorProductoBase = async (prisma, tenantId, query) => {
  * //   ]
  * // }
  */
-const consumoInsumos = async (prisma, tenantId, query) => {
+const consumoInsumos = async (prisma, query) => {
   const { fechaDesde, fechaHasta } = query;
 
   const where = {
-    tenantId,
     pedido: { estado: 'COBRADO' }
   };
 

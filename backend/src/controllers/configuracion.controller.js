@@ -3,14 +3,10 @@ const configuracionService = require('../services/configuracion.service');
 const { createHttpError } = require('../utils/http-error');
 const { getPrisma } = require('../utils/get-prisma');
 
-// Obtener configuración pública (sin auth) - DEPRECATED, usar /api/publico/:slug/config
+// Obtener configuración pública (sin auth) - DEPRECATED, usar /api/publico/config
 const obtenerPublica = async (req, res) => {
   const prisma = getPrisma(req);
-  const tenantId = 1;
-
-  const configs = await prisma.configuracion.findMany({
-    where: { tenantId }
-  });
+  const configs = await prisma.configuracion.findMany();
 
   // Convertir a objeto
   const configObj = {};
@@ -42,7 +38,7 @@ const obtenerPublica = async (req, res) => {
 // Obtener todas las configuraciones (admin)
 const obtenerTodas = async (req, res) => {
   const prisma = getPrisma(req);
-  const config = await configuracionService.obtenerTodas(prisma, 1);
+  const config = await configuracionService.obtenerTodas(prisma);
   res.json(config);
 };
 
@@ -54,26 +50,38 @@ const actualizar = async (req, res) => {
     throw createHttpError.badRequest('Clave requerida');
   }
 
-  const config = await configuracionService.actualizar(prisma, 1, req.params.clave, req.body.valor);
+  const config = await configuracionService.actualizar(prisma, req.params.clave, req.body.valor);
   res.json(config);
 };
 
 // Actualizar múltiples configuraciones
 const actualizarBulk = async (req, res) => {
   const prisma = getPrisma(req);
-  const result = await configuracionService.actualizarBulk(prisma, 1, req.body);
+  const result = await configuracionService.actualizarBulk(prisma, req.body);
   res.json(result);
 };
 
 // Subir banner
 const subirBanner = async (req, res) => {
   const prisma = getPrisma(req);
-  const result = await configuracionService.subirBanner(prisma, 1, req.file);
+  const result = await configuracionService.subirBanner(prisma, req.file);
   res.json(result);
 };
 
-// Semilla de configuraciones iniciales para un tenant
-const seedConfiguraciones = async (tenantId = 1) => {
+const obtenerNegocio = async (req, res) => {
+  const prisma = getPrisma(req);
+  const negocio = await configuracionService.obtenerNegocio(prisma);
+  res.json(negocio);
+};
+
+const actualizarNegocio = async (req, res) => {
+  const prisma = getPrisma(req);
+  const negocio = await configuracionService.actualizarNegocio(prisma, req.body);
+  res.json({ negocio });
+};
+
+// Semilla de configuraciones iniciales
+const seedConfiguraciones = async () => {
   const defaults = [
     { clave: 'tienda_abierta', valor: 'true' },
     { clave: 'horario_apertura', valor: '11:00' },
@@ -90,11 +98,9 @@ const seedConfiguraciones = async (tenantId = 1) => {
 
   for (const config of defaults) {
     await basePrisma.configuracion.upsert({
-      where: {
-        tenantId_clave: { tenantId, clave: config.clave }
-      },
+      where: { clave: config.clave },
       update: {},
-      create: { tenantId, ...config }
+      create: config
     });
   }
 };
@@ -105,5 +111,7 @@ module.exports = {
   actualizar,
   actualizarBulk,
   subirBanner,
+  obtenerNegocio,
+  actualizarNegocio,
   seedConfiguraciones
 };

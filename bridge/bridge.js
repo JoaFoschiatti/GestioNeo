@@ -19,12 +19,10 @@ const escapePsString = (value) => String(value).replace(/'/g, "''");
 
 const getConfig = (env = process.env) => {
   const bridgeToken = env.BRIDGE_TOKEN;
-  const tenantSlug = env.BRIDGE_TENANT_SLUG;
   const printerName = env.PRINTER_NAME;
 
   const missing = [];
   if (!bridgeToken) missing.push('BRIDGE_TOKEN');
-  if (!tenantSlug) missing.push('BRIDGE_TENANT_SLUG');
   if (!printerName) missing.push('PRINTER_NAME');
 
   const pollIntervalRaw = parseIntSafe(env.POLL_INTERVAL_MS, DEFAULT_POLL_INTERVAL_MS);
@@ -34,7 +32,6 @@ const getConfig = (env = process.env) => {
   return {
     apiBaseUrl: env.BRIDGE_API_URL || DEFAULT_API_BASE_URL,
     bridgeToken,
-    tenantSlug,
     bridgeId: env.BRIDGE_ID || os.hostname(),
     printerName,
     adapter: (env.PRINT_ADAPTER || 'spooler').toLowerCase(),
@@ -105,8 +102,7 @@ const createBridge = (env = process.env, deps = {}) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-bridge-token': config.bridgeToken,
-        'x-tenant-slug': config.tenantSlug
+        'x-bridge-token': config.bridgeToken
       },
       body: JSON.stringify({
         bridgeId: config.bridgeId,
@@ -127,8 +123,7 @@ const createBridge = (env = process.env, deps = {}) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-bridge-token': config.bridgeToken,
-        'x-tenant-slug': config.tenantSlug
+        'x-bridge-token': config.bridgeToken
       },
       body: JSON.stringify({ bridgeId: config.bridgeId })
     }, 'Ack failed', config.requestTimeoutMs, fetchImpl);
@@ -139,8 +134,7 @@ const createBridge = (env = process.env, deps = {}) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-bridge-token': config.bridgeToken,
-        'x-tenant-slug': config.tenantSlug
+        'x-bridge-token': config.bridgeToken
       },
       body: JSON.stringify({ bridgeId: config.bridgeId, error })
     }, 'Fail failed', config.requestTimeoutMs, fetchImpl);

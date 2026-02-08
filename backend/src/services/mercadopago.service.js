@@ -1,5 +1,5 @@
 /**
- * Servicio de MercadoPago (Single-Tenant)
+ * Servicio de MercadoPago (instancia unica)
  * Obtiene credenciales del negocio y crea clientes de MercadoPago
  */
 

@@ -31,12 +31,6 @@ router.get('/', (req, res, next) => {
   res.flushHeaders();
 
   const sendEvent = (event) => {
-    // Single-tenant: only forward events with tenantId === 1
-    const eventTenantId = event.payload?.tenantId;
-    if (eventTenantId !== 1) {
-      return;
-    }
-
     logger.info(`[SSE] Enviando evento: ${event.type}`);
     res.write(`event: ${event.type}\n`);
     res.write(`data: ${JSON.stringify(event.payload)}\n\n`);

@@ -39,7 +39,7 @@ test.describe('Pedidos Delivery E2E', () => {
     await page.waitForTimeout(500);
 
     // Confirm order
-    await page.click('button:has-text("Confirmar Pedido")');
+    await page.click('[data-testid="order-confirm-submit"]');
 
     // Should see success
     await expect(page.locator('text=/Pedido #\\d+/')).toBeVisible({ timeout: 10000 });

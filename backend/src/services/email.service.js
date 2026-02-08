@@ -1,5 +1,5 @@
 const nodemailer = require('nodemailer');
-const { prisma, getTenantPrisma } = require('../db/prisma');
+const { prisma } = require('../db/prisma');
 const { logger } = require('../utils/logger');
 
 class EmailService {
@@ -7,30 +7,15 @@ class EmailService {
     this.transporter = null;
   }
 
-  async getConfig(tenantId = null) {
-    let query;
-
-    if (tenantId) {
-      const tenantPrisma = getTenantPrisma(tenantId);
-      query = tenantPrisma.configuracion.findMany({
-        where: {
-          clave: {
-            in: ['smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'email_from', 'nombre_negocio']
-          }
+  async getConfig() {
+    const configs = await prisma.configuracion.findMany({
+      where: {
+        clave: {
+          in: ['smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'email_from', 'nombre_negocio']
         }
-      });
-    } else {
-      query = prisma.configuracion.findMany({
-        where: {
-          clave: {
-            in: ['smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'email_from', 'nombre_negocio']
-          }
-        },
-        take: 6
-      });
-    }
-
-    const configs = await query;
+      },
+      take: 6
+    });
     return Object.fromEntries(configs.map(c => [c.clave, c.valor]));
   }
 
@@ -57,7 +42,7 @@ class EmailService {
     });
   }
 
-  async sendOrderConfirmation(pedido, tenant = null) {
+  async sendOrderConfirmation(pedido, negocio = null) {
     try {
       if (!pedido.clienteEmail) {
         logger.info('Email service: Pedido sin email, saltando envío');
@@ -70,10 +55,10 @@ class EmailService {
         return null;
       }
 
-      const nombreNegocio = tenant?.nombre || 'Comanda';
+      const nombreNegocio = negocio?.nombre || 'Comanda';
       const fromEmail = process.env.EMAIL_FROM || process.env.SMTP_USER || 'pedidos@comanda.app';
 
-      const html = this.generateOrderEmailHTML(pedido, nombreNegocio, tenant);
+      const html = this.generateOrderEmailHTML(pedido, nombreNegocio, negocio);
 
       const info = await transporter.sendMail({
         from: `"${nombreNegocio}" <${fromEmail}>`,
@@ -90,8 +75,8 @@ class EmailService {
     }
   }
 
-  generateOrderEmailHTML(pedido, nombreNegocio, tenant = null) {
-    const primaryColor = tenant?.colorPrimario || '#eb7615';
+  generateOrderEmailHTML(pedido, nombreNegocio, negocio = null) {
+    const primaryColor = negocio?.colorPrimario || '#eb7615';
 
     const itemsHTML = pedido.items.map(item => `
       <tr>
@@ -181,7 +166,7 @@ class EmailService {
   }
 
   /**
-   * Send verification email for new tenant registration
+   * Send verification email for account activation
    */
   async sendVerificationEmail(email, nombre, token, nombreRestaurante) {
     try {

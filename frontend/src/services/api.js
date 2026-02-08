@@ -19,9 +19,9 @@ api.interceptors.response.use(
 
     // Si es error 401 y no es la ruta de login, redirigir
     if (error.response?.status === 401 && !error.config.url.includes('/auth/login')) {
-      // Clear localStorage user/tenant info
+      // Clear localStorage auth info
       localStorage.removeItem('usuario')
-      localStorage.removeItem('tenant')
+      localStorage.removeItem('negocio')
       localStorage.removeItem('suscripcion')
       localStorage.removeItem('modoSoloLectura')
       window.location.href = '/login'

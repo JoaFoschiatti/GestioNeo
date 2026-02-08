@@ -1,23 +1,16 @@
 /**
- * Controlador de Suscripciones SaaS
- * Maneja las suscripciones de tenants para el uso del sistema
+ * Controlador de Suscripciones
  */
 
 const crypto = require('crypto');
 const suscripcionService = require('../services/suscripcion.service');
-const { createHttpError } = require('../utils/http-error');
 
 /**
  * POST /api/suscripcion/crear
  * Crea una nueva suscripción en MercadoPago
  */
 const crearSuscripcion = async (req, res) => {
-  const tenantId = 1;
-  if (!tenantId) {
-    throw createHttpError.badRequest('Contexto de tenant requerido');
-  }
-
-  const resultado = await suscripcionService.crearSuscripcion(tenantId);
+  const resultado = await suscripcionService.crearSuscripcion();
 
   res.json({
     success: true,
@@ -35,12 +28,7 @@ const crearSuscripcion = async (req, res) => {
  * Obtiene el estado actual de la suscripción
  */
 const obtenerEstado = async (req, res) => {
-  const tenantId = 1;
-  if (!tenantId) {
-    throw createHttpError.badRequest('Contexto de tenant requerido');
-  }
-
-  const estado = await suscripcionService.obtenerEstado(tenantId);
+  const estado = await suscripcionService.obtenerEstado();
   res.json(estado);
 };
 
@@ -49,12 +37,7 @@ const obtenerEstado = async (req, res) => {
  * Cancela la suscripción activa
  */
 const cancelarSuscripcion = async (req, res) => {
-  const tenantId = 1;
-  if (!tenantId) {
-    throw createHttpError.badRequest('Contexto de tenant requerido');
-  }
-
-  const suscripcion = await suscripcionService.cancelarSuscripcion(tenantId);
+  const suscripcion = await suscripcionService.cancelarSuscripcion();
 
   res.json({
     success: true,
@@ -71,14 +54,9 @@ const cancelarSuscripcion = async (req, res) => {
  * Obtiene el historial de pagos de la suscripción
  */
 const obtenerPagos = async (req, res) => {
-  const tenantId = 1;
-  if (!tenantId) {
-    throw createHttpError.badRequest('Contexto de tenant requerido');
-  }
-
   const { page = 1, limit = 20 } = req.query;
 
-  const resultado = await suscripcionService.obtenerHistorialPagos(tenantId, {
+  const resultado = await suscripcionService.obtenerHistorialPagos({
     page: parseInt(page),
     limit: parseInt(limit)
   });

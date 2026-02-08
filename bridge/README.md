@@ -12,9 +12,8 @@ Servicio local para imprimir jobs desde el backend en cloud usando el spooler de
 Variables necesarias:
 
 ```
-BRIDGE_API_URL=https://tu-backend.railway.app/api
+BRIDGE_API_URL=https://tu-dominio.com/api
 BRIDGE_TOKEN=tu_token_seguro
-BRIDGE_TENANT_SLUG=mi-restaurante
 BRIDGE_ID=pc-caja-1
 PRINTER_NAME=EPSON T2000 3I
 PRINT_ADAPTER=spooler

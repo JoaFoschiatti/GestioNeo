@@ -36,6 +36,12 @@ export default function Reservas() {
     return response.data
   }, [])
 
+  const cargarReservasPorFecha = useCallback(async (fecha) => {
+    const response = await api.get(`/reservas?fecha=${fecha}`)
+    setReservas(response.data)
+    return response.data
+  }, [])
+
   const handleLoadError = useCallback((error) => {
     console.error('Error:', error)
   }, [])
@@ -44,11 +50,9 @@ export default function Reservas() {
     cargarMesas()
   ), [cargarMesas])
 
-  const cargarReservas = useCallback(async () => {
-    const response = await api.get(`/reservas?fecha=${fechaFiltro}`)
-    setReservas(response.data)
-    return response.data
-  }, [fechaFiltro])
+  const cargarReservas = useCallback(async () => (
+    cargarReservasPorFecha(fechaFiltro)
+  ), [fechaFiltro, cargarReservasPorFecha])
 
   const cargarReservasRequest = useCallback(async (_ctx) => (
     cargarReservas()
@@ -101,6 +105,8 @@ export default function Reservas() {
 
   const guardarReserva = async (e) => {
     e.preventDefault()
+    const fechaReserva = formData.fechaHora ? formData.fechaHora.slice(0, 10) : fechaFiltro
+
     try {
       if (reservaEdit) {
         await api.put(`/reservas/${reservaEdit.id}`, formData, { skipToast: true })
@@ -113,7 +119,8 @@ export default function Reservas() {
         toast.success('Reserva creada')
       }
       setShowModal(false)
-      cargarReservasAsync()
+      setFechaFiltro(fechaReserva)
+      await cargarReservasPorFecha(fechaReserva)
     } catch (error) {
       console.error('Error:', error)
       toast.error(error.response?.data?.error?.message || 'Error al guardar')

@@ -1,299 +1,212 @@
-# Guía de Deploy a Producción - Comanda
+# Deploy Producción (AWS EC2 + RDS + Docker + Nginx)
 
-Esta guía te llevará paso a paso para desplegar Comanda en producción usando:
-- **Supabase** - Base de datos PostgreSQL (gratis)
-- **Railway** - Backend Node.js (~$5/mes)
-- **Vercel** - Frontend React (gratis)
+Este documento refleja el deploy actual de **GestioNeo** en arquitectura de **instancia única**.
 
-**Tiempo estimado:** 30-60 minutos
+## Arquitectura objetivo
 
----
-
-## Índice
-
-1. [Pre-requisitos](#1-pre-requisitos)
-2. [Paso 1: Configurar Supabase](#2-paso-1-configurar-supabase)
-3. [Paso 2: Configurar Railway](#3-paso-2-configurar-railway)
-4. [Paso 3: Configurar Vercel](#4-paso-3-configurar-vercel)
-5. [Paso 4: Verificación](#5-paso-4-verificación)
-6. [Troubleshooting](#6-troubleshooting)
-7. [Mantenimiento](#7-mantenimiento)
+- **EC2**: corre containers Docker (`backend`, `frontend`, `nginx`).
+- **RDS PostgreSQL**: base de datos administrada.
+- **Nginx**: mismo dominio para todo:
+  - `/` -> frontend
+  - `/api` -> backend
+- **Instancia única**: sistema personalizado para un único cliente.
 
 ---
 
-## 1. Pre-requisitos
+## 1. Pre-requisitos AWS
 
-### Cuentas necesarias (todas gratuitas para crear)
-- [ ] Cuenta en [GitHub](https://github.com) con el repositorio de Comanda
-- [ ] Cuenta en [Supabase](https://supabase.com)
-- [ ] Cuenta en [Railway](https://railway.app)
-- [ ] Cuenta en [Vercel](https://vercel.com)
+1. Crear una instancia **EC2 Ubuntu 22.04+** (recomendado `t3.small` o superior).
+2. Crear una base **RDS PostgreSQL** (misma VPC).
+3. Security Groups:
+   - EC2 inbound: `80` (y `22` para administración).
+   - RDS inbound: `5432` solo desde SG de EC2.
+4. DNS del dominio apuntando al endpoint público (ALB o EC2).
 
-### En tu máquina local
-- [ ] Git instalado
-- [ ] Node.js 18+ instalado
-- [ ] El proyecto funcionando localmente
+---
 
-### Subir código a GitHub (si no lo hiciste)
+## 2. Preparar EC2
+
 ```bash
-cd /home/zet/Comanda
-git init
-git add .
-git commit -m "Initial commit"
-git branch -M main
-git remote add origin https://github.com/TU_USUARIO/comanda.git
-git push -u origin main
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y ca-certificates curl gnupg git
+
+# Docker
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo $VERSION_CODENAME) stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo usermod -aG docker $USER
 ```
+
+Reconectar sesión SSH para aplicar el grupo `docker`.
 
 ---
 
-## 2. Paso 1: Configurar Supabase
+## 3. Clonar proyecto y configurar variables
 
-### 2.1 Crear proyecto
-
-1. Ir a [supabase.com](https://supabase.com) → **Start your project**
-2. Click en **New Project**
-3. Completar:
-   - **Name:** `comanda-prod`
-   - **Database Password:** (guardar en lugar seguro, lo necesitarás)
-   - **Region:** Elegir el más cercano (ej: `South America (São Paulo)`)
-4. Click **Create new project** (tarda ~2 minutos)
-
-### 2.2 Obtener Connection String
-
-1. En el dashboard de Supabase, ir a **Settings** → **Database**
-2. En la sección **Connection string**, seleccionar **URI**
-3. Copiar el string, se ve así:
-   ```
-   postgresql://postgres.[PROJECT-REF]:[YOUR-PASSWORD]@aws-0-sa-east-1.pooler.supabase.com:6543/postgres
-   ```
-4. **IMPORTANTE:** Reemplazar `[YOUR-PASSWORD]` con la contraseña que pusiste
-
-### 2.3 Guardar para después
-
-```env
-# Guardar estos valores:
-DATABASE_URL=postgresql://postgres.xxxxx:TU_PASSWORD@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true
-DIRECT_URL=postgresql://postgres.xxxxx:TU_PASSWORD@aws-0-sa-east-1.pooler.supabase.com:5432/postgres
+```bash
+sudo mkdir -p /opt/gestioneo
+sudo chown -R $USER:$USER /opt/gestioneo
+cd /opt/gestioneo
+git clone https://github.com/JoaFoschiatti/GestioNeo.git .
 ```
 
-> **Nota:** El `DATABASE_URL` usa puerto `6543` (pooler), el `DIRECT_URL` usa `5432` (directo, para migraciones)
-
----
-
-## 3. Paso 2: Configurar Railway
-
-### 3.1 Crear proyecto
-
-1. Ir a [railway.app](https://railway.app) → **Login with GitHub**
-2. Click en **New Project** → **Deploy from GitHub repo**
-3. Seleccionar el repositorio `comanda`
-4. Railway detectará que es un monorepo, seleccionar **backend** como carpeta root
-
-### 3.2 Configurar el servicio
-
-1. Click en el servicio creado
-2. Ir a **Settings**:
-   - **Root Directory:** `backend`
-   - **Build Command:** `npm install && npx prisma generate && npx prisma migrate deploy`
-   - **Start Command:** `npm start`
-
-### 3.3 Configurar variables de entorno
-
-1. Ir a la pestaña **Variables**
-2. Agregar las siguientes variables:
+### 3.1 Backend env (`backend/.env.production`)
 
 ```env
-DATABASE_URL=postgresql://postgres.xxxxx:PASSWORD@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true
-DIRECT_URL=postgresql://postgres.xxxxx:PASSWORD@aws-0-sa-east-1.pooler.supabase.com:5432/postgres
-JWT_SECRET=una-clave-secreta-muy-larga-y-segura-de-al-menos-32-caracteres
 NODE_ENV=production
 PORT=3001
-FRONTEND_URL=https://tu-app.vercel.app
+
+DATABASE_URL=postgresql://USER:PASSWORD@RDS_HOST:5432/DB_NAME
+DIRECT_URL=postgresql://USER:PASSWORD@RDS_HOST:5432/DB_NAME
+
+FRONTEND_URL=https://tu-dominio.com
+BACKEND_URL=https://tu-dominio.com
+
+JWT_SECRET=CAMBIAR_POR_SECRETO_LARGO
+PUBLIC_ORDER_TOKEN_SECRET=CAMBIAR_POR_SECRETO_LARGO
+ENCRYPTION_KEY=CAMBIAR_POR_64_HEX
+BRIDGE_TOKEN=CAMBIAR_POR_TOKEN_SEGURO
+
+# MercadoPago (si aplica)
+MERCADOPAGO_ACCESS_TOKEN=
+MERCADOPAGO_PUBLIC_KEY=
+MERCADOPAGO_WEBHOOK_SECRET=
+MP_SAAS_ACCESS_TOKEN=
+MP_SUBSCRIPTION_WEBHOOK_SECRET=
+
+# Email (si aplica)
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+EMAIL_FROM=
 ```
 
-> **Tip:** Para generar un JWT_SECRET seguro:
-> ```bash
-> node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-> ```
-
-### 3.4 Obtener URL del backend
-
-1. Ir a **Settings** → **Networking**
-2. Click en **Generate Domain**
-3. Copiar la URL generada, será algo como:
-   ```
-   https://comanda-backend-production.up.railway.app
-   ```
-
-### 3.5 Ejecutar migraciones (primera vez)
-
-Una vez que el deploy esté completo:
-
-1. En Railway, ir a tu servicio
-2. Click en **Settings** → **Deploy** → **Redeploy**
-
-O desde tu terminal local:
-```bash
-cd backend
-DATABASE_URL="tu-connection-string-de-supabase" DIRECT_URL="tu-connection-string-directo-de-supabase" npx prisma migrate deploy
-DATABASE_URL="tu-connection-string-de-supabase" node prisma/seed-ewald.js
-DATABASE_URL="tu-connection-string-de-supabase" node prisma/seed-test-data.js
-```
-
----
-
-## 4. Paso 3: Configurar Vercel
-
-### 4.1 Importar proyecto
-
-1. Ir a [vercel.com](https://vercel.com) → **Add New Project**
-2. Seleccionar el repositorio `comanda`
-3. Configurar:
-   - **Framework Preset:** Vite
-   - **Root Directory:** `frontend`
-   - **Build Command:** `npm run build`
-   - **Output Directory:** `dist`
-
-### 4.2 Configurar variables de entorno
-
-En la sección **Environment Variables**, agregar:
+### 3.2 Frontend env (`frontend/.env.production`)
 
 ```env
-VITE_API_URL=https://comanda-backend-production.up.railway.app/api
+VITE_API_URL=/api
+VITE_FRONTEND_URL=https://tu-dominio.com
 ```
-
-> Reemplazar con la URL real de tu backend en Railway
-
-### 4.3 Deploy
-
-1. Click en **Deploy**
-2. Esperar ~2 minutos
-3. Vercel te dará una URL como: `https://comanda.vercel.app`
-
-### 4.4 Actualizar CORS en Railway
-
-Volver a Railway y actualizar la variable:
-```env
-FRONTEND_URL=https://comanda.vercel.app
-```
-
-Esto permite que el frontend pueda comunicarse con el backend.
 
 ---
 
-## 5. Paso 4: Verificación
+## 4. Deploy con Docker Compose
 
-### Checklist post-deploy
+Este repo incluye:
+- `deploy/docker-compose.ec2.yml`
+- `deploy/nginx/default.conf`
 
-- [ ] Acceder a `https://tu-app.vercel.app`
-- [ ] Login con `admin@ewald.com` / `123456`
-- [ ] Verificar que carga el dashboard
-- [ ] Verificar que cargan los productos
-- [ ] Crear un pedido de prueba
-- [ ] Verificar los reportes
-- [ ] Probar el menú público en `/menu`
+Comandos:
 
-### URLs finales
-
-| Servicio | URL |
-|----------|-----|
-| Frontend | `https://tu-app.vercel.app` |
-| Backend | `https://tu-backend.railway.app` |
-| Menú Público | `https://tu-app.vercel.app/menu` |
-
----
-
-## 6. Troubleshooting
-
-### Error: "Cannot connect to database"
-- Verificar que `DATABASE_URL` esté correcta en Railway
-- Verificar que la contraseña no tenga caracteres especiales sin escapar
-- Usar `?pgbouncer=true` al final del connection string
-
-### Error: "CORS blocked"
-- Verificar que `FRONTEND_URL` en Railway coincida exactamente con la URL de Vercel
-- No incluir `/` al final de la URL
-
-### Error: "Prisma schema out of sync"
 ```bash
-# Ejecutar desde tu máquina local
-cd backend
-DATABASE_URL="tu-url" DIRECT_URL="tu-url-directa" npx prisma migrate deploy
-npx prisma generate
+cd /opt/gestioneo
+docker compose -f deploy/docker-compose.ec2.yml up -d --build
+docker compose -f deploy/docker-compose.ec2.yml ps
 ```
 
-### El frontend no carga datos
-- Verificar en DevTools → Network que las llamadas a la API no den 404
-- Verificar que `VITE_API_URL` termine en `/api`
-
-### Railway: Build fails
-- Verificar que `package.json` tenga script `start`
-- El script start debe ser: `"start": "node src/server.js"`
+El backend ejecuta `prisma migrate deploy` al iniciar.
 
 ---
 
-## 7. Mantenimiento
+## 5. Verificación
 
-### Actualizar código
-
-Los deploys son automáticos cuando haces push a `main`:
+1. Salud API:
 ```bash
-git add .
-git commit -m "Nueva funcionalidad"
-git push origin main
+curl -i http://localhost/api/health
 ```
+2. Desde navegador:
+   - `https://tu-dominio.com/login`
+   - `https://tu-dominio.com/menu`
+3. Validar login y creación de pedido público.
 
-Railway y Vercel detectan el push y re-deployean automáticamente.
+---
 
-### Ejecutar migraciones nuevas
+## 6. Actualización de versión
 
-Si modificas el schema de Prisma:
 ```bash
-# Desde tu máquina local (crea y commitea la migración)
-cd backend
-npx prisma migrate dev
-
-# En producción: Railway aplica automáticamente con `npx prisma migrate deploy` en el build.
-# Si necesitás aplicarlas manualmente:
-DATABASE_URL="tu-url" DIRECT_URL="tu-url-directa-produccion" npx prisma migrate deploy
+cd /opt/gestioneo
+git pull origin main
+docker compose -f deploy/docker-compose.ec2.yml up -d --build
 ```
 
-### Ver logs en producción
+---
 
-**Railway:**
-- Dashboard → Tu servicio → **Deployments** → Click en deploy → **View Logs**
+## 7. Logs y rollback
 
-**Vercel:**
-- Dashboard → Tu proyecto → **Functions** → Ver logs
+### Logs
+```bash
+docker compose -f deploy/docker-compose.ec2.yml logs -f backend
+docker compose -f deploy/docker-compose.ec2.yml logs -f nginx
+```
 
-### Backup de base de datos
-
-Supabase hace backups automáticos diarios. Para backup manual:
-1. Supabase Dashboard → **Database** → **Backups**
-2. Click en **Create backup**
+### Rollback rápido
+```bash
+git checkout <commit_estable>
+docker compose -f deploy/docker-compose.ec2.yml up -d --build
+```
 
 ---
 
-## Costos Estimados Mensuales
+## 8. Notas operativas
 
-| Servicio | Plan | Costo |
-|----------|------|-------|
-| Supabase | Free | $0 |
-| Railway | Hobby | ~$5 |
-| Vercel | Hobby | $0 |
-| **Total** | | **~$5/mes** |
-
-> Para un restaurante con 100 pedidos/día, estos recursos son más que suficientes.
+- No existe routing por cliente ni slug de cliente.
+- No usar endpoints heredados del modelo SaaS anterior.
+- Toda la configuración del negocio se administra por `/api/configuracion/negocio`.
 
 ---
 
-## Soporte
+## 9. Backup y recuperación (RDS)
 
-Si tenés problemas con el deploy:
-1. Revisar la sección de Troubleshooting
-2. Verificar los logs en Railway/Vercel
-3. Revisar la documentación oficial:
-   - [Supabase Docs](https://supabase.com/docs)
-   - [Railway Docs](https://docs.railway.app)
-   - [Vercel Docs](https://vercel.com/docs)
+1. Activar snapshots automáticos en RDS (mínimo 7 días, recomendado 14+).
+2. Antes de cada release importante, crear snapshot manual:
+```bash
+aws rds create-db-snapshot \
+  --db-instance-identifier <db-instance-id> \
+  --db-snapshot-identifier gestioneo-predeploy-$(date +%Y%m%d-%H%M%S)
+```
+3. Probar recuperación al menos una vez por trimestre en entorno de staging.
+
+---
+
+## 10. Healthchecks y observabilidad mínima
+
+- API: `GET /api/health` desde Nginx y desde host.
+- Logs:
+  - `docker compose -f deploy/docker-compose.ec2.yml logs -f backend`
+  - `docker compose -f deploy/docker-compose.ec2.yml logs -f nginx`
+- Métricas recomendadas (CloudWatch):
+  - CPU/Memoria de EC2
+  - Conexiones de RDS
+  - Errores 5xx en Nginx/API
+
+---
+
+## 11. Checklist post-deploy
+
+1. `curl -i http://localhost/api/health` devuelve `200`.
+2. Login correcto en `https://tu-dominio.com/login`.
+3. Crear pedido interno (mostrador o mesa) y validar flujo completo.
+4. Validar menú público `https://tu-dominio.com/menu`.
+5. Verificar que no hay errores recurrentes en logs en los primeros 10 minutos.
+
+---
+
+## 12. Rollback operativo recomendado
+
+Si el release falla:
+
+1. Volver a commit estable:
+```bash
+cd /opt/gestioneo
+git checkout <commit_estable>
+docker compose -f deploy/docker-compose.ec2.yml up -d --build
+```
+2. Si el problema es de datos, restaurar snapshot RDS.
+3. Repetir checklist post-deploy antes de reabrir tráfico.

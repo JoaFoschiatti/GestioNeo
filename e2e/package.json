@@ -8,6 +8,9 @@
   },
   "scripts": {
     "test": "npx playwright test",
+    "test:core": "npx playwright test tests/01-auth.spec.js tests/02-dashboard.spec.js tests/03-categorias.spec.js tests/04-productos.spec.js tests/05-modificadores.spec.js tests/06-ingredientes.spec.js tests/07-empleados.spec.js tests/08-mesas.spec.js tests/09-reservas.spec.js tests/10-pedidos-mesa.spec.js tests/11-pedidos-mostrador.spec.js tests/12-pedidos-delivery.spec.js tests/13-cocina.spec.js tests/14-delivery.spec.js tests/15-cierre-caja.spec.js tests/16-liquidaciones.spec.js tests/17-reportes.spec.js tests/18-configuracion.spec.js tests/19-menu-publico.spec.js",
+    "test:roles": "npx playwright test tests/20-roles.spec.js",
+    "test:full": "npm run test:core && npm run test:roles",
     "test:headed": "npx playwright test --headed",
     "test:debug": "npx playwright test --debug"
   },

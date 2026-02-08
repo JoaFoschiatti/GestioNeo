@@ -36,8 +36,7 @@ const baseCrud = createCrudService('modificador', {
     return {
       nombre: nombre,
       precio: precioFinal,
-      tipo: data.tipo,
-      tenantId: data.tenantId // Este viene filtrado por el factory si hay whitelist
+      tipo: data.tipo
     };
   },
 

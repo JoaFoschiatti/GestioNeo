@@ -15,6 +15,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import api from '../services/api'
+import { canAccessRouteByKey } from '../config/permissions'
 
 const AuthContext = createContext(null)
 
@@ -121,10 +122,10 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(() => {
     const esAdmin = usuario?.rol === 'ADMIN'
-    const esMozo = usuario?.rol === 'MOZO' || esAdmin
-    const esCocinero = usuario?.rol === 'COCINERO' || esAdmin
-    const esCajero = usuario?.rol === 'CAJERO' || esAdmin
-    const esDelivery = usuario?.rol === 'DELIVERY' || esAdmin
+    const esMozo = canAccessRouteByKey(usuario?.rol, 'mesas')
+    const esCocinero = canAccessRouteByKey(usuario?.rol, 'cocina')
+    const esCajero = ['ADMIN', 'CAJERO'].includes(usuario?.rol)
+    const esDelivery = canAccessRouteByKey(usuario?.rol, 'deliveryPedidos')
 
     // Determine subscription status
     const suscripcionActiva = suscripcion?.estado === 'ACTIVA'

@@ -28,7 +28,7 @@ test.describe('Cocina E2E', () => {
     await expect(page.locator('h1:has-text("Cocina")')).toBeVisible({ timeout: 10000 });
 
     // Find and click "Iniciar Preparación" button on first pending order
-    const startButton = page.locator('button:has-text("Iniciar Preparación")').first();
+    const startButton = page.locator('[data-testid^="kitchen-start-"]').first();
 
     if (await startButton.isVisible({ timeout: 5000 }).catch(() => false)) {
       await startButton.click();
@@ -43,7 +43,7 @@ test.describe('Cocina E2E', () => {
     await expect(page.locator('h1:has-text("Cocina")')).toBeVisible({ timeout: 10000 });
 
     // Find and click "Marcar Listo" button
-    const readyButton = page.locator('button:has-text("Marcar Listo")').first();
+    const readyButton = page.locator('[data-testid^="kitchen-ready-"]').first();
 
     if (await readyButton.isVisible({ timeout: 5000 }).catch(() => false)) {
       await readyButton.click();

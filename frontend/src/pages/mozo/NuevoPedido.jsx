@@ -316,6 +316,7 @@ export default function NuevoPedido() {
             onClick={enviarPedido}
             disabled={enviando || carrito.length === 0}
             className="btn btn-primary w-full py-3 flex items-center justify-center gap-2"
+            data-testid="order-confirm-submit"
           >
             <PrinterIcon className="w-5 h-5" />
             {enviando ? 'Enviando...' : 'Confirmar Pedido'}

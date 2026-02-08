@@ -1,7 +1,7 @@
 /**
  * Middleware de verificación de suscripción
  *
- * Verifica si el tenant tiene una suscripción activa.
+ * Verifica si el negocio tiene una suscripción activa.
  * Si no tiene, marca la request como "modo solo lectura".
  *
  * Uso:
@@ -12,10 +12,9 @@
  */
 
 const { prisma } = require('../db/prisma');
-const { createHttpError } = require('../utils/http-error');
 
 /**
- * Verifica si el tenant tiene suscripción activa.
+ * Verifica si el negocio tiene suscripción activa.
  * Agrega req.modoSoloLectura = true|false según estado de suscripción.
  *
  * NOTA: Este middleware DEBE ejecutarse después de setAuthContext.
@@ -63,7 +62,7 @@ const verificarSuscripcion = async (req, res, next) => {
 };
 
 /**
- * Bloquea operaciones de escritura si el tenant está en modo solo lectura.
+ * Bloquea operaciones de escritura si el negocio está en modo solo lectura.
  *
  * DEBE usarse después de verificarSuscripcion.
  *
@@ -89,7 +88,7 @@ const bloquearSiSoloLectura = (req, res, next) => {
  * Uso: Para rutas que requieren suscripción activa para escribir.
  *
  * @example
- * router.post('/', verificarToken, setTenantFromAuth, requiereSuscripcionActiva, controller.crear);
+ * router.post('/', verificarToken, setAuthContext, requiereSuscripcionActiva, controller.crear);
  */
 const requiereSuscripcionActiva = [verificarSuscripcion, bloquearSiSoloLectura];
 

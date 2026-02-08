@@ -11,7 +11,7 @@ const listar = async (req, res) => {
 const crear = async (req, res) => {
   const prisma = getPrisma(req);
   const { reserva, events } = await reservasService.crear(prisma, req.body);
-  events.forEach(event => eventBus.publish(event.topic, { tenantId: 1, ...event.payload }));
+  events.forEach(event => eventBus.publish(event.topic, event.payload));
   res.status(201).json(reserva);
 };
 
@@ -24,7 +24,7 @@ const actualizar = async (req, res) => {
 const cambiarEstado = async (req, res) => {
   const prisma = getPrisma(req);
   const { reserva, events } = await reservasService.cambiarEstado(prisma, req.params.id, req.body.estado);
-  events.forEach(event => eventBus.publish(event.topic, { tenantId: 1, ...event.payload }));
+  events.forEach(event => eventBus.publish(event.topic, event.payload));
   res.json(reserva);
 };
 

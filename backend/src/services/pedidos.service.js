@@ -120,7 +120,7 @@ const buildPedidoItems = async (prisma, items) => {
  * - Actualización del estado de la mesa a OCUPADA (si aplica)
  * - Creación de items con sus modificadores en una transacción
  *
- * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma con scoping de tenant
+ * @param {import('@prisma/client').PrismaClient} prisma - Cliente Prisma
  * @param {Object} payload - Datos del pedido
  * @param {('MESA'|'DELIVERY'|'MOSTRADOR')} payload.tipo - Tipo de pedido
  * @param {number} [payload.mesaId] - ID de mesa (requerido si tipo='MESA')

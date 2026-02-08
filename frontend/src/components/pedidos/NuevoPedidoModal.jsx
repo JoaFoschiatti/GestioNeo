@@ -347,6 +347,7 @@ export default function NuevoPedidoModal({ isOpen, onClose, onSuccess }) {
                   onClick={enviarPedido}
                   disabled={enviando || carrito.length === 0}
                   className="btn btn-primary w-full py-3 disabled:opacity-50"
+                  data-testid="manual-order-create-submit"
                 >
                   {enviando ? 'Creando...' : 'Crear Pedido'}
                 </button>

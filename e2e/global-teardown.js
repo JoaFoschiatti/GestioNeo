@@ -17,8 +17,16 @@ async function globalTeardown() {
   const testData = JSON.parse(fs.readFileSync(dataPath, 'utf-8'));
 
   try {
+    // Find all E2E users to cleanup cross-role test data
+    const e2eUsers = await prisma.usuario.findMany({
+      where: { email: { startsWith: 'e2e-' } },
+      select: { id: true }
+    });
+    const e2eUserIds = e2eUsers.map(u => u.id);
+
     // Find all pedido IDs created by E2E user or on E2E mesas
     const pedidoFilter = { OR: [] };
+    if (e2eUserIds.length > 0) pedidoFilter.OR.push({ usuarioId: { in: e2eUserIds } });
     if (testData.userId) pedidoFilter.OR.push({ usuarioId: testData.userId });
     if (testData.tableId) pedidoFilter.OR.push({ mesaId: testData.tableId });
 
@@ -76,8 +84,8 @@ async function globalTeardown() {
     }
 
     // Delete cierres by E2E user
-    if (testData.userId) {
-      await prisma.cierreCaja.deleteMany({ where: { usuarioId: testData.userId } });
+    if (e2eUserIds.length > 0) {
+      await prisma.cierreCaja.deleteMany({ where: { usuarioId: { in: e2eUserIds } } });
     }
 
     // Delete product relations
@@ -93,10 +101,10 @@ async function globalTeardown() {
     await prisma.ingrediente.deleteMany({ where: { nombre: { startsWith: 'E2E' } } });
 
     // Delete user last
-    if (testData.userId) {
-      await prisma.refreshToken.deleteMany({ where: { usuarioId: testData.userId } });
-      await prisma.emailVerificacion.deleteMany({ where: { usuarioId: testData.userId } });
-      await prisma.usuario.deleteMany({ where: { email: 'e2e-admin@test.com' } });
+    if (e2eUserIds.length > 0) {
+      await prisma.refreshToken.deleteMany({ where: { usuarioId: { in: e2eUserIds } } });
+      await prisma.emailVerificacion.deleteMany({ where: { usuarioId: { in: e2eUserIds } } });
+      await prisma.usuario.deleteMany({ where: { id: { in: e2eUserIds } } });
     }
 
     console.log('[E2E Teardown] Cleanup complete');

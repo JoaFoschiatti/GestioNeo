@@ -24,6 +24,7 @@
 const jwt = require('jsonwebtoken');
 const { prisma } = require('../db/prisma');
 const { userCache } = require('../utils/cache');
+const { CAPABILITY, rolesForCapability, hasRoleForCapability } = require('../auth/permissions');
 
 /**
  * Verifica el token JWT y agrega el usuario al request.
@@ -143,29 +144,61 @@ const verificarRol = (...rolesPermitidos) => {
   };
 };
 
+/**
+ * Crea un middleware de autorización basado en capacidad de negocio.
+ *
+ * Permite centralizar las reglas RBAC en un único mapa de permisos.
+ *
+ * @param {string} capability - Capacidad definida en auth/permissions.js
+ * @returns {import('express').RequestHandler} Middleware de verificación
+ */
+const verificarPermiso = (capability) => {
+  return (req, res, next) => {
+    if (!req.usuario) {
+      return res.status(401).json({ error: { message: 'No autenticado' } });
+    }
+
+    const rolesPermitidos = rolesForCapability(capability);
+    if (rolesPermitidos.length === 0) {
+      return res.status(500).json({
+        error: { message: `Capacidad no configurada: ${capability}` }
+      });
+    }
+
+    if (!hasRoleForCapability(req.usuario.rol, capability)) {
+      return res.status(403).json({
+        error: { message: 'No tienes permisos para realizar esta acción' }
+      });
+    }
+
+    return next();
+  };
+};
+
 // ============================================================
 // SHORTCUTS DE ROLES
 // Middlewares preconfigurados para roles comunes
 // ============================================================
 
 /** Middleware: Solo rol ADMIN */
-const esAdmin = verificarRol('ADMIN');
+const esAdmin = verificarPermiso(CAPABILITY.ADMIN_ONLY);
 
 /** Middleware: Rol ADMIN o CAJERO */
-const esAdminOCajero = verificarRol('ADMIN', 'CAJERO');
+const esAdminOCajero = verificarPermiso(CAPABILITY.CASH_MANAGEMENT);
 
 /** Middleware: Rol ADMIN o MOZO (para gestión de mesas y pedidos) */
-const esMozo = verificarRol('ADMIN', 'MOZO');
+const esMozo = verificarPermiso(CAPABILITY.TABLES_ACCESS);
 
 /** Middleware: Rol ADMIN o DELIVERY (para gestión de entregas) */
-const esDelivery = verificarRol('ADMIN', 'DELIVERY');
+const esDelivery = verificarPermiso(CAPABILITY.DELIVERY_ACCESS);
 
 /** Middleware: Rol ADMIN o COCINERO (para pantalla de cocina) */
-const esCocinero = verificarRol('ADMIN', 'COCINERO');
+const esCocinero = verificarPermiso(CAPABILITY.KITCHEN_ACCESS);
 
 module.exports = {
   verificarToken,
   verificarRol,
+  verificarPermiso,
   esAdmin,
   esAdminOCajero,
   esMozo,

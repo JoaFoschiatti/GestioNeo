@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const reportesController = require('../controllers/reportes.controller');
-const { verificarToken, esAdmin, esAdminOCajero } = require('../middlewares/auth.middleware');
+const { verificarToken, verificarPermiso } = require('../middlewares/auth.middleware');
 const { setAuthContext } = require('../middlewares/context.middleware');
 const { validate } = require('../middlewares/validate.middleware');
 const { asyncHandler } = require('../utils/async-handler');
+const { CAPABILITY } = require('../auth/permissions');
 const {
   ventasReporteQuerySchema,
   productosMasVendidosQuerySchema,
@@ -17,28 +18,28 @@ const {
 router.use(verificarToken);
 router.use(setAuthContext);
 
-router.get('/dashboard', asyncHandler(reportesController.dashboard));
-router.get('/ventas', esAdminOCajero, validate({ query: ventasReporteQuerySchema }), asyncHandler(reportesController.ventasReporte));
+router.get('/dashboard', verificarPermiso(CAPABILITY.DASHBOARD_VIEW), asyncHandler(reportesController.dashboard));
+router.get('/ventas', verificarPermiso(CAPABILITY.REPORTS_VIEW), validate({ query: ventasReporteQuerySchema }), asyncHandler(reportesController.ventasReporte));
 router.get(
   '/productos-mas-vendidos',
-  esAdminOCajero,
+  verificarPermiso(CAPABILITY.REPORTS_VIEW),
   validate({ query: productosMasVendidosQuerySchema }),
   asyncHandler(reportesController.productosMasVendidos)
 );
-router.get('/ventas-por-mozo', esAdmin, validate({ query: ventasPorMozoQuerySchema }), asyncHandler(reportesController.ventasPorMozo));
-router.get('/inventario', esAdmin, asyncHandler(reportesController.inventarioReporte));
-router.get('/sueldos', esAdmin, validate({ query: sueldosReporteQuerySchema }), asyncHandler(reportesController.sueldosReporte));
+router.get('/ventas-por-mozo', verificarPermiso(CAPABILITY.REPORTS_ADVANCED), validate({ query: ventasPorMozoQuerySchema }), asyncHandler(reportesController.ventasPorMozo));
+router.get('/inventario', verificarPermiso(CAPABILITY.REPORTS_ADVANCED), asyncHandler(reportesController.inventarioReporte));
+router.get('/sueldos', verificarPermiso(CAPABILITY.REPORTS_ADVANCED), validate({ query: sueldosReporteQuerySchema }), asyncHandler(reportesController.sueldosReporte));
 
 // Reportes de variantes de productos
 router.get(
   '/ventas-por-producto-base',
-  esAdminOCajero,
+  verificarPermiso(CAPABILITY.REPORTS_VIEW),
   validate({ query: ventasPorProductoBaseQuerySchema }),
   asyncHandler(reportesController.ventasPorProductoBase)
 );
 router.get(
   '/consumo-insumos',
-  esAdmin,
+  verificarPermiso(CAPABILITY.REPORTS_ADVANCED),
   validate({ query: consumoInsumosQuerySchema }),
   asyncHandler(reportesController.consumoInsumos)
 );

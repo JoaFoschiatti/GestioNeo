@@ -41,7 +41,7 @@ test.describe('Pedidos Mostrador E2E', () => {
     }
 
     // Click create order
-    await page.click('button:has-text("Crear Pedido")');
+    await page.click('[data-testid="manual-order-create-submit"]');
 
     // Should see success
     await expect(page.locator('text=/Pedido #\\d+ creado/i')).toBeVisible({ timeout: 10000 });
@@ -65,10 +65,11 @@ test.describe('Pedidos Mostrador E2E', () => {
       await page.selectOption('#pago-metodo', 'EFECTIVO');
 
       // Submit
-      await page.click('button:has-text("Registrar Pago")');
+      await page.click('[data-testid="register-payment-submit"]');
 
-      // Verify success
-      await expect(page.locator('text=/[Pp]ago registrado|COBRADO/')).toBeVisible({ timeout: 5000 });
+      // Verify success and modal close
+      await expect(page.locator('h2:has-text("Registrar Pago")')).not.toBeVisible({ timeout: 5000 });
+      await expect(page.locator('text=/Pago registrado|pedido cobrado|pendiente de acreditación/i').first()).toBeVisible({ timeout: 5000 });
     }
   });
 });

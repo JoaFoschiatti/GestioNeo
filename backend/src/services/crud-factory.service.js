@@ -199,7 +199,7 @@ const createCrudService = (modelName, options = {}) => {
         if (error.code === 'P2002') {
           // Obtener los campos que violaron la unicidad
           const targets = error.meta?.target || [];
-          // Buscar el primer campo que esté en uniqueFields (excluir tenantId)
+          // Buscar el primer campo que esté en uniqueFields
           const field = targets.find(f => uniqueFields[f]) || targets[0];
           const label = uniqueFields[field] || field || 'campo';
           throw createHttpError.badRequest(
@@ -259,7 +259,7 @@ const createCrudService = (modelName, options = {}) => {
         if (error.code === 'P2002') {
           // Obtener los campos que violaron la unicidad
           const targets = error.meta?.target || [];
-          // Buscar el primer campo que esté en uniqueFields (excluir tenantId)
+          // Buscar el primer campo que esté en uniqueFields
           const field = targets.find(f => uniqueFields[f]) || targets[0];
           const label = uniqueFields[field] || field || 'campo';
           throw createHttpError.badRequest(

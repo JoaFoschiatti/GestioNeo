@@ -12,7 +12,7 @@ const baseCrud = createCrudService('empleado', {
 
   // Protección mass assignment
   allowedFilterFields: ['activo', 'nombre', 'apellido', 'rol'],
-  allowedCreateFields: ['nombre', 'apellido', 'dni', 'telefono', 'direccion', 'rol', 'tarifaHora', 'tenantId'],
+  allowedCreateFields: ['nombre', 'apellido', 'dni', 'telefono', 'direccion', 'rol', 'tarifaHora'],
   allowedUpdateFields: ['nombre', 'apellido', 'telefono', 'direccion', 'rol', 'tarifaHora', 'activo']
 });
 

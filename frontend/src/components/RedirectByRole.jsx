@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { getDefaultRouteForRole } from '../config/permissions'
 
 export default function RedirectByRole() {
   const { usuario, loading } = useAuth()
@@ -16,18 +17,5 @@ export default function RedirectByRole() {
     return <Navigate to="/login" replace />
   }
 
-  switch (usuario.rol) {
-    case 'ADMIN':
-      return <Navigate to="/dashboard" replace />
-    case 'MOZO':
-      return <Navigate to="/mozo/mesas" replace />
-    case 'COCINERO':
-      return <Navigate to="/cocina" replace />
-    case 'CAJERO':
-      return <Navigate to="/dashboard" replace />
-    case 'DELIVERY':
-      return <Navigate to="/delivery/pedidos" replace />
-    default:
-      return <Navigate to="/login" replace />
-  }
+  return <Navigate to={getDefaultRouteForRole(usuario.rol)} replace />
 }

@@ -42,7 +42,7 @@ describe('RedirectByRole', () => {
 
   it.each([
     ['ADMIN', '/dashboard'],
-    ['MOZO', '/mozo/mesas'],
+    ['MOZO', '/mesas'],
     ['COCINERO', '/cocina'],
     ['CAJERO', '/dashboard'],
     ['DELIVERY', '/delivery/pedidos']

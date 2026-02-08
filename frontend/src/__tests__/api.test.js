@@ -40,7 +40,7 @@ describe('api interceptor', () => {
 
     await expect(handlerRef.current(error)).rejects.toBe(error)
 
-    // Token NO se guarda en localStorage (httpOnly cookie), solo se limpian usuario y tenant
+    // Token NO se guarda en localStorage (httpOnly cookie), solo se limpian usuario y negocio
     expect(localStorage.removeItem).not.toHaveBeenCalledWith('token')
     expect(localStorage.removeItem).toHaveBeenCalledWith('usuario')
     expect(window.location.href).toBe('/login')

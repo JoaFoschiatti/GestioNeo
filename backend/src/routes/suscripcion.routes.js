@@ -5,10 +5,11 @@
 
 const express = require('express');
 const router = express.Router();
-const { verificarToken, verificarRol } = require('../middlewares/auth.middleware');
+const { verificarToken, verificarPermiso } = require('../middlewares/auth.middleware');
 const { setAuthContext } = require('../middlewares/context.middleware');
 const controller = require('../controllers/suscripcion.controller');
 const { asyncHandler } = require('../utils/async-handler');
+const { CAPABILITY } = require('../auth/permissions');
 
 // ============================================
 // RUTAS PÚBLICAS (webhook de MercadoPago)
@@ -26,7 +27,7 @@ router.post(
   '/crear',
   verificarToken,
   setAuthContext,
-  verificarRol('ADMIN'),
+  verificarPermiso(CAPABILITY.SUBSCRIPTION_MANAGE),
   asyncHandler(controller.crearSuscripcion)
 );
 
@@ -35,7 +36,7 @@ router.get(
   '/estado',
   verificarToken,
   setAuthContext,
-  verificarRol('ADMIN'),
+  verificarPermiso(CAPABILITY.SUBSCRIPTION_MANAGE),
   asyncHandler(controller.obtenerEstado)
 );
 
@@ -44,7 +45,7 @@ router.post(
   '/cancelar',
   verificarToken,
   setAuthContext,
-  verificarRol('ADMIN'),
+  verificarPermiso(CAPABILITY.SUBSCRIPTION_MANAGE),
   asyncHandler(controller.cancelarSuscripcion)
 );
 
@@ -53,7 +54,7 @@ router.get(
   '/pagos',
   verificarToken,
   setAuthContext,
-  verificarRol('ADMIN'),
+  verificarPermiso(CAPABILITY.SUBSCRIPTION_MANAGE),
   asyncHandler(controller.obtenerPagos)
 );
 

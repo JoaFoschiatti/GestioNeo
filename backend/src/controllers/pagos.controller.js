@@ -10,18 +10,25 @@ const { logger } = require('../utils/logger');
 // Registrar pago
 const registrarPago = async (req, res) => {
   const prisma = getPrisma(req);
-  const { pedidoId, monto, metodo, referencia, comprobante } = req.body;
+  const { pedidoId, monto, metodo, referencia, comprobante, idempotencyKey } = req.body;
 
-  const { pago, pedido, totalPagado, pendiente } = await pagosService.registrarPago(prisma, {
+  const {
+    pago,
+    pedido,
+    totalPagado,
+    pendiente,
+    esperandoTransferencia,
+    idempotentReplay
+  } = await pagosService.registrarPago(prisma, {
     pedidoId,
     monto,
     metodo,
     referencia,
-    comprobante
+    comprobante,
+    idempotencyKey
   });
 
   eventBus.publish('pago.updated', {
-    tenantId: 1,
     pedidoId,
     totalPagado,
     pendiente,
@@ -30,7 +37,6 @@ const registrarPago = async (req, res) => {
 
   if (pedido.estado === 'COBRADO') {
     eventBus.publish('pedido.updated', {
-      tenantId: 1,
       id: pedido.id,
       estado: pedido.estado,
       tipo: pedido.tipo,
@@ -39,11 +45,36 @@ const registrarPago = async (req, res) => {
     });
   }
 
-  res.status(201).json({
+  const status =
+    esperandoTransferencia
+      ? 'PENDING_TRANSFER'
+      : pedido.estado === 'COBRADO'
+        ? 'PAID_FULL'
+        : 'PAID_PARTIAL';
+
+  const message = idempotentReplay
+    ? 'Pago ya registrado previamente'
+    : esperandoTransferencia
+      ? 'Pago registrado, pendiente de acreditación por transferencia'
+      : pedido.estado === 'COBRADO'
+        ? 'Pago registrado y pedido cobrado'
+        : 'Pago registrado';
+
+  res.status(idempotentReplay ? 200 : 201).json({
+    status,
+    message,
+    idempotentReplay: Boolean(idempotentReplay),
+    waitingTransfer: Boolean(esperandoTransferencia),
     pago,
     pedido,
     totalPagado,
-    pendiente
+    pendiente,
+    payment: pago,
+    order: pedido,
+    totals: {
+      totalPagado,
+      pendiente
+    }
   });
 };
 
@@ -124,7 +155,7 @@ const getPaymentFromGlobalToken = async (paymentId) => {
   }
 };
 
-// Webhook de MercadoPago (single-tenant)
+// Webhook de MercadoPago (instancia única)
 const webhookMercadoPago = async (req, res) => {
   try {
     const prisma = getPrisma(req);

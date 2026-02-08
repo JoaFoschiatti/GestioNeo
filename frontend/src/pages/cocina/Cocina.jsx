@@ -63,7 +63,9 @@ export default function Cocina() {
 
   const cargarPedidos = useCallback(async () => {
     const response = await api.get('/pedidos/cocina', { skipToast: true })
-    const nuevosPedidos = response.data
+    const nuevosPedidos = [...response.data].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    )
 
     // Detectar nuevos pedidos PENDIENTES
     if (soundEnabled && pedidosRef.current.length > 0) {
@@ -195,6 +197,20 @@ export default function Cocina() {
     return `${Math.floor(minutos / 60)}h ${minutos % 60}m`
   }
 
+  const getTiempoMinutos = (fecha) => Math.max(0, Math.floor((Date.now() - new Date(fecha)) / 60000))
+
+  const getSlaEstado = (minutos) => {
+    if (minutos >= 30) return 'CRITICO'
+    if (minutos >= 15) return 'ATENCION'
+    return 'OK'
+  }
+
+  const getSlaBadgeClass = (sla) => {
+    if (sla === 'CRITICO') return 'badge-error'
+    if (sla === 'ATENCION') return 'badge-warning'
+    return 'badge-success'
+  }
+
   if (loading && pedidos.length === 0) {
     return (
       <div className="flex justify-center py-12">
@@ -282,114 +298,131 @@ export default function Cocina() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {pedidos.map((pedido, index) => (
-            <div
-              key={pedido.id}
-              ref={el => cardRefs.current[index] = el}
-              className={`card transition-all duration-200 relative ${
-                pedido.estado === 'PENDIENTE'
-                  ? 'border border-warning-200 bg-warning-50/50'
-                  : 'border border-info-200 bg-info-50/50'
-              } ${
-                index === selectedIndex
-                  ? 'ring-4 ring-primary-500 ring-offset-2 scale-[1.02] shadow-lg shadow-primary-500/20'
-                  : 'opacity-80'
-              }`}
-            >
-              {index === selectedIndex && pedidos.length > 1 && (
-                <span className="absolute -top-2 -left-2 bg-primary-500 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shadow-md">
-                  {index + 1}
-                </span>
-              )}
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h3 className="text-xl font-bold text-text-primary">#{pedido.id}</h3>
-                  <p className="text-sm text-text-secondary">
-                    {pedido.tipo === 'MESA'
-                      ? `Mesa ${pedido.mesa?.numero}`
-                      : pedido.tipo}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <span
-                    className={`badge ${
-                      pedido.estado === 'PENDIENTE'
-                        ? 'badge-warning'
-                        : 'badge-info'
-                    }`}
-                  >
-                    {pedido.estado === 'PENDIENTE' ? 'PENDIENTE' : 'PREPARANDO'}
-                  </span>
-                  <p className="text-xs text-text-tertiary mt-1">
-                    {getTiempoTranscurrido(pedido.createdAt)}
-                  </p>
-                </div>
-              </div>
+            (() => {
+              const minutos = getTiempoMinutos(pedido.createdAt)
+              const sla = getSlaEstado(minutos)
 
-              <div className="space-y-3 mb-4">
-                {pedido.items?.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-start gap-3 bg-surface p-3 rounded-xl"
-                  >
-                    <span className="text-2xl font-bold text-primary-500">
-                      {item.cantidad}x
+              return (
+                <div
+                  key={pedido.id}
+                  ref={el => cardRefs.current[index] = el}
+                  className={`card transition-all duration-200 relative ${
+                    sla === 'CRITICO'
+                      ? 'border border-error-300 bg-error-50/50'
+                      : sla === 'ATENCION'
+                        ? 'border border-warning-300 bg-warning-50/50'
+                        : pedido.estado === 'PENDIENTE'
+                          ? 'border border-warning-200 bg-warning-50/50'
+                          : 'border border-info-200 bg-info-50/50'
+                  } ${
+                    index === selectedIndex
+                      ? 'ring-4 ring-primary-500 ring-offset-2 scale-[1.02] shadow-lg shadow-primary-500/20'
+                      : 'opacity-80'
+                  }`}
+                  data-testid={`kitchen-order-card-${pedido.id}`}
+                >
+                  {index === selectedIndex && pedidos.length > 1 && (
+                    <span className="absolute -top-2 -left-2 bg-primary-500 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shadow-md">
+                      {index + 1}
                     </span>
+                  )}
+                  <div className="flex justify-between items-start mb-4">
                     <div>
-                      <p className="font-medium text-text-primary">
-                        {item.producto?.nombre}
+                      <h3 className="text-xl font-bold text-text-primary">#{pedido.id}</h3>
+                      <p className="text-sm text-text-secondary">
+                        {pedido.tipo === 'MESA'
+                          ? `Mesa ${pedido.mesa?.numero}`
+                          : pedido.tipo}
                       </p>
-                      {item.modificadores?.length > 0 && (
-                        <div className="mt-1 space-y-0.5">
-                          {item.modificadores.map((mod) => (
-                            <p
-                              key={mod.id}
-                              className={`text-sm font-medium ${
-                                mod.modificador?.tipo === 'EXCLUSION'
-                                  ? 'text-error-600'
-                                  : 'text-success-600'
-                              }`}
-                            >
-                              {mod.modificador?.tipo === 'EXCLUSION' ? '- Sin' : '+ Extra'}{' '}
-                              {mod.modificador?.nombre}
-                            </p>
-                          ))}
-                        </div>
-                      )}
-                      {item.observaciones && (
-                        <p className="text-sm text-warning-600 font-medium mt-1">
-                          Nota: {item.observaciones}
-                        </p>
-                      )}
+                    </div>
+                    <div className="text-right">
+                      <span
+                        className={`badge ${
+                          pedido.estado === 'PENDIENTE'
+                            ? 'badge-warning'
+                            : 'badge-info'
+                        }`}
+                      >
+                        {pedido.estado === 'PENDIENTE' ? 'PENDIENTE' : 'PREPARANDO'}
+                      </span>
+                      <p className="text-xs text-text-tertiary mt-1">
+                        {getTiempoTranscurrido(pedido.createdAt)}
+                      </p>
+                      <span className={`badge mt-2 ${getSlaBadgeClass(sla)}`}>
+                        SLA {sla}
+                      </span>
                     </div>
                   </div>
-                ))}
-              </div>
 
-              {pedido.observaciones && (
-                <div className="mb-4 p-2 bg-error-100 rounded-lg text-sm text-error-700">
-                  <strong>Nota:</strong> {pedido.observaciones}
+                  <div className="space-y-3 mb-4">
+                    {pedido.items?.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-start gap-3 bg-surface p-3 rounded-xl"
+                      >
+                        <span className="text-2xl font-bold text-primary-500">
+                          {item.cantidad}x
+                        </span>
+                        <div>
+                          <p className="font-medium text-text-primary">
+                            {item.producto?.nombre}
+                          </p>
+                          {item.modificadores?.length > 0 && (
+                            <div className="mt-1 space-y-0.5">
+                              {item.modificadores.map((mod) => (
+                                <p
+                                  key={mod.id}
+                                  className={`text-sm font-medium ${
+                                    mod.modificador?.tipo === 'EXCLUSION'
+                                      ? 'text-error-600'
+                                      : 'text-success-600'
+                                  }`}
+                                >
+                                  {mod.modificador?.tipo === 'EXCLUSION' ? '- Sin' : '+ Extra'}{' '}
+                                  {mod.modificador?.nombre}
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                          {item.observaciones && (
+                            <p className="text-sm text-warning-600 font-medium mt-1">
+                              Nota: {item.observaciones}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {pedido.observaciones && (
+                    <div className="mb-4 p-2 bg-error-100 rounded-lg text-sm text-error-700">
+                      <strong>Nota:</strong> {pedido.observaciones}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    {pedido.estado === 'PENDIENTE' ? (
+                      <button
+                        onClick={() => cambiarEstado(pedido.id, 'EN_PREPARACION')}
+                        className="btn btn-primary flex-1 py-3"
+                        data-testid={`kitchen-start-${pedido.id}`}
+                      >
+                        Iniciar Preparación
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => cambiarEstado(pedido.id, 'LISTO')}
+                        className="btn btn-success flex-1 py-3 flex items-center justify-center gap-2"
+                        data-testid={`kitchen-ready-${pedido.id}`}
+                      >
+                        <CheckIcon className="w-5 h-5" />
+                        Marcar Listo
+                      </button>
+                    )}
+                  </div>
                 </div>
-              )}
-
-              <div className="flex gap-2">
-                {pedido.estado === 'PENDIENTE' ? (
-                  <button
-                    onClick={() => cambiarEstado(pedido.id, 'EN_PREPARACION')}
-                    className="btn btn-primary flex-1 py-3"
-                  >
-                    Iniciar Preparación
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => cambiarEstado(pedido.id, 'LISTO')}
-                    className="btn btn-success flex-1 py-3 flex items-center justify-center gap-2"
-                  >
-                    <CheckIcon className="w-5 h-5" />
-                    Marcar Listo
-                  </button>
-                )}
-              </div>
-            </div>
+              )
+            })()
           ))}
         </div>
       )}

@@ -71,7 +71,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 #### `MP_APP_ID` y `MP_APP_SECRET`
 **Descripción:** Credenciales de aplicación MercadoPago para OAuth
 **Dónde obtener:** https://www.mercadopago.com.ar/developers/panel/app
-**Uso:** Conectar cuentas de MercadoPago de cada tenant (restaurante)
+**Uso:** Conectar la cuenta de MercadoPago de la instancia productiva.
 
 #### `BRIDGE_TOKEN`
 **Descripción:** Token de autenticación para el servicio de impresión local
@@ -96,11 +96,11 @@ node -e "console.log(require('crypto').randomBytes(16).toString('base64'))"
 **Default:** `development`
 **Descripción:** Ambiente de ejecución
 
-### MercadoPago (Legacy)
+### MercadoPago (Legacy de transición)
 
 #### `MERCADOPAGO_ACCESS_TOKEN`
-**Descripción:** Token global (deprecated - usar OAuth por tenant)
-**Uso:** Fallback para tenants sin configuración propia
+**Descripción:** Token global (deprecated - usar OAuth por instancia)
+**Uso:** Fallback temporal para ambientes que todavía no migraron OAuth.
 
 #### `MERCADOPAGO_PUBLIC_KEY`
 **Descripción:** Public key global

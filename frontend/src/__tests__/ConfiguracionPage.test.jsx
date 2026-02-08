@@ -98,10 +98,8 @@ describe('Configuracion page', () => {
     await user.tab()
 
     expect(await screen.findByText(/al menos 3 caracteres/i)).toBeInTheDocument()
-    expect(api.get).not.toHaveBeenCalledWith(
-      expect.stringContaining('/tenant/verificar-slug/'),
-      expect.any(Object)
-    )
+    const urlsInvocadas = api.get.mock.calls.map(call => call?.[0]).filter(Boolean)
+    expect(urlsInvocadas).toEqual(expect.arrayContaining(['/configuracion/negocio', '/configuracion']))
   })
 
   it('muestra error cuando falla la subida del banner', async () => {

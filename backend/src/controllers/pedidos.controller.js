@@ -7,7 +7,6 @@ const { createHttpError } = require('../utils/http-error');
 const emitPedidoUpdated = (pedido) => {
   if (!pedido) return;
   eventBus.publish('pedido.updated', {
-    tenantId: pedido.tenantId,
     id: pedido.id,
     estado: pedido.estado,
     tipo: pedido.tipo,
@@ -16,10 +15,9 @@ const emitPedidoUpdated = (pedido) => {
   });
 };
 
-const emitMesaUpdated = (tenantId, mesaId, estado) => {
+const emitMesaUpdated = (mesaId, estado) => {
   if (!mesaId) return;
   eventBus.publish('mesa.updated', {
-    tenantId,
     mesaId,
     estado,
     updatedAt: new Date().toISOString()
@@ -58,7 +56,7 @@ const crear = async (req, res) => {
   });
 
   if (mesaUpdated) {
-    emitMesaUpdated(1, mesaUpdated.mesaId, mesaUpdated.estado);
+    emitMesaUpdated(mesaUpdated.mesaId, mesaUpdated.estado);
   }
 
   emitPedidoUpdated(pedido);
@@ -81,12 +79,11 @@ const cambiarEstado = async (req, res) => {
     await pedidosService.cambiarEstadoPedido(prisma, { pedidoId: id, estado });
 
   for (const update of mesaUpdates) {
-    emitMesaUpdated(1, update.mesaId, update.estado);
+    emitMesaUpdated(update.mesaId, update.estado);
   }
 
   for (const producto of productosAgotados) {
     eventBus.publish('producto.agotado', {
-      tenantId: 1,
       id: producto.id,
       nombre: producto.nombre,
       motivo: 'Ingrediente agotado',
@@ -99,7 +96,6 @@ const cambiarEstado = async (req, res) => {
     try {
       impresion = await printService.enqueuePrintJobs(prisma, pedidoAntes.id);
       eventBus.publish('impresion.updated', {
-        tenantId: 1,
         pedidoId: pedidoAntes.id,
         ok: 0,
         total: impresion.total
@@ -141,7 +137,7 @@ const cancelar = async (req, res) => {
   });
 
   if (mesaUpdated) {
-    emitMesaUpdated(1, mesaUpdated.mesaId, mesaUpdated.estado);
+    emitMesaUpdated(mesaUpdated.mesaId, mesaUpdated.estado);
   }
 
   emitPedidoUpdated(pedidoCancelado);

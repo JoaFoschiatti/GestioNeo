@@ -28,7 +28,6 @@ const procesarReservas = async () => {
         });
 
         eventBus.publish('mesa.updated', {
-          tenantId: reserva.tenantId,
           mesaId: reserva.mesaId,
           estado: 'RESERVADA',
           reservaId: reserva.id,
@@ -64,7 +63,6 @@ const procesarReservas = async () => {
         });
 
         eventBus.publish('mesa.updated', {
-          tenantId: reserva.tenantId,
           mesaId: reserva.mesaId,
           estado: 'LIBRE',
           updatedAt: new Date().toISOString()
@@ -72,7 +70,6 @@ const procesarReservas = async () => {
       }
 
       eventBus.publish('reserva.updated', {
-        tenantId: reserva.tenantId,
         id: reserva.id,
         estado: 'NO_LLEGO',
         mesaId: reserva.mesaId

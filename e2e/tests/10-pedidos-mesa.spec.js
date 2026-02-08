@@ -34,7 +34,7 @@ test.describe('Pedidos Mesa E2E', () => {
     }
 
     // Wait for "Confirmar Pedido" button to be enabled (product was added to cart)
-    const confirmBtn = page.locator('button:has-text("Confirmar Pedido")');
+    const confirmBtn = page.locator('[data-testid="order-confirm-submit"]');
     await expect(confirmBtn).toBeEnabled({ timeout: 5000 });
     await confirmBtn.click();
 

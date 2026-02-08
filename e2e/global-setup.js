@@ -7,6 +7,12 @@ const prisma = new PrismaClient();
 
 const E2E_USER_EMAIL = 'e2e-admin@test.com';
 const E2E_USER_PASSWORD = 'password123';
+const E2E_MOZO_EMAIL = 'e2e-mozo@test.com';
+const E2E_MOZO_PASSWORD = 'password123';
+const E2E_COCINERO_EMAIL = 'e2e-cocinero@test.com';
+const E2E_COCINERO_PASSWORD = 'password123';
+const E2E_DELIVERY_EMAIL = 'e2e-delivery@test.com';
+const E2E_DELIVERY_PASSWORD = 'password123';
 
 async function globalSetup() {
   console.log('\n[E2E Setup] Creating test data...');
@@ -23,9 +29,42 @@ async function globalSetup() {
     console.log('[E2E Setup] Created Negocio singleton');
   }
 
-  // Create E2E admin user
+  // Ensure subscription is active so write flows are not blocked in read-only mode
+  const ahora = new Date();
+  const proximoCobro = new Date(ahora);
+  proximoCobro.setDate(proximoCobro.getDate() + 30);
+  const vencimiento = new Date(ahora);
+  vencimiento.setDate(vencimiento.getDate() + 365);
+
+  await prisma.suscripcion.upsert({
+    where: { id: 1 },
+    update: {
+      estado: 'ACTIVA',
+      fechaInicio: ahora,
+      fechaProximoCobro: proximoCobro,
+      fechaVencimiento: vencimiento,
+      ultimoPagoExitoso: ahora,
+      intentosFallidos: 0,
+      precioMensual: 37000,
+      moneda: 'ARS'
+    },
+    create: {
+      id: 1,
+      estado: 'ACTIVA',
+      fechaInicio: ahora,
+      fechaProximoCobro: proximoCobro,
+      fechaVencimiento: vencimiento,
+      ultimoPagoExitoso: ahora,
+      intentosFallidos: 0,
+      precioMensual: 37000,
+      moneda: 'ARS'
+    }
+  });
+  console.log('[E2E Setup] Ensured active subscription');
+
+  // Create E2E users (admin + role-specific accounts)
   const passwordHash = await bcrypt.hash(E2E_USER_PASSWORD, 4);
-  const usuario = await prisma.usuario.create({
+  const usuarioAdmin = await prisma.usuario.create({
     data: {
       email: E2E_USER_EMAIL,
       password: passwordHash,
@@ -34,7 +73,34 @@ async function globalSetup() {
       activo: true
     }
   });
-  console.log(`[E2E Setup] Created user: ${usuario.email}`);
+  const usuarioMozo = await prisma.usuario.create({
+    data: {
+      email: E2E_MOZO_EMAIL,
+      password: passwordHash,
+      nombre: 'Mozo E2E',
+      rol: 'MOZO',
+      activo: true
+    }
+  });
+  const usuarioCocinero = await prisma.usuario.create({
+    data: {
+      email: E2E_COCINERO_EMAIL,
+      password: passwordHash,
+      nombre: 'Cocinero E2E',
+      rol: 'COCINERO',
+      activo: true
+    }
+  });
+  const usuarioDelivery = await prisma.usuario.create({
+    data: {
+      email: E2E_DELIVERY_EMAIL,
+      password: passwordHash,
+      nombre: 'Delivery E2E',
+      rol: 'DELIVERY',
+      activo: true
+    }
+  });
+  console.log(`[E2E Setup] Created users: ${usuarioAdmin.email}, ${usuarioMozo.email}, ${usuarioCocinero.email}, ${usuarioDelivery.email}`);
 
   // Create E2E category
   const categoria = await prisma.categoria.create({
@@ -58,7 +124,17 @@ async function globalSetup() {
   });
   console.log(`[E2E Setup] Created product: ${producto.nombre}`);
 
-  // Create E2E table (high number to avoid collisions)
+  // Create additional E2E table so reservation tests can pick an alternate mesa by index
+  await prisma.mesa.create({
+    data: {
+      numero: 97,
+      capacidad: 4,
+      estado: 'LIBRE',
+      activa: true
+    }
+  });
+
+  // Create E2E primary table (high number to avoid collisions)
   const mesa = await prisma.mesa.create({
     data: {
       numero: 99,
@@ -107,9 +183,21 @@ async function globalSetup() {
 
   // Save test data for tests
   const testData = {
-    userId: usuario.id,
+    userId: usuarioAdmin.id,
     userEmail: E2E_USER_EMAIL,
     userPassword: E2E_USER_PASSWORD,
+    adminUserId: usuarioAdmin.id,
+    adminEmail: E2E_USER_EMAIL,
+    adminPassword: E2E_USER_PASSWORD,
+    mozoUserId: usuarioMozo.id,
+    mozoEmail: E2E_MOZO_EMAIL,
+    mozoPassword: E2E_MOZO_PASSWORD,
+    cocineroUserId: usuarioCocinero.id,
+    cocineroEmail: E2E_COCINERO_EMAIL,
+    cocineroPassword: E2E_COCINERO_PASSWORD,
+    deliveryUserId: usuarioDelivery.id,
+    deliveryEmail: E2E_DELIVERY_EMAIL,
+    deliveryPassword: E2E_DELIVERY_PASSWORD,
     categoryId: categoria.id,
     categoryName: categoria.nombre,
     productId: producto.id,
@@ -138,9 +226,12 @@ async function cleanupE2eData() {
   console.log('[E2E Setup] Cleaning up previous E2E data...');
 
   try {
-    // Find E2E user ID for cascading deletes
-    const e2eUser = await prisma.usuario.findUnique({ where: { email: E2E_USER_EMAIL } });
-    const e2eUserId = e2eUser?.id;
+    // Find all E2E user IDs for cascading deletes
+    const e2eUsers = await prisma.usuario.findMany({
+      where: { email: { startsWith: 'e2e-' } },
+      select: { id: true }
+    });
+    const e2eUserIds = e2eUsers.map(u => u.id);
 
     // Find E2E mesa IDs (numero >= 90)
     const e2eMesas = await prisma.mesa.findMany({ where: { numero: { gte: 90 } }, select: { id: true } });
@@ -160,7 +251,7 @@ async function cleanupE2eData() {
 
     // Build pedido filter (by user or by mesa)
     const pedidoFilter = { OR: [] };
-    if (e2eUserId) pedidoFilter.OR.push({ usuarioId: e2eUserId });
+    if (e2eUserIds.length > 0) pedidoFilter.OR.push({ usuarioId: { in: e2eUserIds } });
     if (e2eMesaIds.length > 0) pedidoFilter.OR.push({ mesaId: { in: e2eMesaIds } });
 
     // Find E2E pedido IDs
@@ -211,8 +302,8 @@ async function cleanupE2eData() {
     }
 
     // Delete cierres by user
-    if (e2eUserId) {
-      await prisma.cierreCaja.deleteMany({ where: { usuarioId: e2eUserId } });
+    if (e2eUserIds.length > 0) {
+      await prisma.cierreCaja.deleteMany({ where: { usuarioId: { in: e2eUserIds } } });
     }
 
     // Delete product relations
@@ -230,10 +321,10 @@ async function cleanupE2eData() {
     await prisma.ingrediente.deleteMany({ where: { nombre: { startsWith: 'E2E' } } });
 
     // Delete user last (after all references)
-    if (e2eUserId) {
-      await prisma.refreshToken.deleteMany({ where: { usuarioId: e2eUserId } });
-      await prisma.emailVerificacion.deleteMany({ where: { usuarioId: e2eUserId } });
-      await prisma.usuario.delete({ where: { id: e2eUserId } });
+    if (e2eUserIds.length > 0) {
+      await prisma.refreshToken.deleteMany({ where: { usuarioId: { in: e2eUserIds } } });
+      await prisma.emailVerificacion.deleteMany({ where: { usuarioId: { in: e2eUserIds } } });
+      await prisma.usuario.deleteMany({ where: { id: { in: e2eUserIds } } });
     }
 
     console.log('[E2E Setup] Cleanup complete');

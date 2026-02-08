@@ -33,9 +33,12 @@ export default function DeliveryPedidos() {
 
   const cargarPedidos = useCallback(async () => {
     const response = await api.get('/pedidos/delivery', { skipToast: true })
-    setPedidos(response.data)
+    const pedidosOrdenados = [...response.data].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    )
+    setPedidos(pedidosOrdenados)
     setLoadError(null)
-    return response.data
+    return pedidosOrdenados
   }, [])
 
   const handleLoadError = useCallback((error) => {
@@ -99,6 +102,20 @@ export default function DeliveryPedidos() {
     )
   }
 
+  const getTiempoMinutos = (fecha) => Math.max(0, Math.floor((Date.now() - new Date(fecha)) / 60000))
+
+  const getSlaEstado = (minutos) => {
+    if (minutos >= 40) return 'CRITICO'
+    if (minutos >= 20) return 'ATENCION'
+    return 'OK'
+  }
+
+  const getSlaBadgeClass = (sla) => {
+    if (sla === 'CRITICO') return 'badge-error'
+    if (sla === 'ATENCION') return 'badge-warning'
+    return 'badge-success'
+  }
+
   return (
     <div>
       {loadError && pedidos.length > 0 && (
@@ -135,7 +152,11 @@ export default function DeliveryPedidos() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {pedidos.map((pedido) => (
-            <div key={pedido.id} className="card">
+            <div
+              key={pedido.id}
+              className="card"
+              data-testid={`delivery-order-card-${pedido.id}`}
+            >
               {/* Header */}
               <div className="flex items-center justify-between mb-4">
                 <span className="text-lg font-bold text-text-primary">
@@ -143,6 +164,12 @@ export default function DeliveryPedidos() {
                 </span>
                 <span className={`badge ${estadoBadge[pedido.estado]}`}>
                   {estadoLabel[pedido.estado]}
+                </span>
+              </div>
+
+              <div className="mb-3">
+                <span className={`badge ${getSlaBadgeClass(getSlaEstado(getTiempoMinutos(pedido.createdAt)))}`}>
+                  SLA {getSlaEstado(getTiempoMinutos(pedido.createdAt))}
                 </span>
               </div>
 
@@ -208,6 +235,7 @@ export default function DeliveryPedidos() {
                   onClick={() => marcarEntregado(pedido.id)}
                   disabled={actualizando === pedido.id}
                   className="btn btn-success w-full flex items-center justify-center gap-2"
+                  data-testid={`delivery-mark-delivered-${pedido.id}`}
                 >
                   {actualizando === pedido.id ? (
                     <div className="spinner" />

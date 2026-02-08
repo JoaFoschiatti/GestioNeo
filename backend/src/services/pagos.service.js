@@ -1,11 +1,45 @@
 const { createHttpError } = require('../utils/http-error');
-const { toNumber, sumMoney, subtractMoney, roundMoney } = require('../utils/decimal');
+const { toNumber, sumMoney, subtractMoney } = require('../utils/decimal');
 
 const registrarPago = async (prisma, payload) => {
-  const { pedidoId, monto, metodo, referencia, comprobante } = payload;
+  const { pedidoId, monto, metodo, referencia, comprobante, idempotencyKey } = payload;
 
   // Usar nivel de aislamiento serializable para prevenir race conditions en pagos concurrentes
   const result = await prisma.$transaction(async (tx) => {
+    if (idempotencyKey) {
+      const pagoExistentePorKey = await tx.pago.findUnique({
+        where: { idempotencyKey }
+      });
+
+      if (pagoExistentePorKey) {
+        if (pagoExistentePorKey.pedidoId !== pedidoId) {
+          throw createHttpError.badRequest('Idempotency key ya utilizada para otro pedido');
+        }
+
+        const pedidoExistente = await tx.pedido.findUnique({
+          where: { id: pedidoId },
+          include: { pagos: true, mesa: true }
+        });
+
+        if (!pedidoExistente) {
+          throw createHttpError.notFound('Pedido no encontrado');
+        }
+
+        const pagosAprobadosExistentes = pedidoExistente.pagos.filter(p => p.estado === 'APROBADO');
+        const totalPagadoExistente = sumMoney(...pagosAprobadosExistentes.map(p => p.monto));
+        const pendienteExistente = Math.max(0, subtractMoney(pedidoExistente.total, totalPagadoExistente));
+
+        return {
+          pago: pagoExistentePorKey,
+          pedido: pedidoExistente,
+          totalPagado: totalPagadoExistente,
+          pendiente: pendienteExistente,
+          esperandoTransferencia: pagoExistentePorKey.metodo === 'TRANSFERENCIA' && pagoExistentePorKey.estado === 'PENDIENTE',
+          idempotentReplay: true
+        };
+      }
+    }
+
     const pedido = await tx.pedido.findUnique({
       where: { id: pedidoId },
       include: { pagos: true, mesa: true }
@@ -40,7 +74,8 @@ const registrarPago = async (prisma, payload) => {
         metodo,
         referencia: esTransferencia ? `ESPERANDO-TRANSF-${pedidoId}` : referencia,
         comprobante,
-        estado: estadoPago
+        estado: estadoPago,
+        idempotencyKey: idempotencyKey || undefined
       }
     });
 
@@ -72,7 +107,8 @@ const registrarPago = async (prisma, payload) => {
       pedido: pedidoActualizado,
       totalPagado: nuevoTotalPagado,
       pendiente: Math.max(0, subtractMoney(pedidoActualizado?.total || 0, nuevoTotalPagado)),
-      esperandoTransferencia: esTransferencia
+      esperandoTransferencia: esTransferencia,
+      idempotentReplay: false
     };
   }, {
     isolationLevel: 'Serializable'

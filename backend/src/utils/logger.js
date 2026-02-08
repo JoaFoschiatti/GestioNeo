@@ -93,7 +93,7 @@ const logger = winston.createLogger({
  * @param {Object} [meta] - Additional metadata
  *
  * @example
- * logger.info('User logged in', { userId: 123, tenant: 'restaurant-1' });
+ * logger.info('User logged in', { userId: 123, restaurant: 'principal' });
  */
 
 /**

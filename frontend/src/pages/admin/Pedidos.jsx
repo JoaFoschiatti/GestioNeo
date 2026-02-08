@@ -6,6 +6,7 @@ import { EyeIcon, PrinterIcon, CurrencyDollarIcon, PlusIcon, BuildingLibraryIcon
 import useEventSource from '../../hooks/useEventSource'
 import NuevoPedidoModal from '../../components/pedidos/NuevoPedidoModal'
 import useAsync from '../../hooks/useAsync'
+import { canAccessCapability } from '../../config/permissions'
 
 const estadoBadges = {
   PENDIENTE: 'badge-warning',
@@ -19,7 +20,8 @@ const estadoBadges = {
 export default function Pedidos() {
   const { usuario } = useAuth()
   const esSoloMozo = usuario?.rol === 'MOZO'
-  const puedeCrearPedido = ['ADMIN', 'CAJERO'].includes(usuario?.rol)
+  const puedeCrearPedido = canAccessCapability(usuario?.rol, 'createManualOrder')
+  const puedeRegistrarPago = canAccessCapability(usuario?.rol, 'registerPayment')
 
   const [pedidos, setPedidos] = useState([])
   const [filtroEstado, setFiltroEstado] = useState('')
@@ -27,6 +29,8 @@ export default function Pedidos() {
   const [pedidoSeleccionado, setPedidoSeleccionado] = useState(null)
   const [showPagoModal, setShowPagoModal] = useState(false)
   const [pagoForm, setPagoForm] = useState({ monto: '', metodo: 'EFECTIVO', referencia: '' })
+  const [registrandoPago, setRegistrandoPago] = useState(false)
+  const [pagoIdempotencyKey, setPagoIdempotencyKey] = useState(null)
   const [showNuevoPedidoModal, setShowNuevoPedidoModal] = useState(false)
   const [datosBancarios, setDatosBancarios] = useState(null)
 
@@ -116,24 +120,40 @@ export default function Pedidos() {
     const totalPagado = pedido.pagos?.reduce((sum, p) => sum + parseFloat(p.monto), 0) || 0
     const pendiente = parseFloat(pedido.total) - totalPagado
     setPagoForm({ monto: pendiente.toFixed(2), metodo: 'EFECTIVO', referencia: '' })
+    setPagoIdempotencyKey(
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `pay-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    )
     setShowPagoModal(true)
   }
 
   const registrarPago = async (e) => {
     e.preventDefault()
+    if (registrandoPago || !pedidoSeleccionado?.id) return
+
+    setRegistrandoPago(true)
     try {
-      await api.post('/pagos', {
+      const response = await api.post('/pagos', {
         pedidoId: pedidoSeleccionado.id,
         monto: parseFloat(pagoForm.monto),
         metodo: pagoForm.metodo,
-        referencia: pagoForm.referencia || null
+        referencia: pagoForm.referencia || null,
+        idempotencyKey: pagoIdempotencyKey || undefined
       })
-      toast.success('Pago registrado')
+      if (response.data?.idempotentReplay) {
+        toast.success('Pago ya registrado previamente')
+      } else {
+        toast.success(response.data?.message || 'Pago registrado')
+      }
       setShowPagoModal(false)
+      setPagoIdempotencyKey(null)
       cargarPedidosAsync()
         .catch(() => {})
     } catch (error) {
       console.error('Error:', error)
+    } finally {
+      setRegistrandoPago(false)
     }
   }
 
@@ -218,6 +238,7 @@ export default function Pedidos() {
             <button
               onClick={() => setShowNuevoPedidoModal(true)}
               className="btn btn-primary flex items-center gap-2"
+              data-testid="manual-order-open"
             >
               <PlusIcon className="w-5 h-5" />
               Nuevo Pedido
@@ -287,12 +308,13 @@ export default function Pedidos() {
                   >
                     <PrinterIcon className="w-5 h-5" />
                   </button>
-                  {pedido.estado !== 'COBRADO' && pedido.estado !== 'CANCELADO' && !esSoloMozo && (
+                  {pedido.estado !== 'COBRADO' && pedido.estado !== 'CANCELADO' && !esSoloMozo && puedeRegistrarPago && (
                     <button
                       onClick={() => abrirPago(pedido)}
                       type="button"
                       aria-label={`Registrar pago del pedido #${pedido.id}`}
                       className="text-success-500 hover:text-success-600 transition-colors"
+                      data-testid={`register-payment-open-${pedido.id}`}
                     >
                       <CurrencyDollarIcon className="w-5 h-5" />
                     </button>
@@ -401,6 +423,7 @@ export default function Pedidos() {
                   className="input"
                   value={pagoForm.monto}
                   onChange={(e) => setPagoForm({ ...pagoForm, monto: e.target.value })}
+                  disabled={registrandoPago}
                   required
                 />
               </div>
@@ -411,6 +434,7 @@ export default function Pedidos() {
                   className="input"
                   value={pagoForm.metodo}
                   onChange={(e) => setPagoForm({ ...pagoForm, metodo: e.target.value })}
+                  disabled={registrandoPago}
                 >
                   <option value="EFECTIVO">Efectivo</option>
                   <option value="MERCADOPAGO">MercadoPago</option>
@@ -496,15 +520,34 @@ export default function Pedidos() {
                     value={pagoForm.referencia}
                     onChange={(e) => setPagoForm({ ...pagoForm, referencia: e.target.value })}
                     placeholder="Numero de transaccion"
+                    disabled={registrandoPago}
                   />
                 </div>
               )}
               <div className="modal-footer">
-                <button type="button" onClick={() => setShowPagoModal(false)} className="btn btn-secondary flex-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (registrandoPago) return
+                    setShowPagoModal(false)
+                    setPagoIdempotencyKey(null)
+                  }}
+                  className="btn btn-secondary flex-1"
+                  disabled={registrandoPago}
+                >
                   Cancelar
                 </button>
-                <button type="submit" className="btn btn-success flex-1">
-                  {pagoForm.metodo === 'TRANSFERENCIA' ? 'Registrar (Esperar Transferencia)' : 'Registrar Pago'}
+                <button
+                  type="submit"
+                  className="btn btn-success flex-1"
+                  disabled={registrandoPago}
+                  data-testid="register-payment-submit"
+                >
+                  {registrandoPago
+                    ? 'Registrando...'
+                    : pagoForm.metodo === 'TRANSFERENCIA'
+                      ? 'Registrar (Esperar Transferencia)'
+                      : 'Registrar Pago'}
                 </button>
               </div>
             </form>
@@ -518,7 +561,7 @@ export default function Pedidos() {
         onClose={() => setShowNuevoPedidoModal(false)}
         onSuccess={() => {
           setShowNuevoPedidoModal(false)
-          cargarPedidos()
+          cargarPedidosAsync().catch(() => {})
         }}
       />
     </div>

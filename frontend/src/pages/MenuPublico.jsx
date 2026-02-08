@@ -199,8 +199,12 @@ export default function MenuPublico() {
       try {
         const data = JSON.parse(pedidoGuardado)
         // Si tiene menos de 30 minutos, mostrar opcion de verificar
-        if (Date.now() - data.timestamp < 30 * 60 * 1000) {
-          setPedidoPendienteMP(data.pedido)
+        if (
+          Date.now() - data.timestamp < 30 * 60 * 1000 &&
+          data.pedido?.id &&
+          data.accessToken
+        ) {
+          setPedidoPendienteMP({ ...data.pedido, accessToken: data.accessToken })
         } else {
           localStorage.removeItem('mp_pedido_pendiente')
         }
@@ -214,6 +218,7 @@ export default function MenuPublico() {
   useEffect(() => {
     const pagoResult = searchParams.get('pago')
     const pedidoId = searchParams.get('pedido')
+    const tokenFromUrl = searchParams.get('token')
 
     if (!pagoResult || !pedidoId) return
     let cancelled = false
@@ -228,13 +233,35 @@ export default function MenuPublico() {
       setVerificandoPago(true)
       setTiempoEspera(0)
 
+      let accessToken = tokenFromUrl
+      if (!accessToken) {
+        const pendienteGuardado = localStorage.getItem('mp_pedido_pendiente')
+        if (pendienteGuardado) {
+          try {
+            const data = JSON.parse(pendienteGuardado)
+            if (String(data?.pedido?.id) === String(pedidoId) && data?.accessToken) {
+              accessToken = data.accessToken
+            }
+          } catch (_error) {
+            // Ignorar parse errors
+          }
+        }
+      }
+
+      if (!accessToken) {
+        setVerificandoPago(false)
+        setPageError('No pudimos validar el acceso al pedido. Solicita un nuevo pedido desde el menú.')
+        navigate('/menu', { replace: true })
+        return
+      }
+
       let intentos = 0
       const maxIntentos = 20 // 60 segundos (20 intentos * 3 segundos)
 
       const verificarPago = async () => {
         try {
           const pedido = await fetchJson(
-            `${API_URL}/publico/pedido/${pedidoId}`,
+            `${API_URL}/publico/pedido/${pedidoId}?token=${encodeURIComponent(accessToken)}`,
             {},
             'Error al verificar el pago'
           )
@@ -243,6 +270,7 @@ export default function MenuPublico() {
           if (pedido.estadoPago === 'APROBADO') {
             setVerificandoPago(false)
             setPedidoExitoso({ ...pedido, pagoAprobado: true })
+            localStorage.removeItem('mp_pedido_pendiente')
             // Limpiar URL params
             navigate('/menu', { replace: true })
             return true
@@ -272,6 +300,7 @@ export default function MenuPublico() {
             intervalId = null
             if (!aprobado && intentos >= maxIntentos) {
               setVerificandoPago(false)
+              localStorage.removeItem('mp_pedido_pendiente')
               setPageError(
                 'No pudimos confirmar tu pago. Si ya pagaste, por favor contacta al local. Tu numero de pedido es: #' +
                   pedidoId
@@ -302,7 +331,7 @@ export default function MenuPublico() {
     const verificarPago = async () => {
       try {
         const pedido = await fetchJson(
-          `${API_URL}/publico/pedido/${pedidoPendienteMP.id}`,
+          `${API_URL}/publico/pedido/${pedidoPendienteMP.id}?token=${encodeURIComponent(pedidoPendienteMP.accessToken)}`,
           {},
           'Error al verificar el pago'
         )
@@ -470,11 +499,14 @@ export default function MenuPublico() {
 
       // Si es MercadoPago, redirigir segun dispositivo
       if (metodoPago === 'MERCADOPAGO' && data.initPoint) {
+        if (!data.publicAccessToken) {
+          throw new Error('No se pudo crear el token de acceso del pedido')
+        }
+
         // Guardar estado del pedido para recuperarlo al volver
         const estadoPedido = {
-          pedidoId: data.pedido.id,
           pedido: data.pedido,
-          total: data.pedido.total,
+          accessToken: data.publicAccessToken,
           timestamp: Date.now()
         }
         localStorage.setItem('mp_pedido_pendiente', JSON.stringify(estadoPedido))
@@ -494,7 +526,7 @@ export default function MenuPublico() {
             window.location.href = data.initPoint
           } else {
             // Mostrar pantalla de "Pago en proceso"
-            setPedidoPendienteMP(data.pedido)
+            setPedidoPendienteMP({ ...data.pedido, accessToken: data.publicAccessToken })
             setShowCheckout(false)
           }
         }

@@ -10,8 +10,7 @@ import {
   XCircleIcon,
   BanknotesIcon,
   BuildingStorefrontIcon,
-  LinkIcon,
-  ExclamationTriangleIcon
+  LinkIcon
 } from '@heroicons/react/24/outline'
 import MercadoPagoConfig from '../../components/configuracion/MercadoPagoConfig'
 import useTimeout from '../../hooks/useTimeout'
@@ -19,9 +18,8 @@ import useAsync from '../../hooks/useAsync'
 import { BACKEND_URL } from '../../config/constants'
 
 export default function Configuracion() {
-  // Estado del tenant (datos del negocio)
-  const [tenant, setTenant] = useState({
-    slug: '',
+  // Estado del negocio
+  const [negocio, setNegocio] = useState({
     nombre: '',
     email: '',
     telefono: '',
@@ -29,9 +27,7 @@ export default function Configuracion() {
     colorPrimario: '#3B82F6',
     colorSecundario: '#1E40AF'
   })
-  const [slugError, setSlugError] = useState(null)
-  const [slugChecking, setSlugChecking] = useState(false)
-  const [savingTenant, setSavingTenant] = useState(false)
+  const [savingNegocio, setSavingNegocio] = useState(false)
 
   // Estado de configuracion
   const [config, setConfig] = useState({
@@ -59,21 +55,20 @@ export default function Configuracion() {
   }, [setMessageTimeout])
 
   const cargarDatos = useCallback(async () => {
-    // Cargar tenant y configuracion en paralelo
-    const [tenantRes, configRes] = await Promise.all([
-      api.get('/tenant', { skipToast: true }),
+    // Cargar negocio y configuracion en paralelo
+    const [negocioRes, configRes] = await Promise.all([
+      api.get('/configuracion/negocio', { skipToast: true }),
       api.get('/configuracion', { skipToast: true })
     ])
 
-    // Procesar tenant
-    setTenant({
-      slug: tenantRes.data.slug || '',
-      nombre: tenantRes.data.nombre || '',
-      email: tenantRes.data.email || '',
-      telefono: tenantRes.data.telefono || '',
-      direccion: tenantRes.data.direccion || '',
-      colorPrimario: tenantRes.data.colorPrimario || '#3B82F6',
-      colorSecundario: tenantRes.data.colorSecundario || '#1E40AF'
+    // Procesar negocio
+    setNegocio({
+      nombre: negocioRes.data.nombre || '',
+      email: negocioRes.data.email || '',
+      telefono: negocioRes.data.telefono || '',
+      direccion: negocioRes.data.direccion || '',
+      colorPrimario: negocioRes.data.colorPrimario || '#3B82F6',
+      colorSecundario: negocioRes.data.colorSecundario || '#1E40AF'
     })
 
     // Procesar configuracion
@@ -106,76 +101,21 @@ export default function Configuracion() {
       .catch(() => {})
   }, [cargarDatosAsync])
 
-
-  // Funciones de tenant
-  const handleTenantChange = (key, value) => {
-    setTenant(prev => ({ ...prev, [key]: value }))
-    if (key === 'slug') {
-      setSlugError(null)
-    }
+  const handleNegocioChange = (key, value) => {
+    setNegocio(prev => ({ ...prev, [key]: value }))
   }
 
-  const validateSlugFormat = (slug) => {
-    if (!slug || slug.length < 3) return 'El slug debe tener al menos 3 caracteres'
-    if (slug.length > 50) return 'El slug no puede tener mas de 50 caracteres'
-    if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(slug) && slug.length > 2) {
-      return 'Solo minusculas, numeros y guiones (no al inicio ni al final)'
-    }
-    if (/--/.test(slug)) return 'No puede tener guiones consecutivos'
-    return null
-  }
-
-  const checkSlugAvailability = async (slug) => {
-    const formatError = validateSlugFormat(slug)
-    if (formatError) {
-      setSlugError(formatError)
-      return
-    }
-
-    setSlugChecking(true)
+  const guardarNegocio = async () => {
+    setSavingNegocio(true)
     try {
-      const response = await api.get(`/tenant/verificar-slug/${slug}`, { skipToast: true })
-      if (!response.data.disponible) {
-        setSlugError(response.data.error || 'Este slug no esta disponible')
-      } else {
-        setSlugError(null)
-      }
+      const response = await api.put('/configuracion/negocio', negocio, { skipToast: true })
+      setNegocio(prev => ({ ...prev, ...response.data.negocio }))
+      mostrarMensaje('Datos del negocio guardados')
     } catch (error) {
-      console.error('Error al verificar slug:', error)
-    } finally {
-      setSlugChecking(false)
-    }
-  }
-
-  const handleSlugBlur = () => {
-    if (tenant.slug) {
-      checkSlugAvailability(tenant.slug)
-    }
-  }
-
-  const guardarTenant = async () => {
-    // Validar slug
-    const formatError = validateSlugFormat(tenant.slug)
-    if (formatError) {
-      setSlugError(formatError)
-      return
-    }
-
-    setSavingTenant(true)
-    try {
-      const response = await api.put('/tenant', tenant, { skipToast: true })
-      setTenant(prev => ({ ...prev, ...response.data.tenant }))
-
-      if (response.data.slugChanged) {
-        mostrarMensaje('Datos guardados. La URL del menu cambio a: /menu/' + response.data.tenant.slug)
-      } else {
-        mostrarMensaje('Datos del negocio guardados')
-      }
-    } catch (error) {
-      console.error('Error al guardar tenant:', error)
+      console.error('Error al guardar negocio:', error)
       mostrarMensaje(error.response?.data?.error?.message || 'Error al guardar', 'error')
     } finally {
-      setSavingTenant(false)
+      setSavingNegocio(false)
     }
   }
 
@@ -264,7 +204,7 @@ export default function Configuracion() {
         )}
       </div>
 
-      {/* Datos del Negocio (Tenant) */}
+      {/* Datos del Negocio */}
       <div className="card mb-6">
         <h2 className="text-heading-3 mb-4 flex items-center gap-2">
           <BuildingStorefrontIcon className="w-5 h-5" />
@@ -274,79 +214,62 @@ export default function Configuracion() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="label" htmlFor="tenant-nombre">
+              <label className="label" htmlFor="negocio-nombre">
                 Nombre del Negocio *
               </label>
               <input
-                id="tenant-nombre"
+                id="negocio-nombre"
                 type="text"
-                value={tenant.nombre}
-                onChange={(e) => handleTenantChange('nombre', e.target.value)}
+                value={negocio.nombre}
+                onChange={(e) => handleNegocioChange('nombre', e.target.value)}
                 className="input"
                 placeholder="Mi Restaurante"
               />
             </div>
 
-            <div>
-              <label className="label" htmlFor="tenant-slug">
-                URL del Menu (slug) *
-              </label>
-              <div className="flex">
-                <span className="inline-flex items-center px-3 rounded-l-xl border border-r-0 border-border-default bg-surface-hover text-text-tertiary text-sm">
-                  {frontendUrl}/menu/
-                </span>
-                <input
-                  id="tenant-slug"
-                  type="text"
-                  value={tenant.slug}
-                  onChange={(e) => handleTenantChange('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                  onBlur={handleSlugBlur}
-                  className={`input rounded-l-none flex-1 ${slugError ? 'border-error-500 focus:ring-error-500' : ''}`}
-                  placeholder="mi-restaurante"
-                />
+            <div className="bg-info-50 rounded-xl p-4">
+              <div className="flex items-center gap-2 text-info-700">
+                <LinkIcon className="w-5 h-5" />
+                <span className="font-medium">Link del Menú Público</span>
               </div>
-              {slugChecking && (
-                <p className="input-hint">Verificando disponibilidad...</p>
-              )}
-              {slugError && (
-                <p className="text-xs text-error-600 mt-1 flex items-center gap-1">
-                  <ExclamationTriangleIcon className="w-3 h-3" />
-                  {slugError}
-                </p>
-              )}
-              {!slugError && tenant.slug && !slugChecking && (
-                <p className="text-xs text-success-600 mt-1 flex items-center gap-1">
-                  <CheckCircleIcon className="w-3 h-3" />
-                  URL disponible
-                </p>
-              )}
+              <a
+                href={`${frontendUrl}/menu`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-info-600 hover:underline text-sm mt-1 block"
+              >
+                {frontendUrl}/menu
+              </a>
+              <p className="text-xs text-info-600 mt-2">
+                Comparte este link con tus clientes para que vean el menú y hagan pedidos.
+              </p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="label" htmlFor="tenant-email">
+              <label className="label" htmlFor="negocio-email">
                 Email de Contacto
               </label>
               <input
-                id="tenant-email"
+                id="negocio-email"
                 type="email"
-                value={tenant.email}
-                onChange={(e) => handleTenantChange('email', e.target.value)}
+                value={negocio.email}
+                onChange={(e) => handleNegocioChange('email', e.target.value)}
                 className="input"
                 placeholder="contacto@mirestaurante.com"
               />
             </div>
 
             <div>
-              <label className="label" htmlFor="tenant-telefono">
+              <label className="label" htmlFor="negocio-telefono">
                 Telefono
               </label>
               <input
-                id="tenant-telefono"
+                id="negocio-telefono"
                 type="text"
-                value={tenant.telefono}
-                onChange={(e) => handleTenantChange('telefono', e.target.value)}
+                value={negocio.telefono}
+                onChange={(e) => handleNegocioChange('telefono', e.target.value)}
                 className="input"
                 placeholder="+54 11 1234-5678"
               />
@@ -354,14 +277,14 @@ export default function Configuracion() {
           </div>
 
           <div>
-            <label className="label" htmlFor="tenant-direccion">
+            <label className="label" htmlFor="negocio-direccion">
               Direccion
             </label>
             <input
-              id="tenant-direccion"
+              id="negocio-direccion"
               type="text"
-              value={tenant.direccion}
-              onChange={(e) => handleTenantChange('direccion', e.target.value)}
+              value={negocio.direccion}
+              onChange={(e) => handleNegocioChange('direccion', e.target.value)}
               className="input"
               placeholder="Av. Principal 123, Ciudad"
             />
@@ -369,22 +292,22 @@ export default function Configuracion() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label" htmlFor="tenant-color-primario">
+              <label className="label" htmlFor="negocio-color-primario">
                 Color Primario
               </label>
               <div className="flex items-center gap-2">
                 <input
                   type="color"
-                  value={tenant.colorPrimario}
-                  onChange={(e) => handleTenantChange('colorPrimario', e.target.value)}
+                  value={negocio.colorPrimario}
+                  onChange={(e) => handleNegocioChange('colorPrimario', e.target.value)}
                   className="w-12 h-10 rounded border cursor-pointer"
                   aria-label="Seleccionar color primario"
                 />
                 <input
-                  id="tenant-color-primario"
+                  id="negocio-color-primario"
                   type="text"
-                  value={tenant.colorPrimario}
-                  onChange={(e) => handleTenantChange('colorPrimario', e.target.value)}
+                  value={negocio.colorPrimario}
+                  onChange={(e) => handleNegocioChange('colorPrimario', e.target.value)}
                   className="input flex-1"
                   placeholder="#3B82F6"
                 />
@@ -392,22 +315,22 @@ export default function Configuracion() {
             </div>
 
             <div>
-              <label className="label" htmlFor="tenant-color-secundario">
+              <label className="label" htmlFor="negocio-color-secundario">
                 Color Secundario
               </label>
               <div className="flex items-center gap-2">
                 <input
                   type="color"
-                  value={tenant.colorSecundario}
-                  onChange={(e) => handleTenantChange('colorSecundario', e.target.value)}
+                  value={negocio.colorSecundario}
+                  onChange={(e) => handleNegocioChange('colorSecundario', e.target.value)}
                   className="w-12 h-10 rounded border cursor-pointer"
                   aria-label="Seleccionar color secundario"
                 />
                 <input
-                  id="tenant-color-secundario"
+                  id="negocio-color-secundario"
                   type="text"
-                  value={tenant.colorSecundario}
-                  onChange={(e) => handleTenantChange('colorSecundario', e.target.value)}
+                  value={negocio.colorSecundario}
+                  onChange={(e) => handleNegocioChange('colorSecundario', e.target.value)}
                   className="input flex-1"
                   placeholder="#1E40AF"
                 />
@@ -415,32 +338,13 @@ export default function Configuracion() {
             </div>
           </div>
 
-          {/* Link al menu publico */}
-          <div className="bg-info-50 p-4 rounded-xl">
-            <div className="flex items-center gap-2 text-info-700">
-              <LinkIcon className="w-5 h-5" />
-              <span className="font-medium">Link del Menu Publico:</span>
-            </div>
-            <a
-              href={`${frontendUrl}/menu/${tenant.slug}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-info-600 hover:underline text-sm mt-1 block"
-            >
-              {frontendUrl}/menu/{tenant.slug}
-            </a>
-            <p className="text-xs text-info-600 mt-2">
-              Comparte este link con tus clientes para que vean el menu y hagan pedidos
-            </p>
-          </div>
-
           <div className="flex justify-end">
             <button
-              onClick={guardarTenant}
-              disabled={savingTenant || !!slugError}
-              className={`btn btn-primary px-6 ${(savingTenant || !!slugError) ? 'opacity-50 cursor-not-allowed' : ''}`}
+              onClick={guardarNegocio}
+              disabled={savingNegocio}
+              className={`btn btn-primary px-6 ${savingNegocio ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              {savingTenant ? 'Guardando...' : 'Guardar Datos del Negocio'}
+              {savingNegocio ? 'Guardando...' : 'Guardar Datos del Negocio'}
             </button>
           </div>
         </div>

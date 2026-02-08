@@ -5,7 +5,7 @@
  * escanean para ver productos y hacer pedidos desde sus dispositivos.
  *
  * IMPORTANTE: Este servicio NO requiere autenticación JWT.
- * Sistema single-tenant: usa Negocio singleton (ID=1).
+ * Sistema de instancia única: usa Negocio singleton (ID=1).
  *
  * Funcionalidades:
  * - Obtener configuración pública del restaurante
@@ -17,6 +17,7 @@
  * @module publico.service
  */
 
+const crypto = require('crypto');
 const { createHttpError } = require('../utils/http-error');
 const { toNumber, sumMoney, multiplyMoney, subtractMoney } = require('../utils/decimal');
 const { logger } = require('../utils/logger');
@@ -26,6 +27,12 @@ const {
   saveTransaction,
   searchPaymentByReference
 } = require('./mercadopago.service');
+
+const PUBLIC_ORDER_TOKEN_VERSION = 'v1';
+
+const getPublicOrderTokenSecret = () => {
+  return process.env.PUBLIC_ORDER_TOKEN_SECRET || process.env.JWT_SECRET || 'change-this-public-order-secret';
+};
 
 /**
  * Convierte array de configuraciones a objeto map.
@@ -37,6 +44,59 @@ const buildConfigMap = (configs) => {
     configMap[c.clave] = c.valor;
   });
   return configMap;
+};
+
+const signPublicOrderPayload = ({ pedidoId, createdAtIso }) => {
+  const payload = `${pedidoId}:${createdAtIso}`;
+  return crypto
+    .createHmac('sha256', getPublicOrderTokenSecret())
+    .update(payload)
+    .digest('base64url');
+};
+
+const buildPublicOrderAccessToken = (pedido) => {
+  const createdAtIso = new Date(pedido.createdAt).toISOString();
+  const createdAtEncoded = Buffer.from(createdAtIso, 'utf8').toString('base64url');
+  const signature = signPublicOrderPayload({ pedidoId: pedido.id, createdAtIso });
+  return `${PUBLIC_ORDER_TOKEN_VERSION}.${createdAtEncoded}.${signature}`;
+};
+
+const hasValidPublicOrderAccessToken = (pedido, token) => {
+  if (!token || typeof token !== 'string') {
+    return false;
+  }
+
+  const [version, createdAtEncoded, signature] = token.split('.');
+
+  if (version !== PUBLIC_ORDER_TOKEN_VERSION || !createdAtEncoded || !signature) {
+    return false;
+  }
+
+  let tokenCreatedAtIso;
+  try {
+    tokenCreatedAtIso = Buffer.from(createdAtEncoded, 'base64url').toString('utf8');
+  } catch (_error) {
+    return false;
+  }
+
+  const realCreatedAtIso = new Date(pedido.createdAt).toISOString();
+  if (tokenCreatedAtIso !== realCreatedAtIso) {
+    return false;
+  }
+
+  const expectedSignature = signPublicOrderPayload({
+    pedidoId: pedido.id,
+    createdAtIso: tokenCreatedAtIso
+  });
+
+  const provided = Buffer.from(signature);
+  const expected = Buffer.from(expectedSignature);
+
+  if (provided.length !== expected.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(provided, expected);
 };
 
 /**
@@ -150,13 +210,15 @@ const getPublicMenu = async (prisma) => {
  * @param {string} params.negocioNombre - Nombre para el descriptor de pago
  * @param {Array} params.items - Items del pedido
  * @param {number} params.costoEnvio - Costo de envío
+ * @param {string} params.publicAccessToken - Token público para consultar estado del pedido
  *
  * @returns {Object} Datos para MercadoPago createPreference
  */
-const buildPreferenceData = ({ pedidoId, negocioNombre, items, costoEnvio }) => {
+const buildPreferenceData = ({ pedidoId, negocioNombre, items, costoEnvio, publicAccessToken }) => {
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
   const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
   const isLocalhost = frontendUrl.includes('localhost') || frontendUrl.includes('127.0.0.1');
+  const tokenQuery = `token=${encodeURIComponent(publicAccessToken)}`;
 
   const mpItems = items.map(item => ({
     id: item.productoId.toString(),
@@ -179,11 +241,11 @@ const buildPreferenceData = ({ pedidoId, negocioNombre, items, costoEnvio }) => 
   const preferenceData = {
     items: mpItems,
     back_urls: {
-      success: `${frontendUrl}/menu?pago=exito&pedido=${pedidoId}`,
-      failure: `${frontendUrl}/menu?pago=error&pedido=${pedidoId}`,
-      pending: `${frontendUrl}/menu?pago=pendiente&pedido=${pedidoId}`
+      success: `${frontendUrl}/menu?pago=exito&pedido=${pedidoId}&${tokenQuery}`,
+      failure: `${frontendUrl}/menu?pago=error&pedido=${pedidoId}&${tokenQuery}`,
+      pending: `${frontendUrl}/menu?pago=pendiente&pedido=${pedidoId}&${tokenQuery}`
     },
-    external_reference: `1-${pedidoId}`,
+    external_reference: `pedido-${pedidoId}`,
     notification_url: `${backendUrl}/api/pagos/webhook/mercadopago`,
     statement_descriptor: negocioNombre.substring(0, 22).toUpperCase()
   };
@@ -275,6 +337,10 @@ const createPublicOrder = async (prisma, { body }) => {
     throw createHttpError.badRequest('El delivery no está disponible en este momento');
   }
 
+  if (!['EFECTIVO', 'MERCADOPAGO'].includes(metodoPago)) {
+    throw createHttpError.badRequest('Método de pago inválido');
+  }
+
   if (metodoPago === 'EFECTIVO' && !efectivoHabilitado) {
     throw createHttpError.badRequest('El pago en efectivo no está disponible en este momento');
   }
@@ -352,6 +418,7 @@ const createPublicOrder = async (prisma, { body }) => {
       }
     }
   });
+  const publicAccessToken = buildPublicOrderAccessToken(pedido);
 
   let initPoint = null;
 
@@ -362,7 +429,8 @@ const createPublicOrder = async (prisma, { body }) => {
         pedidoId: pedido.id,
         negocioNombre: negocio?.nombre || 'Mi Negocio',
         items: pedido.items,
-        costoEnvio
+        costoEnvio,
+        publicAccessToken
       });
 
       const mpResponse = await createPreference(preferenceData);
@@ -423,6 +491,7 @@ const createPublicOrder = async (prisma, { body }) => {
     costoEnvio,
     total,
     initPoint,
+    publicAccessToken,
     shouldSendEmail,
     events
   };
@@ -446,7 +515,7 @@ const createPublicOrder = async (prisma, { body }) => {
  * @throws {HttpError} 404 - Pedido no encontrado
  * @throws {HttpError} 400 - Pedido ya pagado o MercadoPago no configurado
  */
-const startMercadoPagoPaymentForOrder = async (prisma, { pedidoId }) => {
+const startMercadoPagoPaymentForOrder = async (prisma, { pedidoId, accessToken }) => {
   const pedido = await prisma.pedido.findUnique({
     where: { id: pedidoId },
     include: {
@@ -455,6 +524,10 @@ const startMercadoPagoPaymentForOrder = async (prisma, { pedidoId }) => {
   });
 
   if (!pedido) {
+    throw createHttpError.notFound('Pedido no encontrado');
+  }
+
+  if (!hasValidPublicOrderAccessToken(pedido, accessToken)) {
     throw createHttpError.notFound('Pedido no encontrado');
   }
 
@@ -491,7 +564,8 @@ const startMercadoPagoPaymentForOrder = async (prisma, { pedidoId }) => {
     pedidoId,
     negocioNombre: negocio?.nombre || 'Mi Negocio',
     items: pedido.items,
-    costoEnvio: toNumber(pedido.costoEnvio)
+    costoEnvio: toNumber(pedido.costoEnvio),
+    publicAccessToken: accessToken
   });
 
   let response;
@@ -527,7 +601,8 @@ const startMercadoPagoPaymentForOrder = async (prisma, { pedidoId }) => {
   return {
     preferenceId: response.id,
     initPoint: response.init_point,
-    sandboxInitPoint: response.sandbox_init_point
+    sandboxInitPoint: response.sandbox_init_point,
+    publicAccessToken: accessToken
   };
 };
 
@@ -548,7 +623,7 @@ const startMercadoPagoPaymentForOrder = async (prisma, { pedidoId }) => {
  *
  * @throws {HttpError} 404 - Pedido no encontrado
  */
-const getPublicOrderStatus = async (prisma, { pedidoId }) => {
+const getPublicOrderStatus = async (prisma, { pedidoId, accessToken }) => {
   let pedido = await prisma.pedido.findUnique({
     where: { id: pedidoId },
     include: {
@@ -561,13 +636,17 @@ const getPublicOrderStatus = async (prisma, { pedidoId }) => {
     throw createHttpError.notFound('Pedido no encontrado');
   }
 
+  if (!hasValidPublicOrderAccessToken(pedido, accessToken)) {
+    throw createHttpError.notFound('Pedido no encontrado');
+  }
+
   const events = [];
 
   if (pedido.estadoPago === 'PENDIENTE') {
     const pagoMP = pedido.pagos.find(p => p.metodo === 'MERCADOPAGO' && p.estado === 'PENDIENTE');
 
     if (pagoMP) {
-      const externalReference = `1-${pedidoId}`;
+      const externalReference = `pedido-${pedidoId}`;
       const pagoAprobado = await searchPaymentByReference(externalReference);
 
       if (pagoAprobado) {

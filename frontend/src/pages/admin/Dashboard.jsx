@@ -4,6 +4,8 @@ import api from '../../services/api'
 import toast from 'react-hot-toast'
 import useEventSource from '../../hooks/useEventSource'
 import useAsync from '../../hooks/useAsync'
+import { useAuth } from '../../context/AuthContext'
+import { canAccessRouteByKey } from '../../config/permissions'
 import {
   CurrencyDollarIcon,
   ShoppingCartIcon,
@@ -14,6 +16,7 @@ import {
 } from '@heroicons/react/24/outline'
 
 export default function Dashboard() {
+  const { usuario } = useAuth()
   const [data, setData] = useState(null)
   const [errorMessage, setErrorMessage] = useState(null)
 
@@ -98,13 +101,13 @@ export default function Dashboard() {
       value: data?.pedidosPendientes || 0,
       icon: ClockIcon,
       highlight: data?.pedidosPendientes > 0,
-      link: '/pedidos'
+      link: canAccessRouteByKey(usuario?.rol, 'pedidos') ? '/pedidos' : null
     },
     {
       name: 'Mesas Ocupadas',
       value: `${data?.mesasOcupadas || 0} / ${data?.mesasTotal || 0}`,
       icon: TableCellsIcon,
-      link: '/mozo/mesas'
+      link: canAccessRouteByKey(usuario?.rol, 'mesas') ? '/mesas' : null
     },
     {
       name: 'Alertas de Stock',
@@ -112,7 +115,7 @@ export default function Dashboard() {
       icon: ExclamationTriangleIcon,
       highlight: data?.alertasStock > 0,
       isWarning: data?.alertasStock > 0,
-      link: '/ingredientes'
+      link: canAccessRouteByKey(usuario?.rol, 'ingredientes') ? '/ingredientes' : null
     },
     {
       name: 'Empleados Trabajando',
@@ -121,6 +124,33 @@ export default function Dashboard() {
       link: null
     }
   ]
+
+  const quickAccesses = [
+    {
+      to: '/mozo/nuevo-pedido',
+      routeKey: 'mozoNuevoPedido',
+      icon: ShoppingCartIcon,
+      label: 'Nuevo Pedido'
+    },
+    {
+      to: '/mesas',
+      routeKey: 'mesas',
+      icon: TableCellsIcon,
+      label: 'Ver Mesas'
+    },
+    {
+      to: '/cocina',
+      routeKey: 'cocina',
+      icon: ClockIcon,
+      label: 'Cocina'
+    },
+    {
+      to: '/reportes',
+      routeKey: 'reportes',
+      icon: CurrencyDollarIcon,
+      label: 'Reportes'
+    }
+  ].filter(item => canAccessRouteByKey(usuario?.rol, item.routeKey))
 
   return (
     <div>
@@ -178,36 +208,55 @@ export default function Dashboard() {
       <div className="mt-10">
         <h2 className="text-heading-3 mb-4">Accesos Rapidos</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Link
-            to="/mozo/nuevo-pedido"
-            className="card card-hover text-center py-8"
-          >
-            <ShoppingCartIcon className="w-8 h-8 mx-auto text-primary-500 mb-3" />
-            <p className="font-medium text-text-primary">Nuevo Pedido</p>
-          </Link>
-          <Link
-            to="/mozo/mesas"
-            className="card card-hover text-center py-8"
-          >
-            <TableCellsIcon className="w-8 h-8 mx-auto text-primary-500 mb-3" />
-            <p className="font-medium text-text-primary">Ver Mesas</p>
-          </Link>
-          <Link
-            to="/cocina"
-            className="card card-hover text-center py-8"
-          >
-            <ClockIcon className="w-8 h-8 mx-auto text-primary-500 mb-3" />
-            <p className="font-medium text-text-primary">Cocina</p>
-          </Link>
-          <Link
-            to="/reportes"
-            className="card card-hover text-center py-8"
-          >
-            <CurrencyDollarIcon className="w-8 h-8 mx-auto text-primary-500 mb-3" />
-            <p className="font-medium text-text-primary">Reportes</p>
-          </Link>
+          {quickAccesses.map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              className="card card-hover text-center py-8"
+            >
+              <item.icon className="w-8 h-8 mx-auto text-primary-500 mb-3" />
+              <p className="font-medium text-text-primary">{item.label}</p>
+            </Link>
+          ))}
         </div>
       </div>
+
+      {data?.tiemposPromedio && (
+        <div className="mt-10">
+          <h2 className="text-heading-3 mb-4">Rendimiento Operativo</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="card">
+              <p className="text-sm text-text-tertiary">Prep. promedio</p>
+              <p className="text-2xl font-bold text-text-primary">{data.tiemposPromedio.preparacionMin} min</p>
+            </div>
+            <div className="card">
+              <p className="text-sm text-text-tertiary">Entrega promedio</p>
+              <p className="text-2xl font-bold text-text-primary">{data.tiemposPromedio.entregaMin} min</p>
+            </div>
+            <div className="card">
+              <p className="text-sm text-text-tertiary">Ciclo completo</p>
+              <p className="text-2xl font-bold text-text-primary">{data.tiemposPromedio.cicloCompletoMin} min</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {data?.ventasPorCanalHoy && (
+        <div className="mt-10">
+          <h2 className="text-heading-3 mb-4">Mix por Canal (Hoy)</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {Object.entries(data.ventasPorCanalHoy).map(([canal, resumen]) => (
+              <div key={canal} className="card">
+                <p className="text-sm text-text-tertiary">{canal}</p>
+                <p className="text-xl font-bold text-text-primary">{resumen.cantidad} pedidos</p>
+                <p className="text-sm text-text-secondary">
+                  ${Number(resumen.total || 0).toLocaleString('es-AR')}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

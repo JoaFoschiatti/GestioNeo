@@ -9,6 +9,7 @@ import PublicLayout from './components/layouts/PublicLayout'
 // Componentes (static - needed immediately for routing)
 import RedirectByRole from './components/RedirectByRole'
 import ErrorBoundary from './components/ErrorBoundary'
+import { ROUTE_ACCESS } from './config/permissions'
 
 // Public pages
 const Login = lazy(() => import('./pages/Login'))
@@ -90,109 +91,113 @@ export default function App() {
           }>
             <Route index element={<RedirectByRole />} />
             <Route path="dashboard" element={
-              <ProtectedRoute roles={['ADMIN', 'COCINERO', 'CAJERO']}>
+              <ProtectedRoute roles={ROUTE_ACCESS.dashboard}>
                 <Dashboard />
               </ProtectedRoute>
             } />
 
             {/* Admin */}
             <Route path="empleados" element={
-              <ProtectedRoute roles={['ADMIN']}>
+              <ProtectedRoute roles={ROUTE_ACCESS.empleados}>
                 <Empleados />
               </ProtectedRoute>
             } />
             <Route path="mesas" element={
-              <ProtectedRoute roles={['ADMIN', 'MOZO']}>
+              <ProtectedRoute roles={ROUTE_ACCESS.mesas}>
                 <MesasUnificado />
               </ProtectedRoute>
             } />
             {/* Redirects antiguos a /mesas */}
             <Route path="plano-mesas" element={<Navigate to="/mesas" replace />} />
             <Route path="categorias" element={
-              <ProtectedRoute roles={['ADMIN']}>
+              <ProtectedRoute roles={ROUTE_ACCESS.categorias}>
                 <Categorias />
               </ProtectedRoute>
             } />
             <Route path="productos" element={
-              <ProtectedRoute roles={['ADMIN']}>
+              <ProtectedRoute roles={ROUTE_ACCESS.productos}>
                 <Productos />
               </ProtectedRoute>
             } />
             <Route path="ingredientes" element={
-              <ProtectedRoute roles={['ADMIN']}>
+              <ProtectedRoute roles={ROUTE_ACCESS.ingredientes}>
                 <Ingredientes />
               </ProtectedRoute>
             } />
             <Route path="liquidaciones" element={
-              <ProtectedRoute roles={['ADMIN']}>
+              <ProtectedRoute roles={ROUTE_ACCESS.liquidaciones}>
                 <Liquidaciones />
               </ProtectedRoute>
             } />
             <Route path="reportes" element={
-              <ProtectedRoute roles={['ADMIN', 'CAJERO']}>
+              <ProtectedRoute roles={ROUTE_ACCESS.reportes}>
                 <Reportes />
               </ProtectedRoute>
             } />
             <Route path="configuracion" element={
-              <ProtectedRoute roles={['ADMIN']}>
+              <ProtectedRoute roles={ROUTE_ACCESS.configuracion}>
                 <Configuracion />
               </ProtectedRoute>
             } />
             <Route path="cierre-caja" element={
-              <ProtectedRoute roles={['ADMIN', 'CAJERO']}>
+              <ProtectedRoute roles={ROUTE_ACCESS.cierreCaja}>
                 <CierreCaja />
               </ProtectedRoute>
             } />
             <Route path="reservas" element={
-              <ProtectedRoute roles={['ADMIN']}>
+              <ProtectedRoute roles={ROUTE_ACCESS.reservas}>
                 <Reservas />
               </ProtectedRoute>
             } />
             <Route path="modificadores" element={
-              <ProtectedRoute roles={['ADMIN']}>
+              <ProtectedRoute roles={ROUTE_ACCESS.modificadores}>
                 <Modificadores />
               </ProtectedRoute>
             } />
             <Route path="transacciones-mp" element={
-              <ProtectedRoute roles={['ADMIN']}>
+              <ProtectedRoute roles={ROUTE_ACCESS.transaccionesMp}>
                 <TransaccionesMercadoPago />
               </ProtectedRoute>
             } />
             <Route path="transferencias" element={
-              <ProtectedRoute roles={['ADMIN', 'CAJERO']}>
+              <ProtectedRoute roles={ROUTE_ACCESS.transferencias}>
                 <Transferencias />
               </ProtectedRoute>
             } />
             <Route path="suscripcion" element={
-              <ProtectedRoute roles={['ADMIN']}>
+              <ProtectedRoute roles={ROUTE_ACCESS.suscripcion}>
                 <Suscripcion />
               </ProtectedRoute>
             } />
-            <Route path="pedidos" element={<Pedidos />} />
+            <Route path="pedidos" element={
+              <ProtectedRoute roles={ROUTE_ACCESS.pedidos}>
+                <Pedidos />
+              </ProtectedRoute>
+            } />
 
             {/* Mozo */}
             <Route path="mozo/mesas" element={<Navigate to="/mesas" replace />} />
             <Route path="mozo/nuevo-pedido" element={
-              <ProtectedRoute roles={['ADMIN', 'MOZO']}>
+              <ProtectedRoute roles={ROUTE_ACCESS.mozoNuevoPedido}>
                 <NuevoPedido />
               </ProtectedRoute>
             } />
             <Route path="mozo/nuevo-pedido/:mesaId" element={
-              <ProtectedRoute roles={['ADMIN', 'MOZO']}>
+              <ProtectedRoute roles={ROUTE_ACCESS.mozoNuevoPedido}>
                 <NuevoPedido />
               </ProtectedRoute>
             } />
 
             {/* Cocina */}
             <Route path="cocina" element={
-              <ProtectedRoute roles={['ADMIN', 'COCINERO']}>
+              <ProtectedRoute roles={ROUTE_ACCESS.cocina}>
                 <Cocina />
               </ProtectedRoute>
             } />
 
             {/* Delivery */}
             <Route path="delivery/pedidos" element={
-              <ProtectedRoute roles={['ADMIN', 'DELIVERY']}>
+              <ProtectedRoute roles={ROUTE_ACCESS.deliveryPedidos}>
                 <DeliveryPedidos />
               </ProtectedRoute>
             } />

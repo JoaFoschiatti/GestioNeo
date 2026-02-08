@@ -1,9 +1,6 @@
 /**
- * Servicio de Suscripciones SaaS
- * Maneja las suscripciones de tenants usando MercadoPago Preapproval
- *
- * IMPORTANTE: Las suscripciones usan las credenciales del SaaS (no de cada tenant)
- * porque los pagos van al dueño del SaaS, no a cada restaurante.
+ * Servicio de Suscripciones.
+ * Usa una suscripción singleton (id=1) para el único negocio del sistema.
  */
 
 const { MercadoPagoConfig, PreApproval } = require('mercadopago');
@@ -11,16 +8,15 @@ const { prisma } = require('../db/prisma');
 const { createHttpError } = require('../utils/http-error');
 const { subscriptionCache } = require('../utils/cache');
 
-const SUBSCRIPTION_PRICE = parseInt(process.env.SUBSCRIPTION_PRICE_ARS || '37000');
+const SUBSCRIPTION_PRICE = parseInt(process.env.SUBSCRIPTION_PRICE_ARS || '37000', 10);
+const SUSCRIPCION_ID = 1;
+const NEGOCIO_ID = 1;
 
-/**
- * Obtiene el cliente de MercadoPago del SaaS
- * @returns {MercadoPagoConfig|null}
- */
 function getSaaSMercadoPagoClient() {
   const accessToken = process.env.MP_SAAS_ACCESS_TOKEN;
 
   if (!accessToken) {
+    // eslint-disable-next-line no-console
     console.warn('MP_SAAS_ACCESS_TOKEN no configurado');
     return null;
   }
@@ -28,47 +24,51 @@ function getSaaSMercadoPagoClient() {
   return new MercadoPagoConfig({ accessToken });
 }
 
-/**
- * Crea una suscripción en MercadoPago para un tenant
- * @param {number} tenantId - ID del tenant
- * @returns {Promise<object>} - { initPoint, suscripcion }
- */
-async function crearSuscripcion(tenantId) {
+async function getNegocioBasico() {
+  return prisma.negocio.findUnique({
+    where: { id: NEGOCIO_ID },
+    select: { id: true, nombre: true, email: true }
+  });
+}
+
+async function crearSuscripcion() {
   const client = getSaaSMercadoPagoClient();
 
   if (!client) {
     throw createHttpError.serviceUnavailable('El servicio de suscripciones no está configurado. Contacta al administrador.');
   }
 
-  // Obtener datos del tenant
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: tenantId },
-    select: { id: true, nombre: true, email: true, slug: true }
-  });
-
-  if (!tenant) {
-    throw createHttpError.notFound('Restaurante no encontrado');
+  const negocio = await getNegocioBasico();
+  if (!negocio) {
+    throw createHttpError.notFound('Negocio no encontrado');
   }
 
-  // Verificar si ya tiene suscripción activa
+  if (!negocio.email) {
+    throw createHttpError.badRequest('El negocio no tiene email configurado para suscripción');
+  }
+
   const suscripcionExistente = await prisma.suscripcion.findUnique({
-    where: { tenantId }
+    where: { id: SUSCRIPCION_ID }
   });
 
-  if (suscripcionExistente?.estado === 'ACTIVA') {
+  const ahora = new Date();
+  const suscripcionActiva = suscripcionExistente &&
+    suscripcionExistente.estado === 'ACTIVA' &&
+    suscripcionExistente.fechaVencimiento &&
+    suscripcionExistente.fechaVencimiento > ahora;
+
+  if (suscripcionActiva) {
     throw createHttpError.conflict('Ya tienes una suscripción activa');
   }
 
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-  const backUrl = `${frontendUrl}/${tenant.slug}/configuracion?tab=suscripcion`;
+  const backUrl = `${frontendUrl}/suscripcion`;
 
-  // Crear preapproval en MercadoPago
   const preapproval = new PreApproval(client);
-
   const preapprovalData = {
-    reason: `Suscripción Comanda - ${tenant.nombre}`,
-    external_reference: `comanda-tenant-${tenantId}`,
-    payer_email: tenant.email,
+    reason: `Suscripción Comanda - ${negocio.nombre}`,
+    external_reference: `comanda-suscripcion-${SUSCRIPCION_ID}`,
+    payer_email: negocio.email,
     auto_recurring: {
       frequency: 1,
       frequency_type: 'months',
@@ -76,14 +76,13 @@ async function crearSuscripcion(tenantId) {
       currency_id: 'ARS'
     },
     back_url: backUrl,
-    status: 'pending' // Usuario debe autorizar en checkout
+    status: 'pending'
   };
 
   const response = await preapproval.create({ body: preapprovalData });
 
-  // Crear o actualizar suscripción en BD
   const suscripcion = await prisma.suscripcion.upsert({
-    where: { tenantId },
+    where: { id: SUSCRIPCION_ID },
     update: {
       mpPreapprovalId: response.id,
       estado: 'PENDIENTE',
@@ -91,7 +90,7 @@ async function crearSuscripcion(tenantId) {
       updatedAt: new Date()
     },
     create: {
-      tenantId,
+      id: SUSCRIPCION_ID,
       mpPreapprovalId: response.id,
       estado: 'PENDIENTE',
       precioMensual: SUBSCRIPTION_PRICE
@@ -107,14 +106,9 @@ async function crearSuscripcion(tenantId) {
   };
 }
 
-/**
- * Obtiene el estado de suscripción de un tenant
- * @param {number} tenantId - ID del tenant
- * @returns {Promise<object>}
- */
-async function obtenerEstado(tenantId) {
+async function obtenerEstado() {
   const suscripcion = await prisma.suscripcion.findUnique({
-    where: { tenantId },
+    where: { id: SUSCRIPCION_ID },
     include: {
       pagos: {
         orderBy: { createdAt: 'desc' },
@@ -154,14 +148,9 @@ async function obtenerEstado(tenantId) {
   };
 }
 
-/**
- * Cancela una suscripción
- * @param {number} tenantId - ID del tenant
- * @returns {Promise<object>}
- */
-async function cancelarSuscripcion(tenantId) {
+async function cancelarSuscripcion() {
   const suscripcion = await prisma.suscripcion.findUnique({
-    where: { tenantId }
+    where: { id: SUSCRIPCION_ID }
   });
 
   if (!suscripcion) {
@@ -172,7 +161,6 @@ async function cancelarSuscripcion(tenantId) {
     throw createHttpError.conflict('La suscripción ya está cancelada');
   }
 
-  // Cancelar en MercadoPago si tiene ID
   if (suscripcion.mpPreapprovalId) {
     const client = getSaaSMercadoPagoClient();
     if (client) {
@@ -183,15 +171,14 @@ async function cancelarSuscripcion(tenantId) {
           body: { status: 'cancelled' }
         });
       } catch (error) {
+        // eslint-disable-next-line no-console
         console.error('Error cancelando en MercadoPago:', error);
-        // Continuar con la cancelación local
       }
     }
   }
 
-  // Actualizar en BD
   const suscripcionActualizada = await prisma.suscripcion.update({
-    where: { tenantId },
+    where: { id: SUSCRIPCION_ID },
     data: {
       estado: 'CANCELADA',
       updatedAt: new Date()
@@ -203,17 +190,11 @@ async function cancelarSuscripcion(tenantId) {
   return suscripcionActualizada;
 }
 
-/**
- * Obtiene el historial de pagos de suscripción
- * @param {number} tenantId - ID del tenant
- * @param {object} options - Opciones de paginación
- * @returns {Promise<object>}
- */
-async function obtenerHistorialPagos(tenantId, options = {}) {
+async function obtenerHistorialPagos(options = {}) {
   const { page = 1, limit = 20 } = options;
 
   const suscripcion = await prisma.suscripcion.findUnique({
-    where: { tenantId },
+    where: { id: SUSCRIPCION_ID },
     select: { id: true }
   });
 
@@ -229,7 +210,7 @@ async function obtenerHistorialPagos(tenantId, options = {}) {
       where: { suscripcionId: suscripcion.id },
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * limit,
-      take: parseInt(limit)
+      take: parseInt(limit, 10)
     }),
     prisma.pagoSuscripcion.count({
       where: { suscripcionId: suscripcion.id }
@@ -239,24 +220,19 @@ async function obtenerHistorialPagos(tenantId, options = {}) {
   return {
     pagos,
     pagination: {
-      page: parseInt(page),
-      limit: parseInt(limit),
+      page: parseInt(page, 10),
+      limit: parseInt(limit, 10),
       total,
       pages: Math.ceil(total / limit)
     }
   };
 }
 
-/**
- * Procesa webhook de suscripción de MercadoPago
- * @param {string} type - Tipo de notificación
- * @param {string} dataId - ID del recurso
- * @returns {Promise<void>}
- */
 async function procesarWebhook(type, dataId) {
   const client = getSaaSMercadoPagoClient();
 
   if (!client) {
+    // eslint-disable-next-line no-console
     console.error('Webhook de suscripción: MP no configurado');
     return;
   }
@@ -268,64 +244,31 @@ async function procesarWebhook(type, dataId) {
   }
 }
 
-/**
- * Procesa notificación de cambio de estado de suscripción
- */
 async function procesarPreapprovalWebhook(client, preapprovalId) {
   const preapproval = new PreApproval(client);
   const data = await preapproval.get({ id: preapprovalId });
 
-  // Buscar suscripción por mpPreapprovalId
-  const suscripcion = await prisma.suscripcion.findFirst({
-    where: { mpPreapprovalId: preapprovalId }
-  });
-
-  if (!suscripcion) {
-    // Intentar buscar por external_reference
-    const externalRef = data.external_reference;
-    if (externalRef?.startsWith('comanda-tenant-')) {
-      const tenantId = parseInt(externalRef.replace('comanda-tenant-', ''));
-      if (tenantId) {
-        await prisma.suscripcion.upsert({
-          where: { tenantId },
-          update: {
-            mpPreapprovalId: preapprovalId,
-            mpPayerId: data.payer_id?.toString(),
-            estado: mapearEstadoMP(data.status),
-            updatedAt: new Date()
-          },
-          create: {
-            tenantId,
-            mpPreapprovalId: preapprovalId,
-            mpPayerId: data.payer_id?.toString(),
-            estado: mapearEstadoMP(data.status),
-            precioMensual: SUBSCRIPTION_PRICE
-          }
-        });
-        subscriptionCache.clear();
-      }
-    }
-    return;
-  }
-
-  // Actualizar estado
-  await prisma.suscripcion.update({
-    where: { id: suscripcion.id },
-    data: {
-      mpPayerId: data.payer_id?.toString(),
+  await prisma.suscripcion.upsert({
+    where: { id: SUSCRIPCION_ID },
+    update: {
+      mpPreapprovalId: preapprovalId,
+      mpPayerId: data.payer_id?.toString() || null,
       estado: mapearEstadoMP(data.status),
       updatedAt: new Date()
+    },
+    create: {
+      id: SUSCRIPCION_ID,
+      mpPreapprovalId: preapprovalId,
+      mpPayerId: data.payer_id?.toString() || null,
+      estado: mapearEstadoMP(data.status),
+      precioMensual: SUBSCRIPTION_PRICE
     }
   });
 
   subscriptionCache.clear();
 }
 
-/**
- * Procesa notificación de pago de cuota
- */
 async function procesarPagoWebhook(client, paymentId) {
-  // Obtener información del pago autorizado
   const response = await fetch(`https://api.mercadopago.com/authorized_payments/${paymentId}`, {
     headers: {
       'Authorization': `Bearer ${process.env.MP_SAAS_ACCESS_TOKEN}`
@@ -333,19 +276,20 @@ async function procesarPagoWebhook(client, paymentId) {
   });
 
   if (!response.ok) {
+    // eslint-disable-next-line no-console
     console.error('Error obteniendo pago autorizado:', await response.text());
     return;
   }
 
   const data = await response.json();
 
-  // Buscar suscripción por preapproval_id
-  const suscripcion = await prisma.suscripcion.findFirst({
-    where: { mpPreapprovalId: data.preapproval_id }
+  const suscripcion = await prisma.suscripcion.findUnique({
+    where: { id: SUSCRIPCION_ID }
   });
 
   if (!suscripcion) {
-    console.error('Suscripción no encontrada para pago:', data.preapproval_id);
+    // eslint-disable-next-line no-console
+    console.error('Suscripción no encontrada para pago autorizado');
     return;
   }
 
@@ -354,7 +298,6 @@ async function procesarPagoWebhook(client, paymentId) {
   });
 
   if (pagoExistente) {
-    // Actualizar pago existente
     await prisma.pagoSuscripcion.update({
       where: { id: pagoExistente.id },
       data: {
@@ -363,20 +306,18 @@ async function procesarPagoWebhook(client, paymentId) {
       }
     });
   } else if (data.status === 'approved') {
-    // Crear nuevo pago
     const ahora = new Date();
     const finPeriodo = new Date(ahora);
     finPeriodo.setMonth(finPeriodo.getMonth() + 1);
 
     await prisma.pagoSuscripcion.create({
       data: {
-        suscripcionId: suscripcion.id,
-        tenantId: suscripcion.tenantId,
+        suscripcionId: SUSCRIPCION_ID,
         mpPaymentId: paymentId.toString(),
         mpStatus: data.status,
         mpStatusDetail: data.status_detail,
         monto: data.transaction_amount,
-        comisionMp: data.fee_details?.reduce((sum, f) => sum + f.amount, 0) || null,
+        comisionMp: data.fee_details?.reduce((sum, fee) => sum + fee.amount, 0) || null,
         montoNeto: data.transaction_details?.net_received_amount || null,
         periodoInicio: ahora,
         periodoFin: finPeriodo,
@@ -386,13 +327,12 @@ async function procesarPagoWebhook(client, paymentId) {
     });
   }
 
-  // Actualizar estado de suscripción según el pago
   if (data.status === 'approved') {
     const fechaVencimiento = new Date();
     fechaVencimiento.setDate(fechaVencimiento.getDate() + 30);
 
     await prisma.suscripcion.update({
-      where: { id: suscripcion.id },
+      where: { id: SUSCRIPCION_ID },
       data: {
         estado: 'ACTIVA',
         fechaVencimiento,
@@ -403,25 +343,22 @@ async function procesarPagoWebhook(client, paymentId) {
         updatedAt: new Date()
       }
     });
-    subscriptionCache.clear();
   } else if (data.status === 'rejected') {
     const nuevoIntentos = suscripcion.intentosFallidos + 1;
 
     await prisma.suscripcion.update({
-      where: { id: suscripcion.id },
+      where: { id: SUSCRIPCION_ID },
       data: {
         intentosFallidos: nuevoIntentos,
         estado: nuevoIntentos >= 3 ? 'MOROSA' : suscripcion.estado,
         updatedAt: new Date()
       }
     });
-    subscriptionCache.clear();
   }
+
+  subscriptionCache.clear();
 }
 
-/**
- * Mapea estado de MercadoPago a estado local
- */
 function mapearEstadoMP(mpStatus) {
   switch (mpStatus) {
     case 'authorized':
@@ -437,14 +374,9 @@ function mapearEstadoMP(mpStatus) {
   }
 }
 
-/**
- * Verifica si un tenant tiene suscripción activa
- * @param {number} tenantId - ID del tenant
- * @returns {Promise<boolean>}
- */
-async function tieneSuscripcionActiva(tenantId) {
+async function tieneSuscripcionActiva() {
   const suscripcion = await prisma.suscripcion.findUnique({
-    where: { tenantId },
+    where: { id: SUSCRIPCION_ID },
     select: { estado: true, fechaVencimiento: true }
   });
 

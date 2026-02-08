@@ -11,7 +11,6 @@ export default function VerificarEmail() {
   const { token } = useParams()
   const [status, setStatus] = useState('verifying') // verifying, success, error
   const [error, setError] = useState(null)
-  const [tenantSlug, setTenantSlug] = useState(null)
 
   const verificarEmail = useCallback(async () => {
     if (!token) {
@@ -23,8 +22,7 @@ export default function VerificarEmail() {
     setStatus('verifying')
     setError(null)
     try {
-      const response = await api.post(`/registro/verificar/${token}`, null, { skipToast: true })
-      setTenantSlug(response.data.tenant?.slug)
+      await api.post(`/registro/verificar/${token}`, null, { skipToast: true })
       setStatus('success')
     } catch (err) {
       setError(err.response?.data?.error?.message || 'Error al verificar el email')
@@ -110,19 +108,17 @@ export default function VerificarEmail() {
           </p>
           <div className="space-y-3">
             <Link
-              to={tenantSlug ? `/login/${tenantSlug}` : '/login'}
+              to="/login"
               className="btn btn-primary w-full py-3 block"
             >
               Iniciar Sesion
             </Link>
-            {tenantSlug && (
-              <Link
-                to={`/menu/${tenantSlug}`}
-                className="btn btn-secondary w-full py-3 block"
-              >
-                Ver mi Menu Publico
-              </Link>
-            )}
+            <Link
+              to="/menu"
+              className="btn btn-secondary w-full py-3 block"
+            >
+              Ver Menu Publico
+            </Link>
           </div>
         </div>
       </div>

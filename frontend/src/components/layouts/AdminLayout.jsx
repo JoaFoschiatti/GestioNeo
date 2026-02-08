@@ -23,6 +23,7 @@ import {
   BuildingLibraryIcon,
   SparklesIcon
 } from '@heroicons/react/24/outline'
+import { ROUTE_ACCESS } from '../../config/permissions'
 
 function MotorcycleIcon(props) {
   return (
@@ -44,26 +45,26 @@ function MotorcycleIcon(props) {
 }
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, roles: ['ADMIN', 'COCINERO', 'CAJERO'] },
-  { name: 'Mesas', href: '/mesas', icon: TableCellsIcon, roles: ['ADMIN', 'MOZO'] },
-  { name: 'Reservas', href: '/reservas', icon: CalendarDaysIcon, roles: ['ADMIN'] },
-  { name: 'Pedidos', href: '/pedidos', icon: ClipboardDocumentListIcon, roles: ['ADMIN', 'MOZO', 'CAJERO'] },
-  { name: 'Cocina', href: '/cocina', icon: FireIcon, roles: ['ADMIN', 'COCINERO'] },
-  { name: 'Mis Entregas', href: '/delivery/pedidos', icon: MotorcycleIcon, roles: ['ADMIN', 'DELIVERY'] },
-  { divider: true, roles: ['ADMIN'] },
-  { name: 'Empleados', href: '/empleados', icon: UsersIcon, roles: ['ADMIN'] },
-  { name: 'Categorías', href: '/categorias', icon: TagIcon, roles: ['ADMIN'] },
-  { name: 'Productos', href: '/productos', icon: CubeIcon, roles: ['ADMIN'] },
-  { name: 'Modificadores', href: '/modificadores', icon: AdjustmentsHorizontalIcon, roles: ['ADMIN'] },
-  { name: 'Ingredientes', href: '/ingredientes', icon: BeakerIcon, roles: ['ADMIN'] },
-  { divider: true, roles: ['ADMIN'] },
-  { name: 'Liquidaciones', href: '/liquidaciones', icon: BanknotesIcon, roles: ['ADMIN'] },
-  { name: 'Transacciones MP', href: '/transacciones-mp', icon: CreditCardIcon, roles: ['ADMIN'] },
-  { name: 'Transferencias', href: '/transferencias', icon: BuildingLibraryIcon, roles: ['ADMIN', 'CAJERO'] },
-  { name: 'Reportes', href: '/reportes', icon: ChartBarIcon, roles: ['ADMIN', 'CAJERO'] },
-  { name: 'Cierre de Caja', href: '/cierre-caja', icon: BanknotesIcon, roles: ['ADMIN', 'CAJERO'] },
-  { name: 'Configuración', href: '/configuracion', icon: Cog6ToothIcon, roles: ['ADMIN'] },
-  { name: 'Suscripción', href: '/suscripcion', icon: SparklesIcon, roles: ['ADMIN'] },
+  { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, roles: ROUTE_ACCESS.dashboard },
+  { name: 'Mesas', href: '/mesas', icon: TableCellsIcon, roles: ROUTE_ACCESS.mesas },
+  { name: 'Reservas', href: '/reservas', icon: CalendarDaysIcon, roles: ROUTE_ACCESS.reservas },
+  { name: 'Pedidos', href: '/pedidos', icon: ClipboardDocumentListIcon, roles: ROUTE_ACCESS.pedidos },
+  { name: 'Cocina', href: '/cocina', icon: FireIcon, roles: ROUTE_ACCESS.cocina },
+  { name: 'Mis Entregas', href: '/delivery/pedidos', icon: MotorcycleIcon, roles: ROUTE_ACCESS.deliveryPedidos },
+  { divider: true, roles: ROUTE_ACCESS.empleados },
+  { name: 'Empleados', href: '/empleados', icon: UsersIcon, roles: ROUTE_ACCESS.empleados },
+  { name: 'Categorías', href: '/categorias', icon: TagIcon, roles: ROUTE_ACCESS.categorias },
+  { name: 'Productos', href: '/productos', icon: CubeIcon, roles: ROUTE_ACCESS.productos },
+  { name: 'Modificadores', href: '/modificadores', icon: AdjustmentsHorizontalIcon, roles: ROUTE_ACCESS.modificadores },
+  { name: 'Ingredientes', href: '/ingredientes', icon: BeakerIcon, roles: ROUTE_ACCESS.ingredientes },
+  { divider: true, roles: ROUTE_ACCESS.empleados },
+  { name: 'Liquidaciones', href: '/liquidaciones', icon: BanknotesIcon, roles: ROUTE_ACCESS.liquidaciones },
+  { name: 'Transacciones MP', href: '/transacciones-mp', icon: CreditCardIcon, roles: ROUTE_ACCESS.transaccionesMp },
+  { name: 'Transferencias', href: '/transferencias', icon: BuildingLibraryIcon, roles: ROUTE_ACCESS.transferencias },
+  { name: 'Reportes', href: '/reportes', icon: ChartBarIcon, roles: ROUTE_ACCESS.reportes },
+  { name: 'Cierre de Caja', href: '/cierre-caja', icon: BanknotesIcon, roles: ROUTE_ACCESS.cierreCaja },
+  { name: 'Configuración', href: '/configuracion', icon: Cog6ToothIcon, roles: ROUTE_ACCESS.configuracion },
+  { name: 'Suscripción', href: '/suscripcion', icon: SparklesIcon, roles: ROUTE_ACCESS.suscripcion },
 ]
 
 export default function AdminLayout() {

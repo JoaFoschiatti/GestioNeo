@@ -3,37 +3,37 @@ const reportesService = require('../services/reportes.service');
 
 const dashboard = async (req, res) => {
   const prisma = getPrisma(req);
-  const resultado = await reportesService.dashboard(prisma, req.usuario.tenantId);
+  const resultado = await reportesService.dashboard(prisma);
   res.json(resultado);
 };
 
 const ventasReporte = async (req, res) => {
   const prisma = getPrisma(req);
-  const resultado = await reportesService.ventasReporte(prisma, req.usuario.tenantId, req.query);
+  const resultado = await reportesService.ventasReporte(prisma, req.query);
   res.json(resultado);
 };
 
 const productosMasVendidos = async (req, res) => {
   const prisma = getPrisma(req);
-  const resultado = await reportesService.productosMasVendidos(prisma, req.usuario.tenantId, req.query);
+  const resultado = await reportesService.productosMasVendidos(prisma, req.query);
   res.json(resultado);
 };
 
 const ventasPorMozo = async (req, res) => {
   const prisma = getPrisma(req);
-  const resultado = await reportesService.ventasPorMozo(prisma, req.usuario.tenantId, req.query);
+  const resultado = await reportesService.ventasPorMozo(prisma, req.query);
   res.json(resultado);
 };
 
 const inventarioReporte = async (req, res) => {
   const prisma = getPrisma(req);
-  const resultado = await reportesService.inventarioReporte(prisma, req.usuario.tenantId);
+  const resultado = await reportesService.inventarioReporte(prisma);
   res.json(resultado);
 };
 
 const sueldosReporte = async (req, res) => {
   const prisma = getPrisma(req);
-  const resultado = await reportesService.sueldosReporte(prisma, req.usuario.tenantId, req.query);
+  const resultado = await reportesService.sueldosReporte(prisma, req.query);
   res.json(resultado);
 };
 
@@ -43,13 +43,13 @@ const sueldosReporte = async (req, res) => {
 
 const ventasPorProductoBase = async (req, res) => {
   const prisma = getPrisma(req);
-  const resultado = await reportesService.ventasPorProductoBase(prisma, req.usuario.tenantId, req.query);
+  const resultado = await reportesService.ventasPorProductoBase(prisma, req.query);
   res.json(resultado);
 };
 
 const consumoInsumos = async (req, res) => {
   const prisma = getPrisma(req);
-  const resultado = await reportesService.consumoInsumos(prisma, req.usuario.tenantId, req.query);
+  const resultado = await reportesService.consumoInsumos(prisma, req.query);
   res.json(resultado);
 };
 

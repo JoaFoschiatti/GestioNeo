@@ -2,11 +2,17 @@ const express = require('express');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const { setPublicContext } = require('../middlewares/context.middleware');
+const { validate } = require('../middlewares/validate.middleware');
 const emailService = require('../services/email.service');
 const eventBus = require('../services/event-bus');
 const { asyncHandler } = require('../utils/async-handler');
 const publicoService = require('../services/publico.service');
 const { logger } = require('../utils/logger');
+const {
+  crearPedidoPublicoBodySchema,
+  pedidoPublicoIdParamSchema,
+  pedidoPublicoAccessTokenQuerySchema
+} = require('../schemas/publico.schemas');
 
 // Rate limiters (deshabilitados en entorno de test para E2E)
 const isTest = process.env.NODE_ENV === 'test';
@@ -63,7 +69,7 @@ router.get('/menu', setPublicContext, asyncHandler(async (req, res) => {
 }));
 
 // POST /api/publico/pedido - Crear pedido público
-router.post('/pedido', publicOrderLimiter, setPublicContext, asyncHandler(async (req, res) => {
+router.post('/pedido', publicOrderLimiter, setPublicContext, validate({ body: crearPedidoPublicoBodySchema }), asyncHandler(async (req, res) => {
   const result = await publicoService.createPublicOrder(req.prisma, {
     body: req.body
   });
@@ -85,21 +91,28 @@ router.post('/pedido', publicOrderLimiter, setPublicContext, asyncHandler(async 
     costoEnvio: result.costoEnvio,
     total: result.total,
     initPoint: result.initPoint,
+    publicAccessToken: result.publicAccessToken,
     message: 'Pedido creado correctamente'
   });
 }));
 
 // POST /api/publico/pedido/:id/pagar - Iniciar pago MercadoPago
-router.post('/pedido/:id/pagar', paymentLimiter, setPublicContext, asyncHandler(async (req, res) => {
-  const pedidoId = parseInt(req.params.id);
-  const result = await publicoService.startMercadoPagoPaymentForOrder(req.prisma, { pedidoId });
+router.post('/pedido/:id/pagar', paymentLimiter, setPublicContext, validate({ params: pedidoPublicoIdParamSchema, query: pedidoPublicoAccessTokenQuerySchema }), asyncHandler(async (req, res) => {
+  const pedidoId = req.params.id;
+  const result = await publicoService.startMercadoPagoPaymentForOrder(req.prisma, {
+    pedidoId,
+    accessToken: req.query.token
+  });
   res.json(result);
 }));
 
 // GET /api/publico/pedido/:id - Obtener estado de pedido
-router.get('/pedido/:id', orderStatusLimiter, setPublicContext, asyncHandler(async (req, res) => {
-  const pedidoId = parseInt(req.params.id);
-  const result = await publicoService.getPublicOrderStatus(req.prisma, { pedidoId });
+router.get('/pedido/:id', orderStatusLimiter, setPublicContext, validate({ params: pedidoPublicoIdParamSchema, query: pedidoPublicoAccessTokenQuerySchema }), asyncHandler(async (req, res) => {
+  const pedidoId = req.params.id;
+  const result = await publicoService.getPublicOrderStatus(req.prisma, {
+    pedidoId,
+    accessToken: req.query.token
+  });
   result.events.forEach(event => eventBus.publish(event.topic, event.payload));
   res.json(result.pedido);
 }));

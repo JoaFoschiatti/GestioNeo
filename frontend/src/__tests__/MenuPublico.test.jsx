@@ -8,7 +8,7 @@ import MenuPublico from '../pages/MenuPublico'
 const API_URL = 'http://localhost:3001/api'
 
 const configData = {
-  tenant: {
+  negocio: {
     nombre_negocio: 'La Casa'
   },
   config: {

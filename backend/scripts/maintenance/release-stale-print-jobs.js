@@ -14,8 +14,8 @@
  *   node scripts/maintenance/release-stale-print-jobs.js      # Default: 5 minutes
  *   node scripts/maintenance/release-stale-print-jobs.js 10   # Custom: 10 minutes
  *
- * Recommended: Run every 5 minutes via cron job
- *   */5 * * * * cd /path/to/backend && node scripts/maintenance/release-stale-print-jobs.js
+ * Recommended: Run every 5 minutes via cron job.
+ * Example: cd /path/to/backend && node scripts/maintenance/release-stale-print-jobs.js
  */
 
 const { PrismaClient } = require('@prisma/client');
@@ -42,7 +42,6 @@ async function releaseStalePrintJobs(timeoutMinutes = DEFAULT_TIMEOUT_MINUTES) {
       },
       select: {
         id: true,
-        tenantId: true,
         pedidoId: true,
         tipo: true,
         claimedBy: true,

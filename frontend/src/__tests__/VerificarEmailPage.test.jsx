@@ -32,19 +32,19 @@ describe('VerificarEmail page', () => {
   })
 
   it('muestra confirmacion cuando el token es valido', async () => {
-    api.post.mockResolvedValueOnce({ data: { tenant: { slug: 'demo' } } })
+    api.post.mockResolvedValueOnce({ data: {} })
 
     renderPage('token123')
 
     expect(await screen.findByText(/Cuenta Verificada/i)).toBeInTheDocument()
     expect(api.post).toHaveBeenCalledWith('/registro/verificar/token123', null, { skipToast: true })
-    expect(screen.getByRole('link', { name: /Iniciar Sesion/i })).toHaveAttribute('href', '/login/demo')
+    expect(screen.getByRole('link', { name: /Iniciar Sesion/i })).toHaveAttribute('href', '/login')
   })
 
   it('permite reintentar cuando falla la verificacion', async () => {
     api.post
       .mockRejectedValueOnce({ response: { data: { error: { message: 'Token vencido' } } } })
-      .mockResolvedValueOnce({ data: { tenant: { slug: 'demo' } } })
+      .mockResolvedValueOnce({ data: {} })
 
     const user = userEvent.setup()
     renderPage('token123')
