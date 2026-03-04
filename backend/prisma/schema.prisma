@@ -1,0 +1,1049 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")  // Para Supabase con connection pooling
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum Rol {
+  ADMIN
+  MOZO
+  COCINERO
+  CAJERO
+  DELIVERY
+}
+
+enum EstadoMesa {
+  LIBRE
+  OCUPADA
+  RESERVADA
+  CUENTA_PEDIDA
+}
+
+enum TipoPedido {
+  MESA
+  DELIVERY
+  MOSTRADOR
+  ONLINE
+}
+
+enum EstadoPedido {
+  PENDIENTE
+  EN_PREPARACION
+  LISTO
+  ENTREGADO
+  COBRADO
+  CANCELADO
+}
+
+enum MetodoPago {
+  EFECTIVO
+  MERCADOPAGO
+  TARJETA
+  TRANSFERENCIA
+}
+
+enum TipoMovimientoStock {
+  ENTRADA
+  SALIDA
+  AJUSTE
+}
+
+enum EstadoPago {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+  CANCELADO
+}
+
+enum TipoEntrega {
+  DELIVERY
+  RETIRO
+}
+
+enum OrigenPedido {
+  INTERNO
+  MENU_PUBLICO
+}
+
+enum TipoComanda {
+  COCINA
+  CAJA
+  CLIENTE
+}
+
+enum EstadoPrintJob {
+  PENDIENTE
+  IMPRIMIENDO
+  OK
+  ERROR
+}
+
+enum EstadoCaja {
+  ABIERTO
+  CERRADO
+}
+
+enum EstadoReserva {
+  CONFIRMADA
+  CLIENTE_PRESENTE
+  NO_LLEGO
+  CANCELADA
+}
+
+enum TipoModificador {
+  EXCLUSION    // "Sin cebolla" - precio 0
+  ADICION      // "Extra queso" - precio > 0
+}
+
+enum TipoAccionAuditoria {
+  CANCELACION_PEDIDO
+  ANULACION_ITEM
+  AJUSTE_STOCK
+  CAMBIO_PRECIO
+}
+
+enum EstadoSuscripcion {
+  PENDIENTE      // Esperando primer pago
+  ACTIVA         // Al dia
+  MOROSA         // Pago fallido
+  CANCELADA      // Cancelada
+}
+
+enum CondicionIva {
+  RESPONSABLE_INSCRIPTO
+  MONOTRIBUTISTA
+  EXENTO
+}
+
+enum TipoComprobante {
+  FACTURA_A           // CbteTipo 1
+  FACTURA_B           // CbteTipo 6
+  FACTURA_C           // CbteTipo 11
+  NOTA_CREDITO_A      // CbteTipo 3
+  NOTA_CREDITO_B      // CbteTipo 8
+  NOTA_CREDITO_C      // CbteTipo 13
+  NOTA_DEBITO_A       // CbteTipo 2
+  NOTA_DEBITO_B       // CbteTipo 7
+  NOTA_DEBITO_C       // CbteTipo 12
+}
+
+enum EstadoComprobante {
+  PENDIENTE
+  AUTORIZADO
+  RECHAZADO
+  ERROR
+}
+
+// ============================================
+// NEGOCIO (Singleton - reemplaza Tenant)
+// ============================================
+
+model Negocio {
+  id              Int      @id @default(1)
+  nombre          String
+  email           String
+  telefono        String?
+  direccion       String?
+  logo            String?
+  bannerUrl       String?
+  colorPrimario   String   @default("#3B82F6")
+  colorSecundario String   @default("#1E40AF")
+
+  // Campos fiscales (AFIP)
+  cuit              String?
+  razonSocial       String?
+  condicionIva      CondicionIva?
+  puntoVenta        Int?
+  domicilioFiscal   String?
+  iibb              String?
+  inicioActividades DateTime?  @db.Date
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("negocio")
+}
+
+// ============================================
+// USUARIOS Y EMPLEADOS
+// ============================================
+
+// Usuarios del sistema (login)
+model Usuario {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  nombre    String
+  rol       Rol      @default(MOZO)
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relaciones
+  pedidos   Pedido[]
+  cierres   CierreCaja[]
+  emailVerificaciones EmailVerificacion[]
+  refreshTokens RefreshToken[]
+  auditorias AuditoriaAnulacion[]
+
+  @@map("usuarios")
+}
+
+// Refresh Tokens (for secure token rotation)
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  usuarioId Int
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+
+  // Relaciones
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@index([token])
+  @@index([expiresAt])
+  @@index([revokedAt])
+  @@map("refresh_tokens")
+}
+
+// Verificacion de email
+model EmailVerificacion {
+  id        Int       @id @default(autoincrement())
+  usuarioId Int
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@index([token])
+  @@index([usedAt, expiresAt])
+  @@map("email_verificaciones")
+}
+
+// Empleados (para fichaje y liquidacion)
+model Empleado {
+  id          Int      @id @default(autoincrement())
+  nombre      String
+  apellido    String
+  dni         String   @unique
+  telefono    String?
+  direccion   String?
+  rol         Rol
+  tarifaHora  Decimal  @db.Decimal(10, 2)
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relaciones
+  fichajes         Fichaje[]
+  liquidaciones    Liquidacion[]
+  repartoPropinas  RepartoPropina[]
+
+  @@map("empleados")
+}
+
+// Control de fichaje (entrada/salida)
+model Fichaje {
+  id         Int       @id @default(autoincrement())
+  empleadoId Int
+  entrada    DateTime
+  salida     DateTime?
+  fecha      DateTime  @db.Date
+  createdAt  DateTime  @default(now())
+
+  // Relaciones
+  empleado Empleado @relation(fields: [empleadoId], references: [id])
+
+  @@index([empleadoId, fecha])
+  @@index([empleadoId])
+  @@map("fichajes")
+}
+
+// Liquidacion de sueldos
+model Liquidacion {
+  id           Int       @id @default(autoincrement())
+  empleadoId   Int
+  periodoDesde DateTime  @db.Date
+  periodoHasta DateTime  @db.Date
+  horasTotales Decimal   @db.Decimal(10, 2)
+  tarifaHora   Decimal   @db.Decimal(10, 2)
+  subtotal     Decimal   @db.Decimal(10, 2)
+  descuentos   Decimal   @default(0) @db.Decimal(10, 2)
+  adicionales  Decimal   @default(0) @db.Decimal(10, 2)
+  totalPagar   Decimal   @db.Decimal(10, 2)
+  observaciones String?
+  pagado       Boolean   @default(false)
+  fechaPago    DateTime?
+  createdAt    DateTime  @default(now())
+
+  // Relaciones
+  empleado Empleado @relation(fields: [empleadoId], references: [id])
+
+  @@index([empleadoId])
+  @@map("liquidaciones")
+}
+
+// ============================================
+// MESAS Y RESERVAS
+// ============================================
+
+// Mesas del local
+model Mesa {
+  id           Int         @id @default(autoincrement())
+  numero       Int         @unique
+  zona         String?
+  capacidad    Int         @default(4)
+  estado       EstadoMesa  @default(LIBRE)
+  activa       Boolean     @default(true)
+  posX         Int?                        // Posición X en el plano (píxeles)
+  posY         Int?                        // Posición Y en el plano (píxeles)
+  rotacion     Int         @default(0)     // Rotación en grados (0, 90, 180, 270)
+  grupoMesaId  Int?                        // Mesas con mismo grupoMesaId están agrupadas
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  // Relaciones
+  pedidos   Pedido[]
+  reservas  Reserva[]
+
+  @@index([estado])
+  @@index([grupoMesaId])
+  @@map("mesas")
+}
+
+// Reservas de mesa
+model Reserva {
+  id                Int           @id @default(autoincrement())
+  mesaId            Int
+  clienteNombre     String
+  clienteTelefono   String?
+  fechaHora         DateTime
+  cantidadPersonas  Int
+  estado            EstadoReserva @default(CONFIRMADA)
+  observaciones     String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  // Relaciones
+  mesa   Mesa   @relation(fields: [mesaId], references: [id])
+
+  @@index([fechaHora])
+  @@index([mesaId, fechaHora])
+  @@index([estado])
+  @@index([mesaId])
+  @@map("reservas")
+}
+
+// ============================================
+// PRODUCTOS Y CATEGORIAS
+// ============================================
+
+// Categorias de productos
+model Categoria {
+  id          Int      @id @default(autoincrement())
+  nombre      String   @unique
+  descripcion String?
+  orden       Int      @default(0)
+  activa      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relaciones
+  productos Producto[]
+
+  @@map("categorias")
+}
+
+// Productos (carta)
+model Producto {
+  id           Int      @id @default(autoincrement())
+  nombre       String
+  descripcion  String?
+  precio       Decimal  @db.Decimal(10, 2)
+  imagen       String?
+  categoriaId  Int
+  disponible   Boolean  @default(true)
+  destacado    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Campos para variantes (Simple, Doble, Triple, etc.)
+  productoBaseId           Int?
+  nombreVariante           String?    // "Simple", "Doble", "Triple"
+  multiplicadorInsumos     Decimal    @default(1.0) @db.Decimal(3, 1)
+  ordenVariante            Int        @default(0)
+  esVariantePredeterminada Boolean    @default(false)
+
+  // Relaciones
+  categoria    Categoria           @relation(fields: [categoriaId], references: [id])
+  ingredientes ProductoIngrediente[]
+  pedidoItems  PedidoItem[]
+  modificadores ProductoModificador[]
+
+  // Self-reference para variantes
+  productoBase Producto?  @relation("ProductoVariantes", fields: [productoBaseId], references: [id], onDelete: SetNull)
+  variantes    Producto[] @relation("ProductoVariantes")
+
+  @@index([categoriaId])
+  @@index([productoBaseId])
+  @@index([disponible])
+  @@map("productos")
+}
+
+// Modificadores (extras y exclusiones)
+model Modificador {
+  id        Int             @id @default(autoincrement())
+  nombre    String          @unique
+  precio    Decimal         @default(0) @db.Decimal(10, 2)
+  tipo      TipoModificador
+  activo    Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  // Relaciones
+  productos ProductoModificador[]
+  items     PedidoItemModificador[]
+
+  @@map("modificadores")
+}
+
+// Relacion producto-modificador (que modificadores acepta cada producto)
+model ProductoModificador {
+  id            Int @id @default(autoincrement())
+  productoId    Int
+  modificadorId Int
+
+  // Relaciones
+  producto    Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  modificador Modificador @relation(fields: [modificadorId], references: [id], onDelete: Cascade)
+
+  @@unique([productoId, modificadorId])
+  @@index([productoId])
+  @@index([modificadorId])
+  @@map("producto_modificadores")
+}
+
+// ============================================
+// INVENTARIO
+// ============================================
+
+// Ingredientes/Insumos para stock
+model Ingrediente {
+  id           Int      @id @default(autoincrement())
+  nombre       String   @unique
+  unidad       String   // kg, litros, unidades, etc.
+  stockActual  Decimal  @db.Decimal(10, 3)
+  stockMinimo  Decimal  @db.Decimal(10, 3)
+  costo        Decimal? @db.Decimal(10, 2)
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relaciones
+  productos   ProductoIngrediente[]
+  movimientos MovimientoStock[]
+  lotes       LoteIngrediente[]
+
+  @@map("ingredientes")
+}
+
+// Relacion producto-ingrediente (cuanto de cada ingrediente lleva un producto)
+model ProductoIngrediente {
+  id            Int     @id @default(autoincrement())
+  productoId    Int
+  ingredienteId Int
+  cantidad      Decimal @db.Decimal(10, 3)
+
+  // Relaciones
+  producto    Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  ingrediente Ingrediente @relation(fields: [ingredienteId], references: [id])
+
+  @@unique([productoId, ingredienteId])
+  @@index([productoId])
+  @@index([ingredienteId])
+  @@map("producto_ingredientes")
+}
+
+// Movimientos de stock
+model MovimientoStock {
+  id             Int                  @id @default(autoincrement())
+  ingredienteId  Int
+  tipo           TipoMovimientoStock
+  cantidad       Decimal              @db.Decimal(10, 3)
+  motivo         String?
+  pedidoId       Int?
+  loteId         Int?
+  categoriaGasto String?
+  costoUnitario  Decimal?             @db.Decimal(10, 2)
+  costoTotal     Decimal?             @db.Decimal(10, 2)
+  createdAt      DateTime             @default(now())
+
+  // Relaciones
+  ingrediente Ingrediente      @relation(fields: [ingredienteId], references: [id])
+  pedido      Pedido?          @relation(fields: [pedidoId], references: [id])
+  lote        LoteIngrediente? @relation(fields: [loteId], references: [id])
+
+  @@index([ingredienteId])
+  @@index([createdAt])
+  @@index([pedidoId])
+  @@index([loteId])
+  @@map("movimientos_stock")
+}
+
+// ============================================
+// PEDIDOS Y PAGOS
+// ============================================
+
+// Pedidos
+model Pedido {
+  id              Int          @id @default(autoincrement())
+  tipo            TipoPedido
+  estado          EstadoPedido @default(PENDIENTE)
+  mesaId          Int?
+  usuarioId       Int?         // Mozo que tomo el pedido (null para pedidos publicos)
+
+  // Datos cliente
+  clienteNombre    String?
+  clienteTelefono  String?
+  clienteDireccion String?
+  clienteEmail     String?      // Email para enviar ticket
+
+  // Delivery/Retiro
+  tipoEntrega     TipoEntrega?
+  costoEnvio      Decimal      @default(0) @db.Decimal(10, 2)
+
+  // Totales
+  subtotal        Decimal      @db.Decimal(10, 2)
+  descuento       Decimal      @default(0) @db.Decimal(10, 2)
+  total           Decimal      @db.Decimal(10, 2)
+  observaciones   String?
+
+  // Estado de pago
+  estadoPago      EstadoPago   @default(PENDIENTE)
+
+  // Origen del pedido
+  origen          OrigenPedido @default(INTERNO)
+
+  impreso         Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  // Relaciones
+  mesa          Mesa?             @relation(fields: [mesaId], references: [id])
+  usuario       Usuario?          @relation(fields: [usuarioId], references: [id])
+  items         PedidoItem[]
+  pagos         Pago[]
+  movimientos   MovimientoStock[]
+  printJobs     PrintJob[]
+  transferencias TransferenciaEntrante[]
+  auditorias    AuditoriaAnulacion[]
+  comprobantes  Comprobante[]
+
+  @@index([estado])
+  @@index([tipo])
+  @@index([createdAt])
+  @@index([estadoPago, createdAt])
+  @@index([mesaId])
+  @@index([usuarioId])
+  @@map("pedidos")
+}
+
+// Items del pedido
+model PedidoItem {
+  id             Int      @id @default(autoincrement())
+  pedidoId       Int
+  productoId     Int
+  cantidad       Int
+  precioUnitario Decimal  @db.Decimal(10, 2)
+  subtotal       Decimal  @db.Decimal(10, 2)
+  observaciones  String?
+  createdAt      DateTime @default(now())
+
+  // Relaciones
+  pedido        Pedido                  @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  producto      Producto                @relation(fields: [productoId], references: [id])
+  modificadores PedidoItemModificador[]
+
+  @@index([pedidoId])
+  @@index([productoId])
+  @@map("pedido_items")
+}
+
+// Modificadores aplicados a items de pedido
+model PedidoItemModificador {
+  id            Int     @id @default(autoincrement())
+  pedidoItemId  Int
+  modificadorId Int
+  precio        Decimal @db.Decimal(10, 2)
+
+  // Relaciones
+  pedidoItem  PedidoItem  @relation(fields: [pedidoItemId], references: [id], onDelete: Cascade)
+  modificador Modificador @relation(fields: [modificadorId], references: [id])
+
+  @@index([pedidoItemId])
+  @@index([modificadorId])
+  @@map("pedido_item_modificadores")
+}
+
+// Pagos
+model Pago {
+  id               Int         @id @default(autoincrement())
+  pedidoId         Int
+  monto            Decimal     @db.Decimal(10, 2)
+  metodo           MetodoPago
+  estado           EstadoPago  @default(PENDIENTE)
+  referencia       String?     // ID transaccion MercadoPago, etc.
+  comprobante      String?
+
+  // MercadoPago
+  mpPreferenceId   String?     // ID de preferencia MP
+  mpPaymentId      String?     // ID de pago MP
+
+  // Propina
+  propina          Decimal?    @db.Decimal(10, 2)
+
+  // Efectivo
+  montoAbonado     Decimal?    @db.Decimal(10, 2)  // Con cuanto abona
+  vuelto           Decimal?    @db.Decimal(10, 2)  // Vuelto a dar
+
+  // Seguridad
+  idempotencyKey   String?     @unique  // Prevenir duplicados webhook
+
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @default(now()) @updatedAt
+
+  // Relaciones
+  pedido Pedido @relation(fields: [pedidoId], references: [id])
+  transaccionesMercadoPago TransaccionMercadoPago[]
+  comprobantes  Comprobante[]
+
+  @@index([pedidoId])
+  @@index([estado])
+  @@index([estado, createdAt])
+  @@index([pedidoId, createdAt])
+  @@index([mpPaymentId])
+  @@map("pagos")
+}
+
+// ============================================
+// CAJA
+// ============================================
+
+// Cierre de caja / Arqueo
+model CierreCaja {
+  id              Int         @id @default(autoincrement())
+  usuarioId       Int
+  fecha           DateTime    @db.Date
+  horaApertura    DateTime
+  horaCierre      DateTime?
+  fondoInicial    Decimal     @db.Decimal(10, 2)
+  totalEfectivo   Decimal     @default(0) @db.Decimal(10, 2)
+  totalTarjeta    Decimal     @default(0) @db.Decimal(10, 2)
+  totalMP         Decimal     @default(0) @db.Decimal(10, 2)
+  totalPropinas   Decimal     @default(0) @db.Decimal(10, 2)
+  efectivoFisico  Decimal?    @db.Decimal(10, 2)
+  diferencia      Decimal?    @db.Decimal(10, 2)
+  estado          EstadoCaja  @default(ABIERTO)
+  observaciones   String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relaciones
+  usuario          Usuario          @relation(fields: [usuarioId], references: [id])
+  repartoPropinas  RepartoPropina[]
+
+  @@index([fecha])
+  @@index([usuarioId, fecha])
+  @@index([estado, createdAt])
+  @@map("cierres_caja")
+}
+
+// Reparto de propinas por cierre de caja
+model RepartoPropina {
+  id           Int      @id @default(autoincrement())
+  cierreId     Int
+  empleadoId   Int
+  monto        Decimal  @db.Decimal(10, 2)
+  createdAt    DateTime @default(now())
+
+  cierre       CierreCaja @relation(fields: [cierreId], references: [id])
+  empleado     Empleado   @relation(fields: [empleadoId], references: [id])
+
+  @@index([cierreId])
+  @@index([empleadoId])
+  @@map("reparto_propinas")
+}
+
+// ============================================
+// IMPRESION
+// ============================================
+
+// Jobs de impresion (cola persistente)
+model PrintJob {
+  id            Int             @id @default(autoincrement())
+  pedidoId      Int
+  tipo          TipoComanda
+  status        EstadoPrintJob  @default(PENDIENTE)
+  intentos      Int             @default(0)
+  maxIntentos   Int             @default(3)
+  nextAttemptAt DateTime        @default(now())
+  lastError     String?
+  contenido     String
+  anchoMm       Int             @default(80)
+  batchId       String
+  claimedBy     String?
+  claimedAt     DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  // Relaciones
+  pedido Pedido @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([status, claimedAt])
+  @@index([pedidoId, batchId])
+  @@index([pedidoId])
+  @@unique([pedidoId, tipo, batchId])
+  @@map("print_jobs")
+}
+
+// ============================================
+// CONFIGURACION
+// ============================================
+
+// Configuracion del sistema
+model Configuracion {
+  id        Int      @id @default(autoincrement())
+  clave     String   @unique
+  valor     String
+  updatedAt DateTime @updatedAt
+
+  @@map("configuraciones")
+}
+
+// ============================================
+// MERCADOPAGO
+// ============================================
+
+// Configuracion de MercadoPago (singleton)
+model MercadoPagoConfig {
+  id              Int       @id @default(1)
+  accessToken     String    // Encriptado con AES-256
+  refreshToken    String?   // Encriptado (para OAuth)
+  publicKey       String?
+  userId          String?   // ID del usuario en MercadoPago
+  email           String?   // Email de la cuenta MercadoPago conectada
+  expiresAt       DateTime? // Fecha de expiración del token
+  isOAuth         Boolean   @default(false) // true si se conectó via OAuth, false si manual
+  isActive        Boolean   @default(true)
+
+  // Datos de cuenta para transferencias
+  cvu                   String?   // CVU de la cuenta
+  alias                 String?   // Alias de la cuenta
+  cbuHolder             String?   // Titular de la cuenta
+  transferenciasEnabled Boolean   @default(false) // Si acepta transferencias
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("mercadopago_config")
+}
+
+// Historial de transacciones de MercadoPago
+model TransaccionMercadoPago {
+  id                Int       @id @default(autoincrement())
+  pagoId            Int?
+  mpPaymentId       String    @unique // ID único del pago en MercadoPago
+  mpPreferenceId    String?   // ID de la preferencia que originó el pago
+  status            String    // approved, rejected, pending, in_process, etc.
+  statusDetail      String?   // Detalle del estado (ej: accredited, cc_rejected_other_reason)
+  amount            Decimal   @db.Decimal(10, 2)
+  currency          String    @default("ARS")
+  payerEmail        String?   // Email del pagador
+  paymentMethod     String?   // credit_card, debit_card, account_money, ticket, etc.
+  paymentTypeId     String?   // visa, mastercard, amex, etc.
+  installments      Int?      // Cantidad de cuotas
+  fee               Decimal?  @db.Decimal(10, 2) // Comisión de MercadoPago
+  netAmount         Decimal?  @db.Decimal(10, 2) // Monto neto recibido
+  externalReference String?   // Referencia externa
+  rawData           Json?     // Respuesta completa de MercadoPago para debugging
+  createdAt         DateTime  @default(now())
+
+  // Relaciones
+  pago   Pago?  @relation(fields: [pagoId], references: [id])
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([pagoId])
+  @@map("transacciones_mercadopago")
+}
+
+// Transferencias entrantes de MercadoPago (CVU/Alias)
+model TransferenciaEntrante {
+  id                Int       @id @default(autoincrement())
+
+  // Datos de MercadoPago
+  mpMovementId      String    @unique  // ID único del movimiento en MP
+  amount            Decimal   @db.Decimal(10, 2)
+  fee               Decimal?  @db.Decimal(10, 2)
+  netAmount         Decimal?  @db.Decimal(10, 2)
+
+  // Datos del pagador
+  payerName         String?   // Nombre del que transfiere
+  payerEmail        String?
+  payerCuit         String?
+
+  // Concepto/descripcion de la transferencia
+  concept           String?   // Puede contener número de pedido (#123)
+  reference         String?   // Referencia externa si existe
+
+  // Estado del match
+  estado            String    @default("PENDIENTE")  // PENDIENTE, MATCHED, MANUAL, RECHAZADA
+  pedidoId          Int?      // Pedido asociado (si hay match)
+  pagoId            Int?      // Pago creado al matchear
+
+  // Sugerencias de match
+  matchScore        Float?    // Confianza del match (0-1)
+  matchReason       String?   // Razón del match sugerido
+
+  // Metadata
+  rawData           Json?     // Respuesta completa de MP
+  createdAt         DateTime  @default(now())
+  matchedAt         DateTime? // Cuando se hizo el match
+
+  // Relaciones
+  pedido            Pedido?   @relation(fields: [pedidoId], references: [id])
+
+  @@index([estado])
+  @@index([amount])
+  @@index([createdAt])
+  @@index([pedidoId])
+  @@map("transferencias_entrantes")
+}
+
+// Control de última sincronización con MP
+model SyncTransferencias {
+  id              Int       @id @default(1)
+  lastSyncAt      DateTime  @default(now())
+  lastMovementId  String?   // Último movimiento procesado
+  updatedAt       DateTime  @updatedAt
+
+  @@map("sync_transferencias")
+}
+
+// ============================================
+// AUDITORIA
+// ============================================
+
+model AuditoriaAnulacion {
+  id            Int                   @id @default(autoincrement())
+  tipo          TipoAccionAuditoria
+  pedidoId      Int?
+  usuarioId     Int
+  motivo        String?
+  detalles      Json?
+  montoAfectado Decimal?              @db.Decimal(10, 2)
+  createdAt     DateTime              @default(now())
+
+  pedido        Pedido?               @relation(fields: [pedidoId], references: [id])
+  usuario       Usuario               @relation(fields: [usuarioId], references: [id])
+
+  @@index([tipo])
+  @@index([pedidoId])
+  @@index([usuarioId])
+  @@index([createdAt])
+  @@map("auditoria_anulaciones")
+}
+
+// ============================================
+// LOTES DE INGREDIENTES
+// ============================================
+
+model LoteIngrediente {
+  id              Int       @id @default(autoincrement())
+  ingredienteId   Int
+  codigoLote      String?
+  cantidadInicial Decimal   @db.Decimal(10, 3)
+  cantidadActual  Decimal   @db.Decimal(10, 3)
+  costoUnitario   Decimal?  @db.Decimal(10, 2)
+  fechaIngreso    DateTime  @default(now())
+  fechaVencimiento DateTime?
+  agotado         Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  ingrediente     Ingrediente     @relation(fields: [ingredienteId], references: [id])
+  movimientos     MovimientoStock[]
+
+  @@index([ingredienteId, agotado, fechaVencimiento])
+  @@index([fechaVencimiento])
+  @@map("lotes_ingredientes")
+}
+
+// ============================================
+// SUSCRIPCIONES (SaaS)
+// ============================================
+
+// Suscripcion del negocio al SaaS (singleton)
+model Suscripcion {
+  id                  Int               @id @default(1)
+
+  // MercadoPago Preapproval
+  mpPreapprovalId     String?           @unique
+  mpPayerId           String?
+
+  // Estado
+  estado              EstadoSuscripcion @default(PENDIENTE)
+
+  // Fechas
+  fechaInicio         DateTime?
+  fechaProximoCobro   DateTime?
+  fechaVencimiento    DateTime?
+
+  // Control
+  ultimoPagoExitoso   DateTime?
+  intentosFallidos    Int               @default(0)
+
+  // Config
+  precioMensual       Decimal           @default(37000) @db.Decimal(10, 2)
+  moneda              String            @default("ARS")
+
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  // Relaciones
+  pagos               PagoSuscripcion[]
+
+  @@index([estado])
+  @@map("suscripciones")
+}
+
+// Pagos de suscripcion
+model PagoSuscripcion {
+  id              Int         @id @default(autoincrement())
+  suscripcionId   Int
+
+  // MercadoPago
+  mpPaymentId     String      @unique
+  mpStatus        String
+  mpStatusDetail  String?
+
+  // Montos
+  monto           Decimal     @db.Decimal(10, 2)
+  comisionMp      Decimal?    @db.Decimal(10, 2)
+  montoNeto       Decimal?    @db.Decimal(10, 2)
+
+  // Periodo facturado
+  periodoInicio   DateTime
+  periodoFin      DateTime
+
+  // Datos adicionales
+  metodoPago      String?
+  rawData         Json?
+
+  createdAt       DateTime    @default(now())
+
+  // Relaciones
+  suscripcion     Suscripcion @relation(fields: [suscripcionId], references: [id], onDelete: Cascade)
+
+  @@index([suscripcionId])
+  @@index([suscripcionId, createdAt])
+  @@map("pagos_suscripcion")
+}
+
+// ============================================
+// AFIP - FACTURACION ELECTRONICA
+// ============================================
+
+// Configuracion AFIP (singleton)
+model AfipConfig {
+  id               Int       @id @default(1)
+  certificado      String?   @db.Text  // PEM encriptado con crypto.service
+  clavePrivada     String?   @db.Text  // PEM encriptado con crypto.service
+  token            String?   @db.Text  // WSAA token cacheado
+  sign             String?   @db.Text  // WSAA sign cacheado
+  tokenExpiration  DateTime?
+  produccion       Boolean   @default(false) // false = homologacion
+  isActive         Boolean   @default(false)
+  csrPendiente     Boolean   @default(false) // true despues de generar CSR, false al subir .crt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@map("afip_config")
+}
+
+// Comprobantes fiscales (facturas emitidas via AFIP)
+model Comprobante {
+  id                Int                @id @default(autoincrement())
+
+  // Identificacion AFIP
+  tipoComprobante   TipoComprobante
+  puntoVenta        Int
+  nroComprobante    Int
+  cbteTipo          Int                // Codigo numerico AFIP (1, 6, 11, etc.)
+  concepto          Int                @default(1) // 1=Productos, 2=Servicios, 3=Ambos
+
+  // Datos del receptor
+  docTipo           Int                // 80=CUIT, 96=DNI, 99=Consumidor Final
+  docNro            String             // Numero de documento ("0" para CF)
+  clienteNombre     String?
+
+  // Importes
+  importeTotal      Decimal            @db.Decimal(12, 2)
+  importeNeto       Decimal            @db.Decimal(12, 2) // Base imponible
+  importeIva        Decimal            @db.Decimal(12, 2)
+  importeExento     Decimal            @default(0) @db.Decimal(12, 2)
+  importeTributos   Decimal            @default(0) @db.Decimal(12, 2)
+  iva               Json?              // Array de IVA: [{Id:5, BaseImp:X, Importe:Y}]
+
+  // Respuesta AFIP
+  cae               String?            // Codigo de Autorizacion Electronica
+  caeVencimiento    DateTime?          @db.Date
+  estado            EstadoComprobante  @default(PENDIENTE)
+  resultado         String?            // "A" (aprobado) o "R" (rechazado)
+  observaciones     String?
+  errores           Json?              // Errores de AFIP
+
+  // Fechas y moneda
+  fechaComprobante  DateTime           @db.Date
+  moneda            String             @default("PES") // PES = Pesos argentinos
+  cotizacion        Decimal            @default(1) @db.Decimal(10, 6)
+
+  // QR para ticket fiscal
+  qrData            String?
+
+  // Asociaciones
+  pedidoId          Int?
+  pagoId            Int?
+  comprobanteAsociadoId Int?           // Para notas de credito/debito
+
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  // Relaciones
+  pedido            Pedido?            @relation(fields: [pedidoId], references: [id])
+  pago              Pago?              @relation(fields: [pagoId], references: [id])
+  comprobanteAsociado Comprobante?     @relation("NotaCredito", fields: [comprobanteAsociadoId], references: [id])
+  notasCredito      Comprobante[]      @relation("NotaCredito")
+
+  @@unique([puntoVenta, cbteTipo, nroComprobante])
+  @@index([pedidoId])
+  @@index([pagoId])
+  @@index([cae])
+  @@index([estado])
+  @@index([createdAt])
+  @@map("comprobantes")
+}

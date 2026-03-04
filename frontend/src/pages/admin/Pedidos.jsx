@@ -1,0 +1,678 @@
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import api from '../../services/api'
+import toast from 'react-hot-toast'
+import { useAuth } from '../../context/AuthContext'
+import { EyeIcon, PrinterIcon, CurrencyDollarIcon, PlusIcon, BuildingLibraryIcon, ClipboardDocumentIcon, DocumentTextIcon } from '@heroicons/react/24/outline'
+import useEventSource from '../../hooks/useEventSource'
+import useOfflineStatus from '../../hooks/useOfflineStatus'
+import useKeyboardShortcuts from '../../hooks/useKeyboardShortcuts'
+import NuevoPedidoModal from '../../components/pedidos/NuevoPedidoModal'
+import EmitirComprobanteModal from '../../components/facturacion/EmitirComprobanteModal'
+import ShortcutsHelp from '../../components/ui/ShortcutsHelp'
+import useAsync from '../../hooks/useAsync'
+import { canAccessCapability } from '../../config/permissions'
+
+const estadoBadges = {
+  PENDIENTE: 'badge-warning',
+  EN_PREPARACION: 'badge-info',
+  LISTO: 'badge-success',
+  ENTREGADO: 'badge-info',
+  COBRADO: 'badge-success',
+  CANCELADO: 'badge-error'
+}
+
+export default function Pedidos() {
+  const { usuario } = useAuth()
+  const { isOnline } = useOfflineStatus()
+  const esSoloMozo = usuario?.rol === 'MOZO'
+  const puedeCrearPedido = canAccessCapability(usuario?.rol, 'createManualOrder')
+  const puedeRegistrarPago = canAccessCapability(usuario?.rol, 'registerPayment')
+
+  const [pedidos, setPedidos] = useState([])
+  const [filtroEstado, setFiltroEstado] = useState('')
+  const [showModal, setShowModal] = useState(false)
+  const [pedidoSeleccionado, setPedidoSeleccionado] = useState(null)
+  const [showPagoModal, setShowPagoModal] = useState(false)
+  const [pagoForm, setPagoForm] = useState({ monto: '', metodo: 'EFECTIVO', referencia: '', propina: '' })
+  const [registrandoPago, setRegistrandoPago] = useState(false)
+  const [pagoIdempotencyKey, setPagoIdempotencyKey] = useState(null)
+  const [showNuevoPedidoModal, setShowNuevoPedidoModal] = useState(false)
+  const [datosBancarios, setDatosBancarios] = useState(null)
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false)
+  const [showFacturaModal, setShowFacturaModal] = useState(false)
+  const [pedidoParaFacturar, setPedidoParaFacturar] = useState(null)
+
+  const shortcutsList = useMemo(() => [
+    { key: 'N', description: 'Nuevo pedido' },
+    { key: 'Esc', description: 'Cerrar modal' },
+    { key: '?', description: 'Ayuda de atajos' },
+  ], [])
+
+  useKeyboardShortcuts(useMemo(() => ({
+    'n': () => { if (puedeCrearPedido) setShowNuevoPedidoModal(true) },
+    'Escape': () => {
+      if (showShortcutsHelp) setShowShortcutsHelp(false)
+      else if (showPagoModal) setShowPagoModal(false)
+      else if (showNuevoPedidoModal) setShowNuevoPedidoModal(false)
+      else if (showModal) setShowModal(false)
+    },
+    '?': () => setShowShortcutsHelp(prev => !prev),
+  }), [puedeCrearPedido, showShortcutsHelp, showPagoModal, showNuevoPedidoModal, showModal]))
+
+  const cargarPedidos = useCallback(async () => {
+    const params = filtroEstado ? `?estado=${filtroEstado}` : ''
+    const response = await api.get(`/pedidos${params}`)
+    setPedidos(response.data)
+    return response.data
+  }, [filtroEstado])
+
+  const handleLoadError = useCallback((error) => {
+    console.error('Error:', error)
+  }, [])
+
+  const cargarPedidosRequest = useCallback(async (_ctx) => (
+    cargarPedidos()
+  ), [cargarPedidos])
+
+  const { loading, execute: cargarPedidosAsync } = useAsync(
+    cargarPedidosRequest,
+    { immediate: false, onError: handleLoadError }
+  )
+
+  // Cargar pedidos cuando cambia el filtro
+  useEffect(() => {
+    cargarPedidosAsync()
+      .catch(() => {})
+  }, [cargarPedidosAsync])
+
+  // Cargar datos bancarios para transferencias
+  useEffect(() => {
+    api.get('/transferencias/config/datos-bancarios')
+      .then(res => setDatosBancarios(res.data))
+      .catch(() => setDatosBancarios(null))
+  }, [])
+
+  const handleSseUpdate = useCallback((event) => {
+    console.log('[SSE] Evento recibido:', event.type)
+    cargarPedidosAsync()
+      .catch(() => {})
+  }, [cargarPedidosAsync])
+
+  const handleSseError = useCallback((err) => {
+    console.error('[SSE] Error en conexión:', err)
+  }, [])
+
+  const handleSseOpen = useCallback(() => {
+    console.log('[SSE] Conexión establecida')
+  }, [])
+
+  useEventSource({
+    events: {
+      'pedido.updated': handleSseUpdate,
+      'pago.updated': handleSseUpdate,
+      'impresion.updated': handleSseUpdate
+    },
+    onError: handleSseError,
+    onOpen: handleSseOpen
+  })
+
+  const verDetalle = async (id) => {
+    try {
+      const response = await api.get(`/pedidos/${id}`)
+      setPedidoSeleccionado(response.data)
+      setShowModal(true)
+    } catch (error) {
+      console.error('Error:', error)
+    }
+  }
+
+  const cambiarEstado = async (id, nuevoEstado) => {
+    try {
+      await api.patch(`/pedidos/${id}/estado`, { estado: nuevoEstado })
+      toast.success(`Estado cambiado a ${nuevoEstado}`)
+      cargarPedidosAsync()
+        .catch(() => {})
+      if (pedidoSeleccionado?.id === id) {
+        verDetalle(id)
+      }
+    } catch (error) {
+      console.error('Error:', error)
+    }
+  }
+
+  const abrirPago = (pedido) => {
+    setPedidoSeleccionado(pedido)
+    const totalPagado = pedido.pagos?.reduce((sum, p) => sum + parseFloat(p.monto), 0) || 0
+    const pendiente = parseFloat(pedido.total) - totalPagado
+    setPagoForm({ monto: pendiente.toFixed(2), metodo: 'EFECTIVO', referencia: '', propina: '' })
+    setPagoIdempotencyKey(
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `pay-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    )
+    setShowPagoModal(true)
+  }
+
+  const registrarPago = async (e) => {
+    e.preventDefault()
+    if (registrandoPago || !pedidoSeleccionado?.id) return
+
+    setRegistrandoPago(true)
+    try {
+      const pagoData = {
+        pedidoId: pedidoSeleccionado.id,
+        monto: parseFloat(pagoForm.monto),
+        metodo: pagoForm.metodo,
+        referencia: pagoForm.referencia || null,
+        idempotencyKey: pagoIdempotencyKey || undefined,
+        propina: pagoForm.propina ? parseFloat(pagoForm.propina) : null
+      }
+      const response = await api.post('/pagos', pagoData, {
+        skipToast: true,
+        offlineCapable: true,
+        _optimisticResponse: { ...pagoData, _offline: true },
+        _offlineDescription: `Pago $${pagoData.monto} ${pagoData.metodo} pedido #${pedidoSeleccionado.id}`
+      })
+      if (response._offline) {
+        toast.success('Pago guardado. Se sincronizara al reconectar.')
+      } else if (response.data?.idempotentReplay) {
+        toast.success('Pago ya registrado previamente')
+      } else {
+        toast.success(response.data?.message || 'Pago registrado')
+      }
+      setShowPagoModal(false)
+      setPagoIdempotencyKey(null)
+      cargarPedidosAsync()
+        .catch(() => {})
+    } catch (error) {
+      console.error('Error:', error)
+    } finally {
+      setRegistrandoPago(false)
+    }
+  }
+
+  const imprimirComanda = async (id) => {
+    try {
+      await api.post(`/impresion/comanda/${id}/reimprimir`, {})
+      toast.success('Reimpresion encolada')
+      const preview = await api.get(`/impresion/comanda/${id}/preview?tipo=CAJA`)
+      const win = window.open('', '_blank', 'noopener,noreferrer')
+      if (!win) {
+        toast.error('No se pudo abrir la vista previa')
+        return
+      }
+      win.opener = null
+
+      const doc = win.document
+      doc.open()
+      doc.write(`
+        <!doctype html>
+        <html lang="es">
+          <head>
+            <meta charset="utf-8" />
+            <title>Vista previa de comanda</title>
+            <style>
+              body { margin: 0; padding: 16px; background: #fff; }
+              pre {
+                white-space: pre-wrap;
+                font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+                font-size: 14px;
+                line-height: 1.4;
+              }
+            </style>
+          </head>
+          <body>
+            <pre id="ticket-preview"></pre>
+          </body>
+        </html>
+      `)
+      doc.close()
+
+      const pre = doc.getElementById('ticket-preview')
+      if (pre) {
+        pre.textContent = preview.data || ''
+      }
+    } catch (error) {
+      console.error('Error:', error)
+    }
+  }
+
+  const renderImpresion = (impresion) => {
+    if (!impresion) {
+      return <span className="text-xs text-text-tertiary">-</span>
+    }
+
+    const label = impresion.status === 'OK'
+      ? `OK ${impresion.ok}/${impresion.total}`
+      : impresion.status === 'ERROR'
+        ? `ERR ${impresion.ok}/${impresion.total}`
+        : `${impresion.ok}/${impresion.total}`
+
+    const badgeClass = impresion.status === 'OK'
+      ? 'badge-success'
+      : impresion.status === 'ERROR'
+        ? 'badge-error'
+        : 'badge-warning'
+
+    return (
+      <span title={impresion.lastError || ''} className={`badge ${badgeClass}`}>
+        {label}
+      </span>
+    )
+  }
+
+  const getTipoBadge = (tipo) => {
+    switch (tipo) {
+      case 'DELIVERY': return 'badge-info'
+      case 'MOSTRADOR': return 'badge-warning'
+      case 'ONLINE': return 'badge-success'
+      default: return 'badge-info'
+    }
+  }
+
+  if (loading && pedidos.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="spinner spinner-lg" />
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-heading-1">Pedidos</h1>
+        <div className="flex items-center gap-4">
+          <label className="sr-only" htmlFor="pedidos-filtro-estado">Filtrar por estado</label>
+          <select
+            id="pedidos-filtro-estado"
+            className="input w-48"
+            value={filtroEstado}
+            onChange={(e) => setFiltroEstado(e.target.value)}
+          >
+            <option value="">Todos los estados</option>
+            <option value="PENDIENTE">Pendiente</option>
+            <option value="EN_PREPARACION">En preparacion</option>
+            <option value="LISTO">Listo</option>
+            <option value="ENTREGADO">Entregado</option>
+            <option value="COBRADO">Cobrado</option>
+            <option value="CANCELADO">Cancelado</option>
+          </select>
+          {puedeCrearPedido && (
+            <button
+              onClick={() => setShowNuevoPedidoModal(true)}
+              className="btn btn-primary flex items-center gap-2"
+              data-testid="manual-order-open"
+            >
+              <PlusIcon className="w-5 h-5" />
+              Nuevo Pedido
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="card overflow-hidden">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Tipo</th>
+              <th>Mesa/Cliente</th>
+              <th>Total</th>
+              <th>Estado</th>
+              <th>Impresion</th>
+              <th>Hora</th>
+              <th className="text-right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pedidos.map((pedido) => (
+              <tr key={pedido.id}>
+                <td className="font-medium text-text-primary">#{pedido.id}</td>
+                <td>
+                  <span className={`badge ${getTipoBadge(pedido.tipo)}`}>
+                    {pedido.tipo}
+                  </span>
+                </td>
+                <td className="text-text-secondary">
+                  {pedido.tipo === 'MESA'
+                    ? `Mesa ${pedido.mesa?.numero}`
+                    : pedido.tipo === 'MOSTRADOR'
+                      ? pedido.clienteNombre || 'Mostrador'
+                      : pedido.clienteNombre || 'Sin nombre'}
+                </td>
+                <td className="font-medium text-text-primary">
+                  ${parseFloat(pedido.total).toLocaleString('es-AR')}
+                </td>
+                <td>
+                  <span className={`badge ${estadoBadges[pedido.estado]}`}>
+                    {pedido.estado.replace('_', ' ')}
+                  </span>
+                </td>
+                <td>
+                  {renderImpresion(pedido.impresion)}
+                </td>
+                <td className="text-text-tertiary">
+                  {new Date(pedido.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                </td>
+                <td className="text-right space-x-2">
+                  <button
+                    onClick={() => verDetalle(pedido.id)}
+                    type="button"
+                    aria-label={`Ver detalle del pedido #${pedido.id}`}
+                    className="text-primary-500 hover:text-primary-600 transition-colors"
+                  >
+                    <EyeIcon className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => imprimirComanda(pedido.id)}
+                    type="button"
+                    aria-label={`Reimprimir comanda del pedido #${pedido.id}`}
+                    className="text-text-secondary hover:text-text-primary transition-colors"
+                  >
+                    <PrinterIcon className="w-5 h-5" />
+                  </button>
+                  {pedido.estado !== 'COBRADO' && pedido.estado !== 'CANCELADO' && !esSoloMozo && puedeRegistrarPago && (
+                    <button
+                      onClick={() => abrirPago(pedido)}
+                      type="button"
+                      aria-label={`Registrar pago del pedido #${pedido.id}`}
+                      className="text-success-500 hover:text-success-600 transition-colors"
+                      data-testid={`register-payment-open-${pedido.id}`}
+                    >
+                      <CurrencyDollarIcon className="w-5 h-5" />
+                    </button>
+                  )}
+                  {pedido.estado === 'COBRADO' && puedeRegistrarPago && !pedido.comprobantes?.length && (
+                    <button
+                      onClick={() => { setPedidoParaFacturar(pedido); setShowFacturaModal(true) }}
+                      type="button"
+                      aria-label={`Facturar pedido #${pedido.id}`}
+                      className="text-primary-500 hover:text-primary-600 transition-colors"
+                      title="Emitir factura"
+                    >
+                      <DocumentTextIcon className="w-5 h-5" />
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Modal Detalle */}
+      {showModal && pedidoSeleccionado && (
+        <div className="modal-overlay">
+          <div className="modal modal-lg">
+            <div className="flex justify-between items-start mb-4">
+              <h2 className="text-heading-3">Pedido #{pedidoSeleccionado.id}</h2>
+              <span className={`badge ${estadoBadges[pedidoSeleccionado.estado]}`}>
+                {pedidoSeleccionado.estado.replace('_', ' ')}
+              </span>
+            </div>
+
+            <div className="space-y-4 overflow-y-auto flex-1">
+              <div className="text-sm text-text-secondary">
+                <p><strong className="text-text-primary">Tipo:</strong> {pedidoSeleccionado.tipo}</p>
+                {pedidoSeleccionado.mesa && <p><strong className="text-text-primary">Mesa:</strong> {pedidoSeleccionado.mesa.numero}</p>}
+                {pedidoSeleccionado.clienteNombre && <p><strong className="text-text-primary">Cliente:</strong> {pedidoSeleccionado.clienteNombre}</p>}
+                <p><strong className="text-text-primary">Mozo:</strong> {pedidoSeleccionado.usuario?.nombre}</p>
+              </div>
+
+              <div>
+                <h3 className="font-semibold text-text-primary mb-2">Items:</h3>
+                <div className="space-y-2">
+                  {pedidoSeleccionado.items?.map((item) => (
+                    <div key={item.id} className="flex justify-between text-sm">
+                      <span className="text-text-primary">
+                        {item.cantidad}x {item.producto?.nombre}
+                        {item.observaciones && <span className="text-text-tertiary ml-1">({item.observaciones})</span>}
+                      </span>
+                      <span className="text-text-primary">${parseFloat(item.subtotal).toLocaleString('es-AR')}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border-t border-border-default pt-3">
+                <div className="flex justify-between font-bold text-lg text-text-primary">
+                  <span>Total:</span>
+                  <span>${parseFloat(pedidoSeleccionado.total).toLocaleString('es-AR')}</span>
+                </div>
+              </div>
+
+              {/* Cambiar estado */}
+              {!['COBRADO', 'CANCELADO'].includes(pedidoSeleccionado.estado) && (
+                <div className="border-t border-border-default pt-3">
+                  <p className="text-sm font-medium text-text-primary mb-2">Cambiar estado:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {!esSoloMozo && pedidoSeleccionado.estado === 'PENDIENTE' && (
+                      <button
+                        onClick={() => cambiarEstado(pedidoSeleccionado.id, 'EN_PREPARACION')}
+                        className="btn btn-primary text-sm"
+                      >
+                        Iniciar preparacion
+                      </button>
+                    )}
+                    {!esSoloMozo && pedidoSeleccionado.estado === 'EN_PREPARACION' && (
+                      <button
+                        onClick={() => cambiarEstado(pedidoSeleccionado.id, 'LISTO')}
+                        className="btn btn-success text-sm"
+                      >
+                        Marcar listo
+                      </button>
+                    )}
+                    {pedidoSeleccionado.estado === 'LISTO' && (
+                      <button
+                        onClick={() => cambiarEstado(pedidoSeleccionado.id, 'ENTREGADO')}
+                        className="btn btn-primary text-sm"
+                      >
+                        Marcar entregado
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button onClick={() => setShowModal(false)} className="btn btn-secondary w-full mt-6">
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Pago */}
+      {showPagoModal && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <h2 className="text-heading-3 mb-4">Registrar Pago</h2>
+            <form onSubmit={registrarPago} className="space-y-4">
+              <div>
+                <label className="label" htmlFor="pago-monto">Monto ($)</label>
+                <input
+                  id="pago-monto"
+                  type="number"
+                  step="0.01"
+                  className="input"
+                  value={pagoForm.monto}
+                  onChange={(e) => setPagoForm({ ...pagoForm, monto: e.target.value })}
+                  disabled={registrandoPago}
+                  required
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="pago-metodo">Metodo de Pago</label>
+                <select
+                  id="pago-metodo"
+                  className="input"
+                  value={pagoForm.metodo}
+                  onChange={(e) => setPagoForm({ ...pagoForm, metodo: e.target.value })}
+                  disabled={registrandoPago}
+                >
+                  <option value="EFECTIVO">Efectivo</option>
+                  <option value="MERCADOPAGO" disabled={!isOnline}>MercadoPago{!isOnline ? ' (requiere conexion)' : ''}</option>
+                  <option value="TARJETA">Tarjeta</option>
+                  <option value="TRANSFERENCIA">Transferencia</option>
+                </select>
+              </div>
+
+              {/* Datos bancarios para transferencia */}
+              {pagoForm.metodo === 'TRANSFERENCIA' && datosBancarios && (
+                <div className="bg-primary-50 border border-primary-200 rounded-xl p-4">
+                  <h4 className="font-semibold text-primary-800 mb-3 flex items-center gap-2">
+                    <BuildingLibraryIcon className="w-5 h-5" />
+                    Datos para Transferencia
+                  </h4>
+                  <div className="space-y-2">
+                    {datosBancarios.cvu && (
+                      <div className="flex items-center justify-between bg-white rounded-lg p-2">
+                        <div>
+                          <p className="text-xs text-text-tertiary">CVU</p>
+                          <p className="font-mono text-sm text-text-primary">{datosBancarios.cvu}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(datosBancarios.cvu)
+                            toast.success('CVU copiado')
+                          }}
+                          className="p-2 hover:bg-primary-100 rounded-lg transition-colors"
+                          title="Copiar CVU"
+                        >
+                          <ClipboardDocumentIcon className="w-4 h-4 text-primary-600" />
+                        </button>
+                      </div>
+                    )}
+                    {datosBancarios.alias && (
+                      <div className="flex items-center justify-between bg-white rounded-lg p-2">
+                        <div>
+                          <p className="text-xs text-text-tertiary">Alias</p>
+                          <p className="font-semibold text-text-primary">{datosBancarios.alias}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(datosBancarios.alias)
+                            toast.success('Alias copiado')
+                          }}
+                          className="p-2 hover:bg-primary-100 rounded-lg transition-colors"
+                          title="Copiar Alias"
+                        >
+                          <ClipboardDocumentIcon className="w-4 h-4 text-primary-600" />
+                        </button>
+                      </div>
+                    )}
+                    {datosBancarios.titular && (
+                      <div className="bg-white rounded-lg p-2">
+                        <p className="text-xs text-text-tertiary">Titular</p>
+                        <p className="text-sm text-text-primary">{datosBancarios.titular}</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="bg-warning-50 border border-warning-200 rounded-lg p-2 mt-3">
+                    <p className="text-xs text-warning-700">
+                      El pago se confirmara automaticamente cuando llegue la transferencia
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {pagoForm.metodo === 'TRANSFERENCIA' && !datosBancarios && (
+                <div className="bg-warning-50 text-warning-700 p-3 rounded-xl text-sm">
+                  Transferencias no configuradas. Configure CVU/Alias en Configuracion.
+                </div>
+              )}
+
+              {pagoForm.metodo !== 'EFECTIVO' && pagoForm.metodo !== 'TRANSFERENCIA' && (
+                <div>
+                  <label className="label" htmlFor="pago-referencia">Referencia</label>
+                  <input
+                    id="pago-referencia"
+                    type="text"
+                    className="input"
+                    value={pagoForm.referencia}
+                    onChange={(e) => setPagoForm({ ...pagoForm, referencia: e.target.value })}
+                    placeholder="Numero de transaccion"
+                    disabled={registrandoPago}
+                  />
+                </div>
+              )}
+              <div>
+                <label className="label" htmlFor="pago-propina">Propina ($)</label>
+                <input
+                  id="pago-propina"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="input"
+                  value={pagoForm.propina}
+                  onChange={(e) => setPagoForm({ ...pagoForm, propina: e.target.value })}
+                  placeholder="0.00 (opcional)"
+                  disabled={registrandoPago}
+                />
+                <p className="text-xs text-text-tertiary mt-1">Se reparte entre los mozos del turno</p>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (registrandoPago) return
+                    setShowPagoModal(false)
+                    setPagoIdempotencyKey(null)
+                  }}
+                  className="btn btn-secondary flex-1"
+                  disabled={registrandoPago}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-success flex-1"
+                  disabled={registrandoPago}
+                  data-testid="register-payment-submit"
+                >
+                  {registrandoPago
+                    ? 'Registrando...'
+                    : pagoForm.metodo === 'TRANSFERENCIA'
+                      ? 'Registrar (Esperar Transferencia)'
+                      : 'Registrar Pago'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Nuevo Pedido */}
+      <NuevoPedidoModal
+        isOpen={showNuevoPedidoModal}
+        onClose={() => setShowNuevoPedidoModal(false)}
+        onSuccess={() => {
+          setShowNuevoPedidoModal(false)
+          cargarPedidosAsync().catch(() => {})
+        }}
+      />
+
+      <ShortcutsHelp
+        isOpen={showShortcutsHelp}
+        onClose={() => setShowShortcutsHelp(false)}
+        shortcuts={shortcutsList}
+        pageName="Pedidos"
+      />
+
+      {/* Modal Emitir Factura */}
+      <EmitirComprobanteModal
+        isOpen={showFacturaModal}
+        onClose={() => { setShowFacturaModal(false); setPedidoParaFacturar(null) }}
+        pedido={pedidoParaFacturar}
+        onSuccess={() => {
+          setShowFacturaModal(false)
+          setPedidoParaFacturar(null)
+          cargarPedidosAsync().catch(() => {})
+        }}
+      />
+    </div>
+  )
+}

@@ -1,0 +1,440 @@
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import api from '../../services/api'
+import toast from 'react-hot-toast'
+import { CheckIcon, ClockIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/outline'
+import usePolling from '../../hooks/usePolling'
+import useEventSource from '../../hooks/useEventSource'
+import useAsync from '../../hooks/useAsync'
+import useKeyboardShortcuts from '../../hooks/useKeyboardShortcuts'
+import ShortcutsHelp from '../../components/ui/ShortcutsHelp'
+
+// Función para reproducir sonido de notificación usando Web Audio API
+const playNotificationSound = () => {
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+    const oscillator = audioContext.createOscillator()
+    const gainNode = audioContext.createGain()
+
+    oscillator.connect(gainNode)
+    gainNode.connect(audioContext.destination)
+
+    oscillator.frequency.value = 800
+    oscillator.type = 'sine'
+    gainNode.gain.value = 0.3
+
+    oscillator.start()
+
+    // Beep corto
+    setTimeout(() => {
+      oscillator.frequency.value = 1000
+    }, 100)
+
+    setTimeout(() => {
+      oscillator.frequency.value = 800
+    }, 200)
+
+    setTimeout(() => {
+      oscillator.stop()
+      audioContext.close()
+    }, 300)
+  } catch (error) {
+    console.error('Error reproduciendo sonido:', error)
+  }
+}
+
+export default function Cocina() {
+  const [pedidos, setPedidos] = useState([])
+  const [loadError, setLoadError] = useState(null)
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    return localStorage.getItem('cocina_sound') !== 'false'
+  })
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const pedidosRef = useRef([])
+  const cardRefs = useRef([])
+
+  const toggleSound = useCallback(() => {
+    setSoundEnabled(prev => {
+      const newValue = !prev
+      localStorage.setItem('cocina_sound', newValue.toString())
+      if (newValue) {
+        playNotificationSound()
+      }
+      return newValue
+    })
+  }, [])
+
+  const cargarPedidos = useCallback(async () => {
+    const response = await api.get('/pedidos/cocina', { skipToast: true })
+    const nuevosPedidos = [...response.data].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    )
+
+    // Detectar nuevos pedidos PENDIENTES
+    if (soundEnabled && pedidosRef.current.length > 0) {
+      const idsAnteriores = new Set(pedidosRef.current.map(p => p.id))
+      const hayNuevoPendiente = nuevosPedidos.some(
+        p => p.estado === 'PENDIENTE' && !idsAnteriores.has(p.id)
+      )
+      if (hayNuevoPendiente) {
+        playNotificationSound()
+      }
+    }
+
+    pedidosRef.current = nuevosPedidos
+    setPedidos(nuevosPedidos)
+    setLoadError(null)
+    return nuevosPedidos
+  }, [soundEnabled])
+
+  const handleLoadError = useCallback((error) => {
+    console.error('Error:', error)
+    setLoadError('No pudimos cargar los pedidos.')
+  }, [])
+
+  const cargarPedidosRequest = useCallback(async (_ctx) => (
+    cargarPedidos()
+  ), [cargarPedidos])
+
+  const { loading, execute: cargarPedidosAsync } = useAsync(
+    cargarPedidosRequest,
+    { onError: handleLoadError }
+  )
+
+  usePolling(cargarPedidosAsync, 10000, { immediate: false })
+
+  useEventSource({
+    events: {
+      'pedido.updated': cargarPedidosAsync
+    }
+  })
+
+  const cambiarEstado = useCallback(async (id, nuevoEstado) => {
+    try {
+      const response = await api.patch(
+        `/pedidos/${id}/estado`,
+        { estado: nuevoEstado },
+        {
+          skipToast: true,
+          offlineCapable: true,
+          _optimisticResponse: { id, estado: nuevoEstado, _offline: true },
+          _offlineDescription: `Cambiar pedido #${id} a ${nuevoEstado}`
+        }
+      )
+      if (response._offline) {
+        toast.success('Cambio guardado. Se sincronizara al reconectar.')
+      } else {
+        toast.success(nuevoEstado === 'EN_PREPARACION' ? 'Iniciando preparación' : 'Pedido listo!')
+      }
+      cargarPedidosAsync().catch(() => {})
+    } catch (error) {
+      toast.error('No pudimos actualizar el pedido.')
+    }
+  }, [cargarPedidosAsync])
+
+  const confirmarPedidoSeleccionado = useCallback(() => {
+    const pedido = pedidos[selectedIndex]
+    if (!pedido) return
+
+    if (pedido.estado === 'PENDIENTE') {
+      cambiarEstado(pedido.id, 'EN_PREPARACION')
+    } else {
+      cambiarEstado(pedido.id, 'LISTO')
+    }
+  }, [pedidos, selectedIndex, cambiarEstado])
+
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false)
+
+  const shortcutsList = useMemo(() => [
+    { key: 'Flechas / 8-2-4-6', description: 'Navegar pedidos' },
+    { key: 'Enter / 5', description: 'Confirmar accion' },
+    { key: '0', description: 'Toggle sonido' },
+    { key: '?', description: 'Ayuda de atajos' },
+  ], [])
+
+  // Navegación por teclado (numpad + flechas) - usando hook reutilizable
+  useKeyboardShortcuts(useMemo(() => {
+    const cols = 3
+    return {
+      'arrowup': () => setSelectedIndex(i => Math.max(0, i - cols)),
+      '8': () => setSelectedIndex(i => Math.max(0, i - cols)),
+      'arrowdown': () => setSelectedIndex(i => Math.min(pedidos.length - 1, i + cols)),
+      '2': () => setSelectedIndex(i => Math.min(pedidos.length - 1, i + cols)),
+      'arrowleft': () => setSelectedIndex(i => Math.max(0, i - 1)),
+      '4': () => setSelectedIndex(i => Math.max(0, i - 1)),
+      'arrowright': () => setSelectedIndex(i => Math.min(pedidos.length - 1, i + 1)),
+      '6': () => setSelectedIndex(i => Math.min(pedidos.length - 1, i + 1)),
+      'enter': () => confirmarPedidoSeleccionado(),
+      '5': () => confirmarPedidoSeleccionado(),
+      '0': () => toggleSound(),
+      '?': () => setShowShortcutsHelp(prev => !prev),
+      'Escape': () => { if (showShortcutsHelp) setShowShortcutsHelp(false) },
+    }
+  }, [pedidos.length, confirmarPedidoSeleccionado, toggleSound, showShortcutsHelp]))
+
+  // Mantener selección válida cuando cambia la lista
+  useEffect(() => {
+    if (selectedIndex >= pedidos.length && pedidos.length > 0) {
+      setSelectedIndex(pedidos.length - 1)
+    }
+  }, [pedidos.length, selectedIndex])
+
+  // Scroll suave a la card seleccionada
+  useEffect(() => {
+    cardRefs.current[selectedIndex]?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest'
+    })
+  }, [selectedIndex])
+
+  const getTiempoTranscurrido = (fecha) => {
+    const minutos = Math.floor((Date.now() - new Date(fecha)) / 60000)
+    if (minutos < 60) return `${minutos} min`
+    return `${Math.floor(minutos / 60)}h ${minutos % 60}m`
+  }
+
+  const getTiempoMinutos = (fecha) => Math.max(0, Math.floor((Date.now() - new Date(fecha)) / 60000))
+
+  const getSlaEstado = (minutos) => {
+    if (minutos >= 30) return 'CRITICO'
+    if (minutos >= 15) return 'ATENCION'
+    return 'OK'
+  }
+
+  const getSlaBadgeClass = (sla) => {
+    if (sla === 'CRITICO') return 'badge-error'
+    if (sla === 'ATENCION') return 'badge-warning'
+    return 'badge-success'
+  }
+
+  if (loading && pedidos.length === 0) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="spinner spinner-lg" />
+      </div>
+    )
+  }
+
+  if (loadError && pedidos.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <ClockIcon className="w-10 h-10 text-error-500 mb-3" />
+        <h2 className="text-lg font-semibold text-text-primary">No pudimos cargar los pedidos</h2>
+        <p className="text-sm text-text-secondary mb-4">{loadError}</p>
+        <button
+          type="button"
+          onClick={() => {
+            setLoadError(null)
+            cargarPedidosAsync().catch(() => {})
+          }}
+          className="btn btn-primary"
+        >
+          Reintentar
+        </button>
+      </div>
+    )
+  }
+
+  const pedidosPendientes = pedidos.filter((p) => p.estado === 'PENDIENTE')
+  const pedidosEnPreparacion = pedidos.filter((p) => p.estado === 'EN_PREPARACION')
+
+  return (
+    <div>
+      {loadError && pedidos.length > 0 && (
+        <div className="mb-4 bg-error-50 text-error-700 px-4 py-3 rounded-xl flex items-center gap-3">
+          <ClockIcon className="w-5 h-5" />
+          <span className="flex-1 text-sm">{loadError}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setLoadError(null)
+              cargarPedidosAsync().catch(() => {})
+            }}
+            className="text-sm font-medium hover:underline"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-heading-1">Cocina</h1>
+        <div className="flex items-center gap-4 text-sm">
+          <span className="flex items-center gap-1 text-text-secondary">
+            <span className="w-3 h-3 bg-warning-400 rounded-full"></span>
+            Pendientes: {pedidosPendientes.length}
+          </span>
+          <span className="flex items-center gap-1 text-text-secondary">
+            <span className="w-3 h-3 bg-info-400 rounded-full"></span>
+            En preparación: {pedidosEnPreparacion.length}
+          </span>
+          <button
+            onClick={toggleSound}
+            className={`p-2 rounded-lg transition-colors ${
+              soundEnabled
+                ? 'bg-success-100 text-success-600 hover:bg-success-200'
+                : 'bg-surface-hover text-text-tertiary hover:bg-border-default'
+            }`}
+            title={soundEnabled ? 'Sonido activado' : 'Sonido desactivado'}
+            aria-label={soundEnabled ? 'Desactivar sonido' : 'Activar sonido'}
+          >
+            {soundEnabled ? (
+              <SpeakerWaveIcon className="w-5 h-5" />
+            ) : (
+              <SpeakerXMarkIcon className="w-5 h-5" />
+            )}
+          </button>
+        </div>
+      </div>
+
+      {pedidos.length === 0 ? (
+        <div className="text-center py-16">
+          <ClockIcon className="w-16 h-16 text-text-tertiary mx-auto mb-4" />
+          <p className="text-xl text-text-secondary">No hay pedidos pendientes</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {pedidos.map((pedido, index) => (
+            (() => {
+              const minutos = getTiempoMinutos(pedido.createdAt)
+              const sla = getSlaEstado(minutos)
+
+              return (
+                <div
+                  key={pedido.id}
+                  ref={el => cardRefs.current[index] = el}
+                  className={`card transition-all duration-200 relative ${
+                    sla === 'CRITICO'
+                      ? 'border border-error-300 bg-error-50/50'
+                      : sla === 'ATENCION'
+                        ? 'border border-warning-300 bg-warning-50/50'
+                        : pedido.estado === 'PENDIENTE'
+                          ? 'border border-warning-200 bg-warning-50/50'
+                          : 'border border-info-200 bg-info-50/50'
+                  } ${
+                    index === selectedIndex
+                      ? 'ring-4 ring-primary-500 ring-offset-2 scale-[1.02] shadow-lg shadow-primary-500/20'
+                      : 'opacity-80'
+                  }`}
+                  data-testid={`kitchen-order-card-${pedido.id}`}
+                >
+                  {index === selectedIndex && pedidos.length > 1 && (
+                    <span className="absolute -top-2 -left-2 bg-primary-500 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shadow-md">
+                      {index + 1}
+                    </span>
+                  )}
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="text-xl font-bold text-text-primary">#{pedido.id}</h3>
+                      <p className="text-sm text-text-secondary">
+                        {pedido.tipo === 'MESA'
+                          ? `Mesa ${pedido.mesa?.numero}`
+                          : pedido.tipo}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span
+                        className={`badge ${
+                          pedido.estado === 'PENDIENTE'
+                            ? 'badge-warning'
+                            : 'badge-info'
+                        }`}
+                      >
+                        {pedido.estado === 'PENDIENTE' ? 'PENDIENTE' : 'PREPARANDO'}
+                      </span>
+                      <p className="text-xs text-text-tertiary mt-1">
+                        {getTiempoTranscurrido(pedido.createdAt)}
+                      </p>
+                      <span className={`badge mt-2 ${getSlaBadgeClass(sla)}`}>
+                        SLA {sla}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 mb-4">
+                    {pedido.items?.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-start gap-3 bg-surface p-3 rounded-xl"
+                      >
+                        <span className="text-2xl font-bold text-primary-500">
+                          {item.cantidad}x
+                        </span>
+                        <div>
+                          <p className="font-medium text-text-primary">
+                            {item.producto?.nombre}
+                          </p>
+                          {item.modificadores?.length > 0 && (
+                            <div className="mt-1 space-y-0.5">
+                              {item.modificadores.map((mod) => (
+                                <p
+                                  key={mod.id}
+                                  className={`text-sm font-medium ${
+                                    mod.modificador?.tipo === 'EXCLUSION'
+                                      ? 'text-error-600'
+                                      : 'text-success-600'
+                                  }`}
+                                >
+                                  {mod.modificador?.tipo === 'EXCLUSION' ? '- Sin' : '+ Extra'}{' '}
+                                  {mod.modificador?.nombre}
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                          {item.observaciones && (
+                            <p className="text-sm text-warning-600 font-medium mt-1">
+                              Nota: {item.observaciones}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {pedido.observaciones && (
+                    <div className="mb-4 p-2 bg-error-100 rounded-lg text-sm text-error-700">
+                      <strong>Nota:</strong> {pedido.observaciones}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    {pedido.estado === 'PENDIENTE' ? (
+                      <button
+                        onClick={() => cambiarEstado(pedido.id, 'EN_PREPARACION')}
+                        className="btn btn-primary flex-1 py-3"
+                        data-testid={`kitchen-start-${pedido.id}`}
+                      >
+                        Iniciar Preparación
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => cambiarEstado(pedido.id, 'LISTO')}
+                        className="btn btn-success flex-1 py-3 flex items-center justify-center gap-2"
+                        data-testid={`kitchen-ready-${pedido.id}`}
+                      >
+                        <CheckIcon className="w-5 h-5" />
+                        Marcar Listo
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })()
+          ))}
+        </div>
+      )}
+
+      {/* Indicador de controles de teclado */}
+      {pedidos.length > 0 && (
+        <div className="text-xs text-text-tertiary mt-4 text-center">
+          Flechas o Numpad: Navegar | Enter=Confirmar | 0=Sonido | ?=Ayuda
+        </div>
+      )}
+
+      <ShortcutsHelp
+        isOpen={showShortcutsHelp}
+        onClose={() => setShowShortcutsHelp(false)}
+        shortcuts={shortcutsList}
+        pageName="Cocina"
+      />
+    </div>
+  )
+}
