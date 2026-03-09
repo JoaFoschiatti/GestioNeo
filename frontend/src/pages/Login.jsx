@@ -53,9 +53,7 @@ export default function Login() {
 
       <div className="glass-card w-full max-w-md relative z-10 animate-fade-in-up">
         <div className="text-center mb-8">
-          <div className="w-14 h-14 bg-brand-900 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg">
-            <span className="text-2xl text-primary-400 font-bold">C</span>
-          </div>
+          <img src="/comanda-logo.png" alt="Comanda" className="w-14 h-14 rounded-2xl mx-auto mb-4 shadow-lg object-cover" />
           <h1 className="text-heading-1">Comanda</h1>
           <p className="text-text-secondary mt-2">Accede a tu cuenta</p>
         </div>

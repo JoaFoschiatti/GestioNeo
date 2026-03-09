@@ -1545,13 +1545,8 @@ body {
   width: 2.75rem;
   height: 2.75rem;
   border-radius: 1rem;
-  background: linear-gradient(135deg, var(--color-brand-900), var(--color-brand-700));
-  color: var(--color-primary-300);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
   box-shadow: var(--shadow-md);
+  object-fit: cover;
 }
 
 .public-shell__brand-label {
@@ -1607,7 +1602,7 @@ body {
   position: relative;
   overflow: hidden;
   background:
-    linear-gradient(135deg, rgba(15, 26, 13, 0.96), rgba(35, 49, 33, 0.9));
+    linear-gradient(135deg, rgba(26, 17, 10, 0.96), rgba(45, 30, 18, 0.9));
   color: var(--color-text-inverse);
 }
 
@@ -1653,14 +1648,8 @@ body {
   height: 3.3rem;
   flex-shrink: 0;
   border-radius: 1.15rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255,255,255,0.12);
-  border: 1px solid rgba(255,255,255,0.12);
   box-shadow: var(--shadow-lg);
-  font-size: 0.95rem;
-  font-weight: 700;
+  object-fit: cover;
 }
 
 .public-hero__title {

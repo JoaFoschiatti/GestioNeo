@@ -27,8 +27,8 @@ const emitMesaUpdated = (mesaId, estado) => {
 
 const listar = async (req, res) => {
   const prisma = getPrisma(req);
-  const pedidos = await pedidosService.listar(prisma, req.query);
-  res.json(pedidos);
+  const result = await pedidosService.listar(prisma, req.query);
+  res.json(result);
 };
 
 const obtener = async (req, res) => {
@@ -214,13 +214,23 @@ const asignarDelivery = async (req, res) => {
   const { id } = req.params;
   const { repartidorId } = req.body;
 
-  const repartidor = await prisma.usuario.findUnique({ where: { id: repartidorId } });
+  const [pedidoExistente, repartidor] = await Promise.all([
+    prisma.pedido.findUnique({ where: { id }, select: { id: true, tipo: true } }),
+    prisma.usuario.findUnique({ where: { id: repartidorId }, select: { id: true, rol: true } })
+  ]);
+
+  if (!pedidoExistente) {
+    throw createHttpError.notFound('Pedido no encontrado');
+  }
+  if (pedidoExistente.tipo !== 'DELIVERY') {
+    throw createHttpError.badRequest('Solo se puede asignar repartidor a pedidos de tipo DELIVERY');
+  }
   if (!repartidor || repartidor.rol !== 'DELIVERY') {
     throw createHttpError.badRequest('El usuario seleccionado no es un repartidor');
   }
 
   const pedido = await prisma.pedido.update({
-    where: { id: Number(id) },
+    where: { id },
     data: { repartidorId },
     include: {
       repartidor: { select: { id: true, nombre: true } },

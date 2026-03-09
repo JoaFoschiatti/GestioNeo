@@ -5,7 +5,10 @@ const listarQuerySchema = z.object({
   estado: z.enum(['PENDIENTE', 'EN_PREPARACION', 'LISTO', 'ENTREGADO', 'COBRADO', 'CERRADO', 'CANCELADO']).optional(),
   tipo: z.enum(['MESA', 'DELIVERY', 'MOSTRADOR']).optional(),
   fecha: z.string().min(1).optional(),
-  mesaId: positiveIntSchema.optional()
+  mesaId: positiveIntSchema.optional(),
+  incluirCerrados: z.coerce.boolean().optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  offset: z.coerce.number().int().min(0).optional()
 }).strip();
 
 const pedidoItemInputSchema = z.object({

@@ -167,9 +167,7 @@ export default function AdminLayout() {
       <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
         <div className="admin-sidebar flex flex-col flex-grow overflow-hidden">
           <div className="flex items-center gap-3 px-5 py-5 border-b border-white/10">
-            <div className="w-10 h-10 rounded-2xl bg-primary-500 flex items-center justify-center shadow-lg shadow-primary-500/20">
-              <span className="text-sm font-bold text-primary-950">C</span>
-            </div>
+            <img src="/comanda-logo.png" alt="Comanda" className="w-10 h-10 rounded-2xl shadow-lg shadow-primary-500/20 object-cover" />
             <div>
               <span className="text-lg font-bold text-white tracking-tight">Comanda</span>
             </div>

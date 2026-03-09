@@ -3,7 +3,7 @@ import { ClockIcon, MapPinIcon, TruckIcon } from '@heroicons/react/24/outline'
 export default function PublicHero({ config, backendUrl }) {
   const backgroundStyle = config?.banner_imagen
     ? {
-        backgroundImage: `linear-gradient(135deg, rgba(15, 26, 13, 0.84), rgba(29, 41, 27, 0.74)), url(${backendUrl}${config.banner_imagen})`,
+        backgroundImage: `linear-gradient(135deg, rgba(26, 17, 10, 0.84), rgba(45, 30, 18, 0.74)), url(${backendUrl}${config.banner_imagen})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center'
       }
@@ -15,7 +15,7 @@ export default function PublicHero({ config, backendUrl }) {
       <div className="public-hero__content">
         <div className="public-hero__eyebrow">Menu del restaurante</div>
         <div className="public-hero__main">
-          <div className="public-hero__badge">Comanda</div>
+          <img src="/comanda-logo.png" alt="Comanda" className="public-hero__badge" />
           <div>
             <h1 className="public-hero__title">
               {config?.nombre_negocio || 'Menu del local'}

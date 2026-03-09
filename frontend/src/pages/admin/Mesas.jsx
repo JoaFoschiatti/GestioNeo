@@ -74,11 +74,14 @@ export default function Mesas() {
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   )
 
-  const grupoColores = {}
-  const gruposUnicos = [...new Set(mesas.filter((mesa) => mesa.grupoMesaId).map((mesa) => mesa.grupoMesaId))]
-  gruposUnicos.forEach((grupoId, index) => {
-    grupoColores[grupoId] = GRUPO_COLORES[index % GRUPO_COLORES.length]
-  })
+  const grupoColores = useMemo(() => {
+    const colores = {}
+    const gruposUnicos = [...new Set(mesas.filter((mesa) => mesa.grupoMesaId).map((mesa) => mesa.grupoMesaId))]
+    gruposUnicos.forEach((grupoId, index) => {
+      colores[grupoId] = GRUPO_COLORES[index % GRUPO_COLORES.length]
+    })
+    return colores
+  }, [mesas])
 
   const resetForm = useCallback(() => {
     setForm(FORM_INICIAL)
@@ -467,19 +470,21 @@ export default function Mesas() {
 
   // ============ VALORES COMPUTADOS ============
 
-  const mesasActivas = mesas.filter((mesa) => mesa.activa !== false)
-  const mesasSinPosicionar = mesasActivas.filter(m => !m.zona || m.posX == null || m.posY == null)
-  const mesasZonaActiva = mesasActivas.filter(m => m.zona === zonaActiva && m.posX != null && m.posY != null)
-  const mesasOcupadas = mesasActivas.filter((mesa) => mesa.estado === 'OCUPADA').length
-  const mesasEsperandoCuenta = mesasActivas.filter((mesa) => mesa.estado === 'ESPERANDO_CUENTA').length
-  const mesasPorZona = mesasActivas.reduce((acc, mesa) => {
-    const zona = mesa.zona || 'Sin zona'
-    if (!acc[zona]) {
-      acc[zona] = []
-    }
-    acc[zona].push(mesa)
-    return acc
-  }, {})
+  const mesasActivas = useMemo(() => mesas.filter((mesa) => mesa.activa !== false), [mesas])
+  const mesasSinPosicionar = useMemo(() => mesasActivas.filter(m => !m.zona || m.posX == null || m.posY == null), [mesasActivas])
+  const mesasZonaActiva = useMemo(() => mesasActivas.filter(m => m.zona === zonaActiva && m.posX != null && m.posY != null), [mesasActivas, zonaActiva])
+  const { mesasOcupadas, mesasEsperandoCuenta, mesasPorZona } = useMemo(() => ({
+    mesasOcupadas: mesasActivas.filter((mesa) => mesa.estado === 'OCUPADA').length,
+    mesasEsperandoCuenta: mesasActivas.filter((mesa) => mesa.estado === 'ESPERANDO_CUENTA').length,
+    mesasPorZona: mesasActivas.reduce((acc, mesa) => {
+      const zona = mesa.zona || 'Sin zona'
+      if (!acc[zona]) {
+        acc[zona] = []
+      }
+      acc[zona].push(mesa)
+      return acc
+    }, {})
+  }), [mesasActivas])
 
   if (loading && mesas.length === 0) {
     return (

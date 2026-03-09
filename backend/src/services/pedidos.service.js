@@ -364,7 +364,7 @@ const cambiarEstadoPedido = async (prisma, payload) => {
       }
 
       const ingredientesAgotados = await tx.ingrediente.findMany({
-        where: { stockActual: { lte: 0 } },
+        where: { id: { in: [...ingredienteUpdates.keys()] }, stockActual: { lte: 0 } },
         select: { id: true }
       });
 
@@ -793,10 +793,14 @@ module.exports = {
    * @returns {Promise<Array>} Lista de pedidos con items, mesa, usuario y pagos
    */
   listar: async (prisma, query) => {
-    const { estado, tipo, fecha, mesaId } = query;
+    const { estado, tipo, fecha, mesaId, incluirCerrados, limit = 50, offset = 0 } = query;
 
     const where = {};
-    if (estado) where.estado = estado;
+    if (estado) {
+      where.estado = estado;
+    } else if (!incluirCerrados) {
+      where.estado = { notIn: ['CERRADO', 'CANCELADO'] };
+    }
     if (tipo) where.tipo = tipo;
     if (mesaId) where.mesaId = mesaId;
     if (fecha) {
@@ -806,29 +810,42 @@ module.exports = {
       where.createdAt = { gte: fechaInicio, lt: fechaFin };
     }
 
-    const pedidos = await prisma.pedido.findMany({
-      where,
-      include: {
-        mesa: { select: { numero: true, zona: true } },
-        usuario: { select: { nombre: true } },
-        repartidor: { select: { id: true, nombre: true } },
-        items: {
-          include: {
-            producto: { select: { nombre: true } },
-            modificadores: { include: { modificador: { select: { nombre: true, tipo: true } } } }
-          }
+    const [pedidos, total] = await Promise.all([
+      prisma.pedido.findMany({
+        where,
+        include: {
+          mesa: { select: { numero: true, zona: true } },
+          usuario: { select: { nombre: true } },
+          repartidor: { select: { id: true, nombre: true } },
+          items: {
+            include: {
+              producto: { select: { nombre: true } },
+              modificadores: { include: { modificador: { select: { nombre: true, tipo: true } } } }
+            }
+          },
+          pagos: {
+            select: {
+              id: true, monto: true, metodo: true, estado: true,
+              canalCobro: true, referencia: true, comprobante: true,
+              propinaMonto: true, createdAt: true
+            }
+          },
+          printJobs: { select: { status: true, batchId: true, createdAt: true, lastError: true } }
         },
-        pagos: true,
-        printJobs: { select: { status: true, batchId: true, createdAt: true, lastError: true } }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset
+      }),
+      prisma.pedido.count({ where })
+    ]);
 
-    return pedidos.map(pedido => {
+    const data = pedidos.map(pedido => {
       const impresion = printService.getLatestPrintSummary(pedido.printJobs || []);
       const { printJobs: _printJobs, ...rest } = pedido;
       return { ...rest, impresion };
     });
+
+    return { data, total };
   },
 
   /**

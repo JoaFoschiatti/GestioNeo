@@ -4,7 +4,7 @@ export default function PublicLayout({ children }) {
       <header className="public-shell__header">
         <div className="public-shell__header-inner">
           <div className="public-shell__brand">
-            <div className="public-shell__brand-mark">C</div>
+            <img src="/comanda-logo.png" alt="Comanda" className="public-shell__brand-mark" />
             <div>
               <p className="public-shell__brand-label">Pedido online</p>
               <h1 className="public-shell__brand-title">Comanda</h1>

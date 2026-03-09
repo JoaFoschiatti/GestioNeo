@@ -1,6 +1,9 @@
 const jwt = require('jsonwebtoken');
 const { prisma } = require('../db/prisma');
 
+const userCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000;
+
 const verificarToken = async (req, res, next) => {
   try {
     let token = req.cookies?.token;
@@ -17,6 +20,14 @@ const verificarToken = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    const cacheKey = decoded.id;
+    const cached = userCache.get(cacheKey);
+    if (cached && Date.now() - cached.ts < CACHE_TTL) {
+      req.usuario = cached.user;
+      return next();
+    }
+
     const usuario = await prisma.usuario.findUnique({
       where: { id: decoded.id },
       select: {
@@ -29,9 +40,11 @@ const verificarToken = async (req, res, next) => {
     });
 
     if (!usuario || !usuario.activo) {
+      userCache.delete(cacheKey);
       return res.status(401).json({ error: { message: 'Usuario no valido o inactivo' } });
     }
 
+    userCache.set(cacheKey, { user: usuario, ts: Date.now() });
     req.usuario = usuario;
     return next();
   } catch (error) {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from '../../services/api'
 import toast from 'react-hot-toast'
@@ -121,11 +121,13 @@ export default function Pedidos() {
   const abrirPagoDesdeQuery = parseBooleanFlag(searchParams.get('openPago'))
 
   const [pedidos, setPedidos] = useState([])
+  const [totalPedidos, setTotalPedidos] = useState(0)
   const [filtroEstado, setFiltroEstado] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [pedidoSeleccionado, setPedidoSeleccionado] = useState(null)
   const [showPagoModal, setShowPagoModal] = useState(false)
   const qrSyncInFlightRef = useRef(false)
+  const deliveryModalPedidoRef = useRef(null)
   const [pagoForm, setPagoForm] = useState({
     monto: '',
     metodo: 'EFECTIVO',
@@ -148,10 +150,15 @@ export default function Pedidos() {
   const [asignandoDelivery, setAsignandoDelivery] = useState(false)
 
   const cargarPedidos = useCallback(async () => {
-    const params = filtroEstado ? `?estado=${filtroEstado}` : ''
-    const response = await api.get(`/pedidos${params}`)
-    setPedidos(response.data)
-    return response.data
+    const params = new URLSearchParams()
+    if (filtroEstado) params.set('estado', filtroEstado)
+    if (filtroEstado === 'CERRADO' || filtroEstado === 'CANCELADO') params.set('incluirCerrados', 'true')
+    const qs = params.toString()
+    const response = await api.get(`/pedidos${qs ? `?${qs}` : ''}`)
+    const { data, total } = response.data
+    setPedidos(data)
+    setTotalPedidos(total)
+    return data
   }, [filtroEstado])
 
   const handleLoadError = useCallback((error) => {
@@ -172,15 +179,16 @@ export default function Pedidos() {
       return
     }
 
-    setPedidos((current) => current.map((pedido) => (
-      pedido.id === pedidoActualizado.id
-        ? {
-            ...pedido,
-            ...pedidoActualizado,
-            impresion: pedidoActualizado.impresion ?? pedido.impresion
-          }
-        : pedido
-    )))
+    setPedidos((current) => {
+      const exists = current.some(p => p.id === pedidoActualizado.id)
+      if (exists) {
+        return current.map(p => p.id === pedidoActualizado.id
+          ? { ...p, ...pedidoActualizado, impresion: pedidoActualizado.impresion ?? p.impresion }
+          : p
+        )
+      }
+      return [pedidoActualizado, ...current]
+    })
   }, [])
 
   const obtenerPedidoPorId = useCallback(async (id) => {
@@ -206,21 +214,33 @@ export default function Pedidos() {
       .catch(() => {})
   }, [cargarPedidosAsync])
 
-  const handleSseUpdate = useCallback((event) => {
-    console.log('[SSE] Evento recibido:', event.type)
+  const abrirAsignarDelivery = useCallback(async (pedidoId) => {
+    if (deliveryModalPedidoRef.current === pedidoId) return
+    deliveryModalPedidoRef.current = pedidoId
+    setPedidoDeliveryListoId(pedidoId)
+    try {
+      const res = await api.get('/pedidos/delivery/repartidores')
+      setRepartidores(res.data)
+      setRepartidorSeleccionado(res.data.length === 1 ? String(res.data[0].id) : '')
+    } catch {
+      setRepartidores([])
+    }
+    setShowAsignarDeliveryModal(true)
+  }, [])
 
+  const handleSseUpdate = useCallback((event) => {
     let data = null
     try { data = JSON.parse(event.data) } catch {}
+    const pedidoId = data?.id || data?.pedidoId
+    if (!pedidoId) return
 
     if (data?.tipo === 'DELIVERY' && data?.estado === 'LISTO' && puedeCrearPedido) {
       toast('Pedido delivery #' + data.id + ' listo para despachar', { icon: '🚀', duration: 8000 })
-      setPedidoDeliveryListoId(data.id)
-      setShowAsignarDeliveryModal(true)
+      abrirAsignarDelivery(data.id)
     }
 
-    cargarPedidosAsync()
-      .catch(() => {})
-  }, [cargarPedidosAsync, puedeCrearPedido])
+    obtenerPedidoPorId(pedidoId).catch(() => {})
+  }, [obtenerPedidoPorId, puedeCrearPedido, abrirAsignarDelivery])
 
   const handleSseError = useCallback((err) => {
     console.error('[SSE] Error en conexión:', err)
@@ -249,7 +269,7 @@ export default function Pedidos() {
     setPagoForm(buildPagoForm(null))
   }, [])
 
-  const verDetalle = async (id) => {
+  const verDetalle = useCallback(async (id) => {
     try {
       const pedido = await obtenerPedidoPorId(id)
       setPedidoSeleccionado(pedido)
@@ -257,7 +277,7 @@ export default function Pedidos() {
     } catch (error) {
       console.error('Error:', error)
     }
-  }
+  }, [obtenerPedidoPorId])
 
   const cambiarEstado = async (id, nuevoEstado) => {
     try {
@@ -273,7 +293,7 @@ export default function Pedidos() {
     }
   }
 
-  const abrirPago = async (pedido) => {
+  const abrirPago = useCallback(async (pedido) => {
     try {
       const pedidoActualizado = await obtenerPedidoPorId(pedido.id)
       const qrPendiente = getLatestQrPresencialPago(pedidoActualizado)
@@ -298,7 +318,7 @@ export default function Pedidos() {
     } catch (error) {
       console.error('Error:', error)
     }
-  }
+  }, [obtenerPedidoPorId])
 
   useEffect(() => {
     if (!pedidoEnfocadoId) {
@@ -488,18 +508,6 @@ export default function Pedidos() {
     }
   }
 
-  const abrirAsignarDelivery = useCallback(async (pedidoId) => {
-    setPedidoDeliveryListoId(pedidoId)
-    try {
-      const res = await api.get('/pedidos/delivery/repartidores')
-      setRepartidores(res.data)
-      setRepartidorSeleccionado(res.data.length === 1 ? String(res.data[0].id) : '')
-    } catch {
-      setRepartidores([])
-    }
-    setShowAsignarDeliveryModal(true)
-  }, [])
-
   const confirmarAsignarDelivery = async () => {
     if (!repartidorSeleccionado || !pedidoDeliveryListoId) return
     setAsignandoDelivery(true)
@@ -510,6 +518,7 @@ export default function Pedidos() {
       toast.success('Repartidor asignado')
       setShowAsignarDeliveryModal(false)
       setPedidoDeliveryListoId(null)
+      deliveryModalPedidoRef.current = null
       setRepartidorSeleccionado('')
       cargarPedidosAsync().catch(() => {})
     } catch (error) {
@@ -519,16 +528,6 @@ export default function Pedidos() {
     }
   }
 
-  // Load repartidores when modal opens via SSE
-  useEffect(() => {
-    if (!showAsignarDeliveryModal || repartidores.length > 0) return
-    api.get('/pedidos/delivery/repartidores')
-      .then((res) => {
-        setRepartidores(res.data)
-        if (res.data.length === 1) setRepartidorSeleccionado(String(res.data[0].id))
-      })
-      .catch(() => {})
-  }, [showAsignarDeliveryModal, repartidores.length])
 
   const renderImpresion = (impresion) => {
     if (!impresion) {
@@ -564,32 +563,35 @@ export default function Pedidos() {
 
   const esQrPresencial = pagoForm.canalCobro === 'QR_PRESENCIAL'
   const qrStatusLabel = getQrStatusLabel(qrPresencial?.status)
-  const pedidosPendientes = pedidos.filter((pedido) => !['COBRADO', 'CERRADO', 'CANCELADO'].includes(pedido.estado)).length
-  const pedidosPorCerrar = pedidos.filter((pedido) => pedido.estado === 'COBRADO').length
-  const pedidosConQrPendiente = pedidos.filter((pedido) => getLatestQrPresencialPago(pedido)?.estado === 'PENDIENTE').length
-  const metricas = [
-    {
-      label: 'Pedidos activos',
-      value: pedidosPendientes,
-      icon: EyeIcon,
-      accent: 'bg-primary-50 text-primary-700',
-      hint: 'Operacion en curso'
-    },
-    {
-      label: 'Listos para cierre',
-      value: pedidosPorCerrar,
-      icon: CurrencyDollarIcon,
-      accent: 'bg-success-50 text-success-700',
-      hint: 'Cobros ya tomados'
-    },
-    {
-      label: 'QR pendiente',
-      value: pedidosConQrPendiente,
-      icon: QrCodeIcon,
-      accent: 'bg-warning-50 text-warning-700',
-      hint: 'Requieren seguimiento'
-    }
-  ]
+  const metricas = useMemo(() => {
+    const pedidosPendientes = pedidos.filter((pedido) => !['COBRADO', 'CERRADO', 'CANCELADO'].includes(pedido.estado)).length
+    const pedidosPorCerrar = pedidos.filter((pedido) => pedido.estado === 'COBRADO').length
+    const pedidosConQrPendiente = pedidos.filter((pedido) => getLatestQrPresencialPago(pedido)?.estado === 'PENDIENTE').length
+    return [
+      {
+        label: 'Pedidos activos',
+        value: pedidosPendientes,
+        icon: EyeIcon,
+        accent: 'bg-primary-50 text-primary-700',
+        hint: 'Operacion en curso'
+      },
+      {
+        label: 'Listos para cierre',
+        value: pedidosPorCerrar,
+        icon: CurrencyDollarIcon,
+        accent: 'bg-success-50 text-success-700',
+        hint: 'Cobros ya tomados'
+      },
+      {
+        label: 'QR pendiente',
+        value: pedidosConQrPendiente,
+        icon: QrCodeIcon,
+        accent: 'bg-warning-50 text-warning-700',
+        hint: 'Requieren seguimiento'
+      }
+    ]
+  }, [pedidos])
+  const pedidosPorCerrar = metricas[1].value
 
   if (loading && pedidos.length === 0) {
     return (
@@ -614,7 +616,7 @@ export default function Pedidos() {
               value={filtroEstado}
               onChange={(e) => setFiltroEstado(e.target.value)}
             >
-              <option value="">Todos los estados</option>
+              <option value="">Activos</option>
               <option value="PENDIENTE">Pendiente</option>
               <option value="EN_PREPARACION">En preparacion</option>
               <option value="LISTO">Listo</option>
@@ -752,6 +754,25 @@ export default function Pedidos() {
           </Table>
         )}
       </div>
+
+      {pedidos.length > 0 && pedidos.length < totalPedidos && (
+        <div className="mt-4 text-center">
+          <Button
+            variant="secondary"
+            onClick={async () => {
+              const params = new URLSearchParams()
+              if (filtroEstado) params.set('estado', filtroEstado)
+              if (filtroEstado === 'CERRADO' || filtroEstado === 'CANCELADO') params.set('incluirCerrados', 'true')
+              params.set('offset', String(pedidos.length))
+              const res = await api.get(`/pedidos?${params.toString()}`)
+              const { data } = res.data
+              setPedidos(prev => [...prev, ...data])
+            }}
+          >
+            Cargar mas ({pedidos.length} de {totalPedidos})
+          </Button>
+        </div>
+      )}
 
       {/* Modal Detalle */}
       {showModal && pedidoSeleccionado && (
@@ -1124,6 +1145,7 @@ export default function Pedidos() {
                 onClick={() => {
                   setShowAsignarDeliveryModal(false)
                   setPedidoDeliveryListoId(null)
+                  deliveryModalPedidoRef.current = null
                   setRepartidorSeleccionado('')
                 }}
               >

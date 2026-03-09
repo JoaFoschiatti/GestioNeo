@@ -1,5 +1,7 @@
 import { useEffect, useCallback } from 'react'
 
+const ALPHA_NUM_RE = /[a-z0-9]/
+
 /**
  * Hook reutilizable para atajos de teclado.
  *
@@ -28,10 +30,14 @@ export default function useKeyboardShortcuts(shortcuts, { enabled = true } = {})
 
       const keyMatch = e.key.toLowerCase() === key || e.code.toLowerCase() === key
 
+      // For single non-alpha characters (e.g. '?'), skip shiftKey check
+      // because they inherently require Shift on most keyboards
+      const isShiftedChar = key.length === 1 && !ALPHA_NUM_RE.test(key)
+
       if (
         keyMatch &&
         e.ctrlKey === needsCtrl &&
-        e.shiftKey === needsShift &&
+        (isShiftedChar || e.shiftKey === needsShift) &&
         e.altKey === needsAlt
       ) {
         e.preventDefault()

@@ -26,8 +26,9 @@ export default function IngredientesTable({
           </tr>
         </thead>
         <tbody>
-          {ingredientes.map((ingrediente) => (
-            <tr
+          {ingredientes.map((ingrediente) => {
+            const estadoIngrediente = getEstadoIngrediente(ingrediente)
+            return (<tr
               key={ingrediente.id}
               id={`ingrediente-row-${ingrediente.id}`}
               className={`
@@ -81,8 +82,8 @@ export default function IngredientesTable({
                   : '-'}
               </td>
               <td>
-                <Badge variant={getEstadoIngrediente(ingrediente).variant}>
-                  {getEstadoIngrediente(ingrediente).label}
+                <Badge variant={estadoIngrediente.variant}>
+                  {estadoIngrediente.label}
                 </Badge>
               </td>
               <td className="text-right">
@@ -121,8 +122,8 @@ export default function IngredientesTable({
                 </button>
                 </div>
               </td>
-            </tr>
-          ))}
+            </tr>)
+          })}
         </tbody>
       </table>
     </div>

@@ -212,7 +212,7 @@ describe('Pedidos Endpoints', () => {
       .set('Authorization', authHeader(tokenAdmin))
       .expect(200);
 
-    const ids = listado.body.map(p => p.id);
+    const ids = listado.body.data.map(p => p.id);
     expect(ids).toContain(pedidoId);
   });
 
