@@ -18,7 +18,12 @@ router.get('/paredes', validate({ query: obtenerParedesQuerySchema }), asyncHand
     where: { clave }
   });
 
-  res.json(config ? JSON.parse(config.valor) : []);
+  if (!config) return res.json([]);
+  try {
+    res.json(JSON.parse(config.valor));
+  } catch {
+    res.json([]);
+  }
 }));
 
 // PUT /api/plano/paredes

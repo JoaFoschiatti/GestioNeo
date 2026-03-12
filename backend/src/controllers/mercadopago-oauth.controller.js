@@ -1,4 +1,5 @@
 const mercadoPagoConfigService = require('../services/mercadopago-config.service');
+const { verifyState } = mercadoPagoConfigService;
 const { logger } = require('../utils/logger');
 
 const iniciarOAuth = async (_req, res) => {
@@ -20,9 +21,7 @@ const callbackOAuth = async (req, res) => {
       return res.redirect(`${frontendUrl}/configuracion?mp=error&reason=missing_params`);
     }
 
-    try {
-      JSON.parse(Buffer.from(state, 'base64url').toString());
-    } catch {
+    if (!verifyState(state)) {
       return res.redirect(`${frontendUrl}/configuracion?mp=error&reason=invalid_state`);
     }
 

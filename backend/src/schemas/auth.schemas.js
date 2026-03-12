@@ -7,7 +7,7 @@ const loginBodySchema = z.object({
 
 const registrarBodySchema = z.object({
   email: z.string({ required_error: 'Email es requerido' }).trim().toLowerCase().min(1, 'Email es requerido').email('Email invalido'),
-  password: z.string({ required_error: 'Password es requerido' }).min(6, 'Password debe tener al menos 6 caracteres'),
+  password: z.string({ required_error: 'Password es requerido' }).min(8, 'Password debe tener al menos 8 caracteres'),
   nombre: z.string({ required_error: 'Nombre es requerido' }).min(1, 'Nombre es requerido'),
   rol: z.enum(['ADMIN', 'MOZO', 'COCINERO', 'CAJERO', 'DELIVERY']).optional()
 }).strip();

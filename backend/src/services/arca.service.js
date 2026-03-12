@@ -163,6 +163,14 @@ const ensureRuntimeConfig = (ambiente) => {
     throw createHttpError.badRequest('Falta configurar ARCA_CUIT, ARCA_CERT_PATH y ARCA_KEY_PATH en el servidor');
   }
 
+  // Validate certificate paths are absolute to prevent path traversal
+  if (!path.isAbsolute(config.certPath)) {
+    throw createHttpError.internal('ARCA_CERT_PATH debe ser una ruta absoluta');
+  }
+  if (!path.isAbsolute(config.keyPath)) {
+    throw createHttpError.internal('ARCA_KEY_PATH debe ser una ruta absoluta');
+  }
+
   return config;
 };
 

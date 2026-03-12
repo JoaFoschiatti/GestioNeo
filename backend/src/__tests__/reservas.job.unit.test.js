@@ -8,7 +8,8 @@ const mockPrisma = {
   },
   mesa: {
     update: jest.fn()
-  }
+  },
+  $transaction: jest.fn((fn) => fn(mockPrisma))
 };
 
 jest.mock('../services/event-bus', () => ({

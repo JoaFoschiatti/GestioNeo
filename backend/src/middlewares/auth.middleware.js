@@ -2,7 +2,8 @@ const jwt = require('jsonwebtoken');
 const { prisma } = require('../db/prisma');
 
 const userCache = new Map();
-const CACHE_TTL = 5 * 60 * 1000;
+const CACHE_TTL = 60 * 1000;
+const CACHE_MAX_SIZE = 500;
 
 const verificarToken = async (req, res, next) => {
   try {
@@ -44,6 +45,10 @@ const verificarToken = async (req, res, next) => {
       return res.status(401).json({ error: { message: 'Usuario no valido o inactivo' } });
     }
 
+    if (userCache.size >= CACHE_MAX_SIZE) {
+      const oldestKey = userCache.keys().next().value;
+      userCache.delete(oldestKey);
+    }
     userCache.set(cacheKey, { user: usuario, ts: Date.now() });
     req.usuario = usuario;
     return next();

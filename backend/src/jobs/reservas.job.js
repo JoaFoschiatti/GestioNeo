@@ -19,9 +19,11 @@ const procesarReservas = async () => {
 
     for (const reserva of reservasProximas) {
       if (reserva.mesa.estado === 'LIBRE') {
-        await prisma.mesa.update({
-          where: { id: reserva.mesaId },
-          data: { estado: 'RESERVADA' }
+        await prisma.$transaction(async (tx) => {
+          await tx.mesa.update({
+            where: { id: reserva.mesaId },
+            data: { estado: 'RESERVADA' }
+          });
         });
 
         eventBus.publish('mesa.updated', {
@@ -46,17 +48,23 @@ const procesarReservas = async () => {
     });
 
     for (const reserva of reservasVencidas) {
-      await prisma.reserva.update({
-        where: { id: reserva.id },
-        data: { estado: 'NO_LLEGO' }
-      });
-
-      if (reserva.mesa.estado === 'RESERVADA') {
-        await prisma.mesa.update({
-          where: { id: reserva.mesaId },
-          data: { estado: 'LIBRE' }
+      const mesaLiberada = await prisma.$transaction(async (tx) => {
+        await tx.reserva.update({
+          where: { id: reserva.id },
+          data: { estado: 'NO_LLEGO' }
         });
 
+        if (reserva.mesa.estado === 'RESERVADA') {
+          await tx.mesa.update({
+            where: { id: reserva.mesaId },
+            data: { estado: 'LIBRE' }
+          });
+          return true;
+        }
+        return false;
+      });
+
+      if (mesaLiberada) {
         eventBus.publish('mesa.updated', {
           mesaId: reserva.mesaId,
           estado: 'LIBRE',

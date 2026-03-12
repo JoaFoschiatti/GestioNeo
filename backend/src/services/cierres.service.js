@@ -1,5 +1,7 @@
 const { createHttpError } = require('../utils/http-error');
 
+const round2 = (n) => Math.round(n * 100) / 100;
+
 // Mapa de metodos de pago DB -> claves internas
 const METODO_KEY = { EFECTIVO: 'efectivo', TARJETA: 'tarjeta', MERCADOPAGO: 'mercadopago' };
 
@@ -16,6 +18,11 @@ const calcularVentasDesdeFecha = async (prisma, desde) => {
     const key = METODO_KEY[pago.metodo];
     if (key) totales[key] += monto;
   }
+
+  totales.efectivo = round2(totales.efectivo);
+  totales.tarjeta = round2(totales.tarjeta);
+  totales.mercadopago = round2(totales.mercadopago);
+  totales.total = round2(totales.total);
 
   return totales;
 };
@@ -83,9 +90,9 @@ const cerrarCaja = async (prisma, id, efectivoFisico, observaciones) => {
 
   const ventas = await calcularVentasDesdeFecha(prisma, caja.horaApertura);
 
-  const efectivoEsperado = parseFloat(caja.fondoInicial) + ventas.efectivo;
-  const efectivoContado = parseFloat(efectivoFisico) || 0;
-  const diferencia = efectivoContado - efectivoEsperado;
+  const efectivoEsperado = round2(parseFloat(caja.fondoInicial) + ventas.efectivo);
+  const efectivoContado = round2(parseFloat(efectivoFisico) || 0);
+  const diferencia = round2(efectivoContado - efectivoEsperado);
 
   const cajaCerrada = await prisma.cierreCaja.update({
     where: { id },
@@ -146,7 +153,7 @@ const resumenActual = async (prisma) => {
   if (!result) throw createHttpError.badRequest('No hay caja abierta');
 
   const { caja, ventas } = result;
-  const efectivoEsperado = parseFloat(caja.fondoInicial) + ventas.efectivo;
+  const efectivoEsperado = round2(parseFloat(caja.fondoInicial) + ventas.efectivo);
 
   return {
     fondoInicial: parseFloat(caja.fondoInicial),

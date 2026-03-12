@@ -93,8 +93,8 @@ app.use(cors({
 }));
 
 // Parsers
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: true, limit: '100kb' }));
 app.use(cookieParser());
 
 // Servir archivos estáticos (imágenes de productos)

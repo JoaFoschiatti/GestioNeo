@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom'
 import Mesas from '../pages/admin/Mesas'
 import api from '../services/api'
 import toast from 'react-hot-toast'
+import { useAuth } from '../context/AuthContext'
 
 vi.mock('../services/api', () => ({
   default: {
@@ -27,9 +28,14 @@ vi.mock('react-hot-toast', () => ({
   },
 }))
 
+vi.mock('../context/AuthContext', () => ({
+  useAuth: vi.fn(),
+}))
+
 describe('Mesas page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useAuth.mockReturnValue({ usuario: { rol: 'ADMIN' } })
   })
 
   const renderPage = (initialEntries = ['/mesas']) =>

@@ -63,7 +63,9 @@ describe('MercadoPago OAuth Endpoints', () => {
   });
 
   it('GET /api/mercadopago/oauth/callback guarda config global y redirige a connected', async () => {
-    const state = Buffer.from(JSON.stringify({ timestamp: Date.now() })).toString('base64url');
+    const { buildOAuthAuthorizationUrl } = require('../services/mercadopago-config.service');
+    const authUrl = new URL(buildOAuthAuthorizationUrl());
+    const state = authUrl.searchParams.get('state');
 
     const fetchMock = jest.fn()
       .mockResolvedValueOnce({

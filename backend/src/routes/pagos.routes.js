@@ -1,4 +1,5 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const pagosController = require('../controllers/pagos.controller');
 const { verificarToken, esAdminOCajero } = require('../middlewares/auth.middleware');
@@ -11,8 +12,16 @@ const {
   crearQrOrdenBodySchema
 } = require('../schemas/pagos.schemas');
 
+const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: { message: 'Demasiadas solicitudes al webhook' } }
+});
+
 // Webhook público de MercadoPago (sin auth)
-router.post('/webhook/mercadopago', asyncHandler(pagosController.webhookMercadoPago));
+router.post('/webhook/mercadopago', webhookLimiter, asyncHandler(pagosController.webhookMercadoPago));
 
 // Rutas protegidas
 router.use(verificarToken);

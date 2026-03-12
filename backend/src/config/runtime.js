@@ -86,6 +86,10 @@ const validateProductionEnvironment = (env = process.env) => {
     errors.push('ENCRYPTION_KEY debe tener 64 caracteres hexadecimales');
   }
 
+  if (env.ENCRYPTION_KEY && /^0+$/.test(env.ENCRYPTION_KEY)) {
+    errors.push('ENCRYPTION_KEY no puede ser el placeholder por defecto (todos ceros). Genera una clave segura con: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+  }
+
   if (env.BRIDGE_TOKEN && String(env.BRIDGE_TOKEN).trim().length < 16) {
     errors.push('BRIDGE_TOKEN debe tener al menos 16 caracteres');
   }

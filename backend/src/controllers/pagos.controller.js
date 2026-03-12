@@ -259,8 +259,8 @@ const webhookMercadoPago = async (req, res) => {
       dataId: req.query['data.id']
     });
 
-    const shouldVerify = process.env.SKIP_WEBHOOK_VERIFICATION !== 'true';
-    if (shouldVerify && !verifyWebhookSignature(req)) {
+    const shouldVerify = process.env.SKIP_WEBHOOK_VERIFICATION === 'true' && process.env.NODE_ENV !== 'production';
+    if (!shouldVerify && !verifyWebhookSignature(req)) {
       logger.error('Webhook MercadoPago: firma invalida o WEBHOOK_SECRET no configurado');
       return res.sendStatus(401);
     }

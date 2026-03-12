@@ -1,16 +1,43 @@
+const crypto = require('crypto');
 const { prisma } = require('../db/prisma');
 const { encrypt } = require('./crypto.service');
 const { createHttpError } = require('../utils/http-error');
 const { getMercadoPagoConfigInfo, getTransactionHistory } = require('./mercadopago.service');
+
+const signState = (payload) => {
+  const data = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const secret = process.env.JWT_SECRET || 'dev-secret';
+  const signature = crypto.createHmac('sha256', secret).update(data).digest('base64url');
+  return `${data}.${signature}`;
+};
+
+const verifyState = (state) => {
+  const dotIndex = state.lastIndexOf('.');
+  if (dotIndex === -1) return null;
+
+  const data = state.slice(0, dotIndex);
+  const signature = state.slice(dotIndex + 1);
+  const secret = process.env.JWT_SECRET || 'dev-secret';
+  const expected = crypto.createHmac('sha256', secret).update(data).digest('base64url');
+
+  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
+
+  try {
+    const payload = JSON.parse(Buffer.from(data, 'base64url').toString());
+    // Reject states older than 10 minutes
+    if (Date.now() - payload.timestamp > 10 * 60 * 1000) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+};
 
 const buildOAuthAuthorizationUrl = () => {
   if (!process.env.MP_APP_ID) {
     throw createHttpError.internal('OAuth de MercadoPago no esta configurado en el servidor');
   }
 
-  const state = Buffer.from(JSON.stringify({
-    timestamp: Date.now()
-  })).toString('base64url');
+  const state = signState({ timestamp: Date.now() });
 
   const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
   const authUrl = new URL('https://auth.mercadopago.com/authorization');
@@ -153,6 +180,7 @@ const listarTransacciones = async (options) => getTransactionHistory(options);
 
 module.exports = {
   buildOAuthAuthorizationUrl,
+  verifyState,
   guardarOAuthConfig,
   desconectar,
   obtenerEstado,
